@@ -1,0 +1,73 @@
+docs/superpowers/plans/2026-10-27-02-app1-reader-features.md
+  s_bc8ea26773de3f::t_e9d0dab2dfacb5 97,111,147-148,214,239,241,243,245
+  s_bc8ea26773de3f::t_8bc6e0c621c4a5 1807-1808
+  s_bc8ea26773de3f::t_0827cfff23e18a 123
+docs/superpowers/plans/2026-10-27-01-g0-renderer-quicklook.md
+  s_bc8ea26773de3f::t_8bc6e0c621c4a5 519,1905
+  s_bc8ea26773de3f::t_87b2c57f9872a3 35
+docs/superpowers/plans/2026-10-27-00-master-roadmap.md
+  s_bc8ea26773de3f::t_25d75af6719a1f 182,228
+  s_bc8ea26773de3f::t_4e82a6b8bf1925 427
+docs/superpowers/plans/2026-10-27-09-design-system-brand.md
+  s_bc8ea26773de3f::t_2e116373fdddd5 1192
+  s_bc8ea26773de3f::t_87b2c57f9872a3 42
+  s_bc8ea26773de3f::t_74e82ee58884ee 1041
+  s_bc8ea26773de3f::t_25d75af6719a1f 1085
+  s_bc8ea26773de3f::t_5854a70636d451 1151-1152
+docs/reviews/m00-bloat-audit-post.md
+  s_bc8ea26773de3f::t_2f3244b693585f 1-23,25-74,76-102
+  s_bc8ea26773de3f::t_c31e9ae13d398d 24,75
+docs/superpowers/plans/2026-10-27-03-licensing-updates-release.md
+  s_bc8ea26773de3f::t_5bfe86d024eacf 20,274
+  s_bc8ea26773de3f::t_a366bb2c948975 1029
+  s_bc8ea26773de3f::t_25d75af6719a1f 308
+  s_bc8ea26773de3f::t_870f457e1eebe2 1127
+  s_bc8ea26773de3f::t_8bc6e0c621c4a5 1218
+docs/superpowers/plans/2026-10-27-06-app2-data-reader.md
+  s_bc8ea26773de3f::t_9f919e1445d984 989-990
+  s_bc8ea26773de3f::t_c24e3519409ca9 1004-1006
+  s_bc8ea26773de3f::t_a366bb2c948975 983-985
+  s_bc8ea26773de3f::t_25d75af6719a1f 595,601,735,863
+  s_bc8ea26773de3f::t_2e116373fdddd5 1009
+docs/superpowers/plans/2026-10-27-07-post-launch-scale.md
+  s_bc8ea26773de3f::t_5bfe86d024eacf 28
+  s_bc8ea26773de3f::t_a243c97d9916e5 525,542-545,547-551,603,606,643
+  s_bc8ea26773de3f::t_232d2bc17ebf7d 156
+  s_bc8ea26773de3f::t_07b4fd227338db 443
+  s_bc8ea26773de3f::t_c24e3519409ca9 1052-1053
+docs/superpowers/plans/2026-10-27-05-release-readiness-launch.md
+  s_bc8ea26773de3f::t_74e82ee58884ee 157,159,825
+  s_bc8ea26773de3f::t_a366bb2c948975 233,809,853-854
+  s_bc8ea26773de3f::t_25d75af6719a1f 73,102,312,515,782
+  s_bc8ea26773de3f::t_e785ac2109d4e2 33
+  s_bc8ea26773de3f::t_a86b6c41be846d 924
+docs/superpowers/plans/2026-10-27-08-growth-engine.md
+  s_bc8ea26773de3f::t_2e116373fdddd5 1267,1281
+  s_bc8ea26773de3f::t_25d75af6719a1f 43,671,746
+  s_bc8ea26773de3f::t_5854a70636d451 1258,1265
+docs/superpowers/plans/2026-10-27-04-site-seo.md
+  s_bc8ea26773de3f::t_e785ac2109d4e2 46
+  s_bc8ea26773de3f::t_880afbb85f3866 1034,1036-1038
+  s_bc8ea26773de3f::t_25d75af6719a1f 270,429,686,765,812
+  s_bc8ea26773de3f::t_4d9e947986bcb9 867,873-874,892,940,984,1040
+  s_bc8ea26773de3f::t_c00d99fec450f6 858
+  s_bc8ea26773de3f::t_0fd7a055bbbcf9 1041-1042
+docs/reviews/m00-pipeline.md
+  s_bc8ea26773de3f::t_9754ffdbd55437 14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fe252c7263c7c0361af0a351e399a3024a743265",
+  "prompts": {},
+  "sessions": {
+    "s_bc8ea26773de3f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c36ff1eb-4626-43e3-815d-36966257085e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "farouq abou umar <farouqabouumar@farouqs-iMac.local>"
+    }
+  }
+}
