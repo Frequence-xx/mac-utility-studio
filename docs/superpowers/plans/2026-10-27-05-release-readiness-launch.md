@@ -30,7 +30,7 @@ Master §2/§3 and CLAUDE.md apply (product rules 1–9, outward-facing approval
 - **Price (D15, K10):** App 1 is **$19 / €19 once, 2 Macs**. The introductory **$14 / €14 is the actual Polar price, not a discount** [F3f]. Both currencies change by hand on **Tue 15 Dec 2026 00:00 CET**, site first. The EUR amounts are the plan default, **pending user confirmation** (K10). Polar picks the checkout currency by geolocation and shows EU prices VAT-inclusive.
 - **Launch-price wording, verbatim, wherever a price is shown before 15 Dec:** `Introductory price $14 until Mon 14 Dec 2026 23:59 CET. From 15 Dec: $19.` Pages that show EUR use the same dated sentence with € amounts (plan 04 owns the translations). Never a "was" price, struck-through price, countdown or "only N left" (rule 6, art. 5a Bpp).
 - **Media:** no faces anywhere (avatars, Dock icons of people, browser tabs); videos are encoded with `-an`; demo documents come from `Fixtures/markdown/` (§3.4). No Black Friday (27 Nov) or Cyber Monday (30 Nov) tie-ins.
-- **`.env` (K1):** read values only through `. scripts/lib/env.sh` and per-key `envget` (plan 01 Task 1); write them only with `envset KEY VALUE`. Never source `.env`. Key check, by name: `. scripts/lib/env.sh; [ -n "$(envget KEY)" ] && echo set` → `set`. (A `grep '^KEY=.+'` passes on an empty quoted `KEY=''`, so it isn't used.)
+- **Key check, by name:** `. scripts/lib/env.sh; [ -n "$(envget KEY)" ] && echo set` → `set`. (A `grep '^KEY=.+'` passes on an empty quoted `KEY=''`, so it isn't used.)
 - **Evidence names:** `m15-intel` = build Mac; `m14-arm`, `m15-arm`, `m26-arm` = GitHub runners; `m27-arm` = Scaleway M1.
 - **Commits (B2):** "message `…` + trailer" means the message ends with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - **Dates (all CET):**
@@ -70,7 +70,7 @@ Master §2/§3 and CLAUDE.md apply (product rules 1–9, outward-facing approval
 | `docs/ops/support-templates.md`, `docs/ops/support-log.md` | 4 | Reply templates; daily minutes log + gate |
 | `docs/launch/demo/storyboard.md`, `docs/launch/demo/captions/*.png`, `docs/launch/demo/captions.filter` | 5 | Demo script, caption bands (plan 09 `caption.html`) and the overlay graph |
 | `site/static/media/tegel-markdown-demo.{mp4,webm}`, `…-poster.png` | 5 | Site video and poster |
-| `site/static/img/app1-<subject>-<light\|dark>.png` | 5 | Site screenshots (plan 04 CR-6) |
+| `site/static/img/app1-<subject>-<light\|dark>.png` | 5 | Site screenshots for plan 04 |
 | `docs/launch/ph-gallery/*.png` | 5 | 4 × 1270×760 gallery (plan 09 `gallery.html`) + 240×240 thumbnail |
 | `scripts/polar_sales.py`, `scripts/test_polar_sales.py`, `Makefile` | 6 | Count paid sales in a CET date window; `test-scripts` (Python only) in `make check` |
 | `docs/ops/advisers.md` | 7 | H8 scholar and H10 tax-adviser messages; H7 KvK-number check |
@@ -99,7 +99,7 @@ grep -rniE 'was \$|~~\$|black friday|cyber monday|christmas|xmas|holiday|santa|l
 - Create: `scripts/smoke-dmg.sh`, `scripts/test-smoke-dmg.sh`, `.github/workflows/smoke.yml`
 
 **Interfaces:**
-- Consumes: a DMG from `scripts/release.sh markdown <version> --no-upload`, whose `<version>` may be `X.Y.Z-rcN` (plan 03 Task 12; Contract change request 2); `Fixtures/markdown/*.md`.
+- Consumes: a DMG from `scripts/release.sh markdown <version> --no-upload`, whose `<version>` may be `X.Y.Z-rcN` (plan 03 Task 12); `Fixtures/markdown/*.md`.
 - Produces:
   - `scripts/smoke-dmg.sh <dmg> <out-dir>`, which reads env `APP_NAME` (default `Tegel Markdown`), `INSTALL_DIR` (default `/Applications`) and `FIXTURES` (default `Fixtures/markdown`, relative to the working directory). It writes `<out-dir>/smoke.txt`, one line per check (`PASS <check> <detail>` / `FAIL <check> <detail>`), plus `<out-dir>/*.png`. It exits 0 only if every hard check passes, else 1.
   - Hard checks, by name. Only what varies by machine (B18); the staple, the archs and the Polar plist values are intrinsic to the DMG and asserted once by plan 03's `release.sh` before it prints the path:
@@ -154,10 +154,9 @@ jobs:
         with: { name: "smoke-${{ matrix.os }}", path: out }
 ```
 
-- [ ] **Step 7: Validate, and watch the pin guard fail first.**
+- [ ] **Step 7: Validate.**
   - `ruby -ryaml -e 'YAML.load_file(".github/workflows/smoke.yml"); puts "yaml ok"'` → `yaml ok`.
-  - Guard on a planted tag ref: `printf '      - uses: actions/checkout@v7\n' | grep -cE 'uses: [^@]+@v[0-9]'` → `1` (it catches a tag).
-  - Then on the file: `grep -cE 'uses: [^@]+@v[0-9]' .github/workflows/smoke.yml` → `0`; `grep -cE 'uses: [^@]+@[0-9a-f]{40}( |$)' .github/workflows/smoke.yml` → `2`.
+  - `make test-shell` → exit 0 (plan 01's `check-guards.sh` accepts every pin).
 - [ ] **Step 8: Review, land on `main`, then dispatch per branch.**
   - Commit on `ci/smoke`: `git add .github/workflows/smoke.yml`, message `ci: add on-demand DMG smoke workflow` + trailer.
   - Review the one-file diff: a cold code-review subagent on `git diff main...ci/smoke`, plus the Task 10 `/cso` items for this file (`permissions: contents: read`, no `${{ inputs.* }}` in `run:`, SHA pins). Fix any P0/P1 on `ci/smoke`. Keep the result for `docs/reviews/m05.md` ("smoke.yml bootstrap", Task 10).
@@ -231,7 +230,7 @@ Each 🔒 step is a live, outward-facing change. Show the user the exact values,
   - product Tegel Markdown; discount codes **off**; success URL = `/download/` (plan 04 Task 14), or none.
   - Save `POLAR_CHECKOUT_URL_MARKDOWN` and `POLAR_PORTAL_URL` (`https://polar.sh/<org-slug>/portal`).
   - Expected: both key checks → `set`; `. scripts/lib/env.sh; curl -s -o /dev/null -w '%{http_code}' -L "$(envget POLAR_CHECKOUT_URL_MARKDOWN)"` → `200`.
-  - **Keep the URL unpublished** (no site page, post or message) until key check `KVK_NUMBER` → `set`. Plan 04 Task 14 then puts it in `site/config.json`.
+  - **Keep the URL unpublished** (no site page, post or message) until key check `KVK_NUMBER` → `set`. Plan 04 Task 14 then puts it in `site/config.json` as `checkoutURL`; `version` and `downloadURL` are Task 10 Step 8's (plan 04 CR-5).
 - [ ] **Step 7 🔒 QA licence.** It gives a production key for the matrix without a real sale.
   - Create discount `QA-INTERNAL`: 100%, max redemptions 1 (single-use), ends 2026-12-07. Hidden: it's never published, and the public link has discount codes off (Step 6), so nobody can type it in.
   - Create a separate, unpublished checkout link with that discount preset. Complete it with the studio email, **leaving the opt-in box as it loads** (unticked).
@@ -310,7 +309,7 @@ Notes the doc must carry:
 
 **Steps:**
 
-- [ ] **Step 1: Price-string check** (Contract change request 5). `grep -rnE '(\$|€) ?1[49]\b' Apps/Markdown || echo "no price in app"`. Expected: `no price in app`. A hit means 15 Dec would need an app release, so raise it before RC1.
+- [ ] **Step 1: Price-string check** (the app shows no price; the checkout does). `grep -rnE '(\$|€) ?1[49]\b' Apps/Markdown || echo "no price in app"`. Expected: `no price in app`. A hit means 15 Dec would need an app release, so raise it before RC1.
 - [ ] **Step 2: Build RC1 and store it privately.**
   - `scripts/release.sh markdown 1.0.0-rc1 --no-upload`; DMG = the last stdout line.
   - `gh release create v1.0.0-rc1 "$DMG" --prerelease --title "1.0.0-rc1 (internal)" --notes "internal test build"`. The repo is private, so this is not an outward action.
@@ -513,7 +512,7 @@ ffmpeg -ss 2 -i site/static/media/tegel-markdown-demo.mp4 -frames:v 1 site/stati
   - `ffprobe -v error -select_streams v -show_entries stream=width,height -of csv=p=0 <file>` → `1920,1080`;
   - watching it once confirms the captions are readable, sit in the band and never over UI, and no face appears.
 - [ ] **Step 8: Screenshots.**
-  - **Site shots** (plan 04 CR-6: 2×, light and dark, Fixtures documents only): `scripts/window-shot.sh <owner> site/static/img/app1-<subject>-<light|dark>.png` (plan 09; native window shadow). Subjects are `quicklook` (owner `qlmanage`, via `qlmanage -p`), `folder-mermaid` and `themes` (owner `Tegel Markdown`) and `rtl-pdf` (owner `Preview`).
+  - **Site shots** (2×, light and dark, Fixtures documents only): `scripts/window-shot.sh <owner> site/static/img/app1-<subject>-<light|dark>.png` (plan 09; native window shadow). Subjects are `quicklook` (owner `qlmanage`, via `qlmanage -p`), `folder-mermaid` and `themes` (owner `Tegel Markdown`) and `rtl-pdf` (owner `Preview`).
   - **PH gallery** (verified 27 Oct at producthunt.com/launch/preparing-for-launch: "recommended size for images in the gallery is 1270x760", thumbnail "240x240" square, images "under 3MB", "2+ images" required). Render each one from plan 09's `gallery.html`, with a caption of ≤ 48 characters and `img` relative to `docs/design/templates/`:
 
     ```bash
@@ -780,7 +779,7 @@ Expected: every line starts with `200`. During launch week it can run on `/loop 
 
 - [ ] **Step 2: Write the price-change runbook** (Mon 14 → Tue 15 Dec). This runbook owns the whole switch, site half included; plan 04 Task 15 points here (B13).
   - [ ] **Mon 14 Dec, daytime:**
-    - Prepare `content/price-19` with plan 04 Task 15 Step 1 (`price`, `priceEUR` and `intro` in `site/config.json`, one commit, not merged). Every page, translation and the JSON-LD `offers.price` read that file (Contract change request 3).
+    - Prepare `content/price-19` with plan 04 Task 15 Step 1 (`price`, `priceEUR` and `intro` in `site/config.json`, one commit, not merged). Every page, translation and the JSON-LD `offers.price` read that file.
     - Preview-deploy it with plan 04's preview deploy command, then run plan 04 Task 15 Step 2's site checks with `https://tegelapps.com` swapped for the preview URL. Expected: as listed there. (Those checks match the no-break space in `€ 19 incl. btw`; a plain `€ ?14` grep would pass on a page that still shows €14.)
   - [ ] **Mon 14 Dec:** the user approves in writing: "deploy `content/price-19` at 00:00 CET on 15 Dec, then change the Polar prices of Tegel Markdown from $14 / €14 to $19 / €19". Record the approval.
   - [ ] **Reminder:** a calendar entry at **Mon 14 Dec 23:45 CET** (the user creates it). If the executing session offers `CronCreate`, also add a one-shot prompt at that time. Record which.
@@ -807,6 +806,7 @@ Expected: every line starts with `200`. During launch week it can run on `/loop 
     - `git tag -a v1.0.1 -m "1.0.1" && git push origin v1.0.1`; `scripts/release.sh markdown 1.0.1 --no-upload` → `$DMG`;
     - `gh release create v1.0.1 "$DMG" --title "1.0.1"` (private), read the CI minutes (Task 3 Step 3), then `gh workflow run smoke.yml --ref main -f tag=v1.0.1` → 3 × 2 `PASS`;
     - 🔒 `scripts/release.sh markdown 1.0.1 --from-dmg "$DMG"` (no rebuild);
+    - site keys (plan 04 CR-5): on `content/release-1.0.1`, set `apps.markdown.version` → `"1.0.1"` and `downloadURL` → the printed `published …` URL, add the `/changelog/` entry, run review stages 2, 3 and 9, merge, and deploy with plan 04's production deploy command → `curl -s https://tegelapps.com/download/ | grep -cF "<downloadURL>"` ≥ 1;
     - Task 10 Step 7's `same-dmg` comparison with `v1.0.1` and the public 1.0.1 DMG URL → `same-dmg`;
     - `curl -s "<SUFeedURL>" | grep -c '<sparkle:shortVersionString>1.0.1<'` → `1`;
     - on `m15-intel`, 1.0.0 → Check for Updates → About shows 1.0.1 (screenshot).
@@ -822,7 +822,7 @@ Expected: every line starts with `200`. During launch week it can run on `/loop 
   - **Stage 2:** `make check` includes `test-scripts` (Task 6). `test-smoke-dmg.sh` is GUI and outside `make check`, so run `bash scripts/test-smoke-dmg.sh` on `m15-intel` beside it and record `test-smoke-dmg: PASS` (K13).
   - **Stage 4, `/cso` scope:**
     - `Config/Release.xcconfig` (production ids only, no secrets, the `https:/$()/` form);
-    - `.github/workflows/smoke.yml` (`permissions: contents: read`, no inline `${{ inputs.* }}` in `run:`, every `uses:` on a 40-hex SHA: Task 1 Step 7's guard prints `0`);
+    - `.github/workflows/smoke.yml` (`permissions: contents: read`, no inline `${{ inputs.* }}` in `run:`, every `uses:` on a 40-hex SHA: check-guards passes);
     - `scripts/polar_sales.py` (the token never printed or logged; HTTPS only);
     - `scripts/smoke-dmg.sh`;
     - `.env.example` (names only);
@@ -850,7 +850,8 @@ Expected: every line starts with `200`. During launch week it can run on `/loop 
   - customers get the bytes the runners smoked, i.e. the private release asset. Watch the comparison fail first, against the RC1 asset: `[ "$(gh release download v1.0.0-rc1 --pattern '*.dmg' --output - | shasum -a 256)" = "$(gh release download v1.0.0 --pattern '*.dmg' --output - | shasum -a 256)" ] || echo differs` → `differs`. Then `[ "$(curl -sL "<public DMG URL>" | shasum -a 256)" = "$(gh release download v1.0.0 --pattern '*.dmg' --output - | shasum -a 256)" ] && echo same-dmg` → `same-dmg`;
   - `curl -s "<SUFeedURL>" | grep -c '<sparkle:shortVersionString>1.0.0<'` → `1`;
   - on `m15-intel`, the installed `1.0.0-rc1` (test-feed override removed in Task 3) → Check for Updates → About shows 1.0.0. This is R10 against the production feed. The rc build number must be lower than 1.0.0's.
-- [ ] **Step 8: Retire QA access.**
+- [ ] **Step 8: Site keys (plan 04 CR-5).** On plan 04's `content/w6-launch` branch, set `apps.markdown.version` → `"1.0.0"` and `downloadURL` → the URL on Step 7's `published …` line in `site/config.json`; `(cd site && bun test)` → 0 fail; commit `site/config.json` (`content(site): Tegel Markdown 1.0.0 download` + trailer). Plan 04 Task 14 Step 6 reviews and merges the branch; then deploy with plan 04's production deploy command (plan 04 Task 10 Step 2). Expected: `curl -s https://tegelapps.com/download/ | grep -cF "<downloadURL>"` ≥ 1.
+- [ ] **Step 9: Retire QA access.**
   - Revoke the QA licence key in the dashboard; archive the `QA-INTERNAL` discount and its checkout link (🔒).
   - Remove the key from `.env`: `envset POLAR_QA_LICENSE_KEY ''`.
   - Expected: `. scripts/lib/env.sh; [ -z "$(envget POLAR_QA_LICENSE_KEY)" ] && echo gone` → `gone`.
@@ -920,13 +921,4 @@ Expected: every line starts with `200`. During launch week it can run on `/loop 
 
 ## Contract change requests
 
-1. **§3.1 file layout, additive:**
-   - `scripts/smoke-dmg.sh`, `scripts/test-smoke-dmg.sh`, `scripts/polar_sales.py`, `scripts/test_polar_sales.py`;
-   - `.github/workflows/smoke.yml`, separate from `ci.yml` to avoid editing plan 01/03's file. It lands on `main` first in its own reviewed commit (K13);
-   - folders `docs/gates/evidence/`, `docs/ops/` (including `docs/ops/support-log.md`), `docs/launch/`.
-   - Accepted, modified: the FAQ and known issues live in plan 04's `site/content/en/faq.md` (`/faq/`, `## Known issues`), not in a separate support folder.
-2. **`scripts/release.sh <app> <version> [--sandbox] [--yes] [--no-upload] [--from-dmg <path>]`**, version `X.Y.Z[-bN|-rcN]`. Accepted; it lands in plan 03 Task 12. `--no-upload` stops after the notarised, stapled DMG and prints its path as the last stdout line; it builds RCs and the pre-publish smoke DMG. `--from-dmg <path>` (K7, CR-P2-2) publishes that already smoke-tested DMG with no rebuild; release day and 1.0.1 use it.
-3. **Single site price source.** Accepted: plan 04's `site/config.json`, read by the pages **and** the JSON-LD `offers.price`, so 15 Dec is a one-file change. It holds the USD and the EUR price (K10). The format is `"19"` (no decimals); Task 9 edits only that file.
-4. **Schedule (master §5 H6, §7 W5):** the second Scaleway lease is L2, **Thu 26 Nov 09:00 → Fri 27 Nov 09:00** (€3.19 incl. VAT), so RC1 and the production Polar product (needed for R9 on macOS 27) exist on lease day. It is shared in the order 05 → 03 → 02 → 08, with macOS 14 last. The macOS 14 manual pass uses the same lease (reinstall), not a third lease.
-5. **Invariant for plans 02/03:** the app UI contains no hard-coded price. The "Buy" button opens `TGPolarCheckoutURL`, so the 15 Dec change needs no app release. Task 3 Step 1 checks this. Accepted.
-6. **`.env.example` keys added:** `POLAR_PRODUCT_ID_MARKDOWN`, `POLAR_BENEFIT_ID_MARKDOWN`, `POLAR_PORTAL_URL`, `POLAR_QA_LICENSE_KEY` (the last is removed from `.env` after Task 10).
+CR 1–6 accepted and applied to master §3.1, §5 (H6) and §7, plans 03 and 04, and this plan's Tasks 2 and 3 (27 Oct); history in `docs/reviews/m00-consolidated.md`.

@@ -25,12 +25,11 @@ Master §2/§3 and `CLAUDE.md` apply (platform and universal binary, build Mac a
 - **Read-only, extended:** App 3 may also write the pasteboard on an explicit action. `readonly-gate` (plan 06) scans every app; a new writer joins its allowlist by exact name, with a step that watches the gate fail first.
 - **Network:** the MAS edition makes **no** network calls. Setapp framework reporting is allowed only if the user signs the exception in Task C2.
 - **Pricing:** App 1 **$19 once, 2 Macs**; App 2 **$15**; bundle **$29**; each with its EUR price from plans 05/06 (K10, pending the user); MAS at the $19 price point. App 3 and v2 prices are set by the user (D1, F0).
-- **Licence:** 2 activations [F3e]; **30-day grace** from the last 200. A 404, 5xx or network error never locks a user on the spot [F3d]. Whenever sales end, Task G7 (Procedure S) runs: new sales stop first, then a final build keeps Pro for every stored licence with no further online checks (K14). G3 STOP stops development but keeps the apps on sale (BUSINESS-PLAN §12), so G7 waits until sales end.
+- **Licence and kill path:** master GC; Task G7 is Procedure S.
 - **Permissions:** **no Accessibility, Screen Recording or Input Monitoring in Apps 1–2.** App 3 would use Accessibility only: no event tap, no Input Monitoring, no key-event monitor. That exception (CR-8) stays **NO-GO until the user signs it off explicitly** in D2.
 - **Gate windows:** the **30 full days before the gate day**, Europe/Amsterdam. EUR uses the ECB rate (USD per EUR) on the gate day:
   `curl -s 'https://data-api.ecb.europa.eu/service/data/EXR/D.USD.EUR.SP00.A?lastNObservations=1&format=csvdata' | python3 -c "import csv,sys; r=list(csv.DictReader(sys.stdin))[-1]; print(r['TIME_PERIOD'], r['OBS_VALUE'])"`
 - **Hours:** ≤ 20 h/week; ≤ 10 h/week if G3 lands in €100–300; ≤ 2 h/week under a G2 freeze (BUSINESS-PLAN §11–12).
-- **`.env` in commands:** start with `. scripts/lib/env.sh` and pass keys one at a time (`KEY="$(envget KEY)" cmd`); never `set -a` (K1).
 - **Commits:** "Commit: `<paths>`, `<msg>` + trailer" means `git add <paths> && git commit -m "<msg>" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`.
 
 ## Review Focus
@@ -154,10 +153,7 @@ def test_summary_cli_maps_names_and_needs_no_markdown_id(self):
 
 **Thresholds (verbatim):** continue if "≤ 20 min/day averaged over 14 days". Kill / change if "> 30 min/day → fix the docs or raise the price before any new feature".
 
-- [ ] **Step 1: Compute the 14-day average** with plan 05's support command (Task 4 Step 5; one implementation, B9):
-  ```bash
-  grep -E '^\| 20[0-9]{2}-' docs/ops/support-log.md | tail -14 | awk -F'|' '{s+=$3;n++} END{printf "avg %.1f min/day over %d days\n", s/n, n}'
-  ```
+- [ ] **Step 1: Compute the 14-day average.** Run plan 05 Task 4 Step 5's check command.
 - [ ] **Step 2: Append a row:** `| date | avg min/day | GREEN ≤ 20 / AMBER 20–30 / RED > 30 | top 3 categories |`.
 - [ ] **Step 3: On RED.** The next feature task in any active section waits. Write FAQ/docs fixes for the top 3 categories, or propose a price rise (outward-facing; never framed with a "was" price). Re-measure after 14 days.
 - [ ] **Step 4: Commit the row** (and any docs fixes) to `main`.
@@ -444,7 +440,7 @@ func testRejectsNonPDF() { XCTAssertThrowsError(try PDFStamper.stamp(Data("no".u
 
 - [ ] **Step 1: Gate and branch.** G2 ≠ FREEZE and `m07a` is merged. `git checkout -b m07b-mas main`.
 - [ ] **Step 2: SDK rule.** Record the newest "built with Xcode N" rule and its date from developer.apple.com/news/upcoming-requirements/ (today: "Xcode 26 or later", since 28 Apr 2026). If submission day needs an Xcode newer than 26.3, CI is mandatory [F2]; otherwise the build Mac may build too.
-- [ ] **Step 3: Runner image.** `curl -s https://raw.githubusercontent.com/actions/runner-images/main/images/macos/macos-26-arm64-Readme.md | grep -A12 '### Xcode'`. On 27 Oct 2026 the default was 26.6 (17F113), with 26.3, 26.4.1 and 26.5 installed; `xcode-27` was a preview image [F7]. Choose the newest GA Xcode that meets Step 2. Record the full commit SHA of the release of **every** action used in `.github/workflows/` (`actions/checkout`, `oven-sh/setup-bun`, `actions/upload-artifact`, …) and the XcodeGen release version plus the sha256 of its `xcodegen.zip`; B3 pins them all (S25).
+- [ ] **Step 3: Runner image.** `curl -s https://raw.githubusercontent.com/actions/runner-images/main/images/macos/macos-26-arm64-Readme.md | grep -A12 '### Xcode'`. On 27 Oct 2026 the default was 26.6 (17F113), with 26.3, 26.4.1 and 26.5 installed; `xcode-27` was a preview image [F7]. Choose the newest GA Xcode that meets Step 2. Record the full commit SHA of the release of every action `mas.yml` uses (`actions/checkout`) and the XcodeGen release version plus the sha256 of its `xcodegen.zip`; B3 pins `mas.yml` to them (S25).
 - [ ] **Step 4: Source split.** `grep -rlE "import (Sparkle|TegelStore)|TGPolar|SUFeedURL|checkoutURL|portalURL" Apps/Markdown/App` lists the files that move to `Apps/Markdown/App/Direct/` in B1.
 - [ ] **Step 5: Human checkpoint H-M1 (Account Holder).** Create the **Apple Distribution** and **Mac Installer Distribution** certificates; register the explicit App IDs `com.tegelapps.markdown` and `com.tegelapps.markdown.quicklook`; create a Team API key "tegel-ci-mas" with role **App Manager** → `.env` keys `ASC_CI_API_KEY_ID`, `ASC_CI_API_ISSUER_ID`, `ASC_CI_API_KEY_PATH`. Check: `security find-identity -v -p codesigning | grep -c "Apple Distribution"` ≥ 1.
 - [ ] **Step 6: Commit** the revalidation doc.
@@ -526,7 +522,7 @@ func testRejectsNonPDF() { XCTAssertThrowsError(try PDFStamper.stamp(Data("no".u
 
 ### Task B3: MAS build script and CI workflow, with the keychain import
 
-**Files:** Create `scripts/mas.sh`, `scripts/ExportOptions-MAS.plist`, `.github/workflows/mas.yml`. Modify `.env.example` (adds `ASC_CI_API_KEY_ID`, `ASC_CI_API_ISSUER_ID`, `ASC_CI_API_KEY_PATH`), `Makefile` (a `workflow-gate` target in `check`), and every existing `.github/workflows/*.yml` (actions pinned to the B0 SHAs, S25).
+**Files:** Create `scripts/mas.sh`, `scripts/ExportOptions-MAS.plist`, `.github/workflows/mas.yml`. Modify `.env.example` (adds `ASC_CI_API_KEY_ID`, `ASC_CI_API_ISSUER_ID`, `ASC_CI_API_KEY_PATH`) and `scripts/check-guards.sh` (plan 01; the inputs guard, S24).
 
 **Interfaces:**
 - Consumes: `scripts/verify-store-build.sh`, `APPLE_TEAM_ID`.
@@ -543,16 +539,16 @@ func testRejectsNonPDF() { XCTAssertThrowsError(try PDFStamper.stamp(Data("no".u
   - Copy the plist to `build/ExportOptions.plist`; `plutil -replace teamID -string "$APPLE_TEAM_ID"`; with `--upload`, also `plutil -replace destination -string upload`.
   - `xcodebuild -exportArchive -archivePath build/MAS.xcarchive -exportPath build/MAS-export -exportOptionsPlist build/ExportOptions.plist` plus the same auth flags.
 - [ ] **Step 3: Local dry run** (only if B0 allows Xcode 26.3). `. scripts/lib/env.sh && APPLE_TEAM_ID="$(envget APPLE_TEAM_ID)" ASC_CI_API_KEY_PATH="$(envget ASC_CI_API_KEY_PATH)" ASC_CI_API_KEY_ID="$(envget ASC_CI_API_KEY_ID)" ASC_CI_API_ISSUER_ID="$(envget ASC_CI_API_ISSUER_ID)" scripts/mas.sh 1.1.0 110`, then `pkgutil --check-signature build/MAS-export/*.pkg | grep -E "Mac Installer Distribution|3rd Party Mac Developer Installer"` → one match.
-- [ ] **Step 4: Write the workflow guard and watch it fail.** Add to the `Makefile`, and make `check` depend on it (S24, S25):
-
-```make
-# every action pinned to a 40-hex SHA; no ${{ inputs.* }} anywhere except as a plain `NAME: ${{ inputs.x }}` env line
-workflow-gate:
-	@! grep -nE 'uses: [^@]+@[^0-9a-f]|uses: [^@]+@[0-9a-f]{0,39}([^0-9a-f]|$$)' .github/workflows/*.yml
-	@! grep -nE '\$$\{\{ *inputs\.' .github/workflows/*.yml | grep -vE '^[^:]+:[0-9]+: +[A-Z_]+: "?\$$\{\{ *inputs\.[a-z_]+ *\}\}"?$$'
+- [ ] **Step 4: Add the inputs guard to `check-guards.sh` and watch it fail (S24).** Plan 01's script already fails `make check` on an unpinned `uses:` (S25); this adds one rule: `${{ inputs.* }}` reaches a workflow only as a `NAME: ${{ inputs.x }}` env entry, never inline in `run:`. Plant first:
+```bash
+mkdir -p .github/workflows && printf '      - run: echo ${{ inputs.version }}\n      VERSION: ${{ inputs.version }}\n      - env: { TAG: "${{ inputs.tag }}" }\n' > .github/workflows/planted.yml
+make test-shell; echo "exit=$?"
 ```
-
-Run `make workflow-gate`. Expected: FAIL, listing the `@v…` lines in plan 01's `ci.yml` and plan 05's `smoke.yml`. Pin each to its B0 SHA (keep the version in a trailing comment) → exit 0. Then add a scratch line `      - run: echo ${{ inputs.version }}` to `ci.yml` → FAIL on that line; remove it.
+Expected: `exit=0`; nothing catches it yet. Insert this line into the script's `{ … }` group, above the `uses:` grep (each `NAME: ${{ inputs.x }}` entry is stripped, block or flow style; any `${{ inputs.` left is a hit), and append `; pass workflow inputs through env:` to its error message:
+```sh
+          grep -rnE '\$\{\{ *inputs\.' .github/workflows | sed -E 's/([{,:][[:space:]-]*)[A-Z_]+: "?\$\{\{ *inputs\.[a-z_]+ *\}\}"?/\1/g' | grep -E '\$\{\{ *inputs\.'
+```
+Re-run `make test-shell; echo "exit=$?"`. Expected: exactly `.github/workflows/planted.yml:1:      - run: echo ${{ inputs.version }}`, the `check-guards:` line and `exit=1`; lines 2–3 (the allowed env forms) aren't listed. `rm .github/workflows/planted.yml`, then `make test-shell` → exit 0 (plan 05's `smoke.yml` passes `TAG` through `env:`).
 - [ ] **Step 5: Write `.github/workflows/mas.yml`.** Inputs reach the shell only through `env:` and are checked against a pattern before use; the job's token can only read; the imported keys are usable only by `codesign` and `productbuild` (S24); xcodegen comes from a pinned, checksummed release (S25).
 ```yaml
 name: mas
@@ -604,10 +600,10 @@ jobs:
       - if: always()
         run: security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" || true; rm -f "$RUNNER_TEMP/AuthKey.p8"
 ```
-  Then `make workflow-gate` → exit 0 (the `VERSION: ${{ inputs.version }}` lines are the allowed form).
+  Then `make test-shell` → exit 0 (the `VERSION: ${{ inputs.version }}` lines are the allowed form).
 - [ ] **Step 6: Secrets (human checkpoint H-M2).** The user exports both identities from Keychain Access as `.p12` files outside the repo and runs `gh auth login`. Then `gh secret set <NAME> < <file>` for `APPLE_TEAM_ID`, `MAS_DIST_CERT_P12_BASE64`, `MAS_INSTALLER_CERT_P12_BASE64`, `MAS_P12_PASSWORD`, `KEYCHAIN_PASSWORD`, `ASC_CI_API_KEY_ID`, `ASC_CI_API_ISSUER_ID`, `ASC_CI_KEY_P8_BASE64`. Check: `gh secret list` shows all 8 names.
 - [ ] **Step 7: CI dry run.** `gh workflow run mas.yml --ref m07b-mas -f version=1.1.0 -f build=110 -f xcode=<B0> -f upload=false && gh run watch --exit-status` → success; `gh run view --log | grep -c "verify-store-build: PASS"` → 1. (About 20 macOS minutes [F7].)
-- [ ] **Step 8: Commit:** `scripts/mas.sh scripts/ExportOptions-MAS.plist .github/workflows Makefile .env.example`, `build(mas): archive/export script, macos-26 CI with a temporary keychain, pinned actions` + trailer.
+- [ ] **Step 8: Commit:** `scripts/mas.sh scripts/ExportOptions-MAS.plist scripts/check-guards.sh .github/workflows .env.example`, `build(mas): archive/export script, macos-26 CI with a temporary keychain, pinned actions` + trailer.
 
 ### Task B4: App Store Connect record and listing
 
@@ -644,7 +640,7 @@ jobs:
 
 ### Task B6: Pipeline P, then submit for review
 
-- [ ] **Step 1: Run Procedure P (master §11) for `m07b`.** `/cso` scope: MAS and Quick Look entitlements; the `UNLOCKED` split (no licence bypass reaches the direct build); `mas.yml` (inputs only through `env:` and checked, `permissions: contents: read`, `-T` not `-A`, keychain cleanup, pinned SHAs and XcodeGen checksum; `make workflow-gate` green); `mas.sh` argument checks. Design review: screenshots and the menu without licence items.
+- [ ] **Step 1: Run Procedure P (master §11) for `m07b`.** `/cso` scope: MAS and Quick Look entitlements; the `UNLOCKED` split (no licence bypass reaches the direct build); `mas.yml` (inputs only through `env:` and checked, `permissions: contents: read`, `-T` not `-A`, keychain cleanup, pinned SHAs and XcodeGen checksum; `check-guards.sh` green in `make check`); `mas.sh` argument checks. Design review: screenshots and the menu without licence items.
 - [ ] **Step 2: Merge and push.**
 - [ ] **Step 3: Submit for Review** (approval of this submission). Log rejections in `docs/mas/review-log.md`; fix → P stages 2–4 → resubmit, with approval each time.
 - [ ] **Step 4: On approval.** Release manually (approval). Add "Also on the Mac App Store" and a FAQ entry ("same features; licences don't transfer between the direct and App Store editions") to the site. `curl -s https://tegelapps.com/markdown | grep -c "apps.apple.com"` ≥ 1. Later MAS updates run `mas.yml upload=true`, each with approval.
@@ -1053,6 +1049,8 @@ Plan 03 already binds each key to one benefit (D1): `PolarConfig.benefitID: Stri
 
 ## Contract change requests
 
+Row 14 accepted and applied to plan 08 Task 4 Step 8 and Task G1 (27 Oct); history in `docs/reviews/m00-consolidated.md`. Row 13 is dropped: Task B3 Step 4 adds the inputs guard to plan 01's `check-guards.sh`. Open:
+
 | # | Change | Reason | Section |
 |---|---|---|---|
 | 1 | §3.2: `renderToHTML` also emits math placeholders (`.math-src`, `data-math`, `dir="ltr"`) and footnotes (`fn<N>`/`fnref<N>`, `<li dir="auto">`). `window.tegel.render` lazy-loads `katex/katex.min.js` like Mermaid and sanitises KaTeX output with `SANITIZE_CONFIG` from `Renderer/src/sanitize.js` (plan 01), inserted with `replaceChildren` | v1.1 math and footnotes (BUSINESS-PLAN §6.1) | A1, A2 |
@@ -1067,8 +1065,6 @@ Plan 03 already binds each key to one benefit (D1): `PolarConfig.benefitID: Stri
 | 10 | `scripts/release.sh` accepts the apps `markdown-setapp` (zip; no DMG, appcast or R2) and `select` | Setapp packaging; App 3 | C4, D7 |
 | 11 | TegelStore: `PolarConfig.finalBuild` (Info.plist `TGFinalBuild`, build setting `TG_FINAL_BUILD`); `refresh()` makes no call and `isPro` holds for any stored licence when it's set. Master: every stop path runs Procedure S | K14: a stop never strands a buyer | G7 |
 | 12 | `PDFStamper.stamp(_:header:) -> Data`, in memory, applied between plan 02's `makePDFData` and its one write | No new file write; `readonly-gate` unchanged | A4 |
-| 13 | `Makefile` gains `workflow-gate` in `check` (pinned action SHAs; inputs only through `env:`) | S24, S25 | B3 |
-| 14 | `summarise` lives in `polar_sales.py`, added by plan 08 Task 4 (per currency, K10); plan 07 G1 adds only `--summary`/`--products` | B8: one net-revenue formula | G1 |
 | 15 | `PolarClient.activate` returns `Activation { id, benefitID }` and the benefit id is stored at activation | CX16 | F1 |
 
 ## Open questions only the user can answer

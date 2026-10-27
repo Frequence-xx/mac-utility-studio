@@ -40,7 +40,7 @@ Master §2/§3 and `CLAUDE.md` apply (product rules 1–9, design standard, appr
   - **HR7:** an email waitlist with consent, and buyer email only to buyers who ticked the checkout opt-in (K9), *not* bought lists, mail without consent, or inburgering/immigration framing.
   - **HR8:** neutral seasonal timing, *not* Christmas, holiday or other-religion theming. This includes Black Friday (27 Nov), Cyber Monday (30 Nov), Nowruz and Hanukkah tie-ins.
   - **HR9:** Arabic/RTL as a language feature, *not* Islamic-themed marketing. That means no Ramadan or Eid tie-ins, and no Qur'an or hadith as sample text.
-- **Price wording.** Before 15 Dec, the wording is verbatim: `Introductory price $14 until Mon 14 Dec 2026 23:59 CET. From 15 Dec: $19.` (plan 05 Global Constraints). EU-language copy uses the same sentence in € through plan 04's `{{pricing:…}}` placeholder (K10). The apps never show a price (plan 05 contract change request 5).
+- **Price wording.** Before 15 Dec, the wording is verbatim: `Introductory price $14 until Mon 14 Dec 2026 23:59 CET. From 15 Dec: $19.` (plan 05 Global Constraints). EU-language copy uses the same sentence in € through plan 04's `{{pricing:…}}` placeholder (K10). The apps never show a price (plan 05 Task 3 Step 1).
 - **Approvals:** every post, email, submission, reply, account creation and live DNS change is a 🔒 step; each records `Approved: <date>, user`.
 - **Email law (NL).** Primary source: Telecommunicatiewet art. 11.7, the version in force from 15-08-2026, read at wetten.overheid.nl/BWBR0009950/2026-08-15 on 27 Oct 2026.
   - *Lid 1:* commercial email needs prior consent the sender "kan aantonen" (can prove). Double opt-in is the proof.
@@ -51,7 +51,6 @@ Master §2/§3 and `CLAUDE.md` apply (product rules 1–9, design standard, appr
   - `MAILERLITE_API_TOKEN` (local scripts only) and `MAILERLITE_API_TOKEN_PAGES` (the Pages secret only): two tokens, so either can be revoked alone (K8, S18);
   - `MAILERLITE_GROUP_WAITLIST`, `MAILERLITE_GROUP_BUYERS_MARKDOWN`, `MAILERLITE_GROUP_BUYERS_DATA`;
   - `CLOUDFLARE_KV_WAITLIST_ID` (the waitlist's KV namespace id; not secret).
-- **`.env` in commands:** start with `. scripts/lib/env.sh` and pass keys one at a time (`KEY="$(envget KEY)" cmd`); never `set -a` (K1).
 - **Evidence honesty:** every number in `docs/growth/` names its source and date. Counts that include bots or updates say so.
 - **Owners:** **C** = Claude, **U** = the user.
 - **Commits:** "Commit: `<paths>`, `<msg>` + trailer" means `git add <paths> && git commit -m "<msg>" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`. Explicit paths, never `-A` (B2).
@@ -669,7 +668,7 @@ test('the tool drops every non-data: image source, same-origin paths included', 
   - **CTA under the preview:** `Need it on paper? Tegel Markdown exports paginated A4 and Letter PDFs that keep right-to-left text correct.`, linking to `/download/` and to checkout with `?reference_id=tool-rtl`.
   - **Print stylesheet:** `.preview { display: none }`, and `.print-note` shows: `Printing from this page is turned off. Tegel Markdown Pro exports paginated, right-to-left-correct PDFs.`
   - **AR page:** the same copy in Arabic (U reviews).
-- [ ] **Step 6: Build.** Plan 04's build bundles `main.js` into `site/public/tools/rtl-markdown-check/` (contract change request 4). Expected:
+- [ ] **Step 6: Build.** Plan 04's build bundles `main.js` into `site/public/tools/rtl-markdown-check/` (plan 04 Task 5). Expected:
   - `grep -c "connect-src 'none'" site/static/_headers` → ≥ `1` (plan 04's `/tools/*` and `/:lang/tools/*` blocks; the tool CSP isn't a meta tag);
   - `gzip -c site/public/tools/rtl-markdown-check/main.js | wc -c` < `300000` (if over, report the size to plan 01; the highlight.js language set is theirs).
 - [ ] **Step 7: Hostile input** (Review focus 5). Only a deploy applies `_headers`, so test on a preview deploy (plan 04's preview command; previews need no approval). First `curl -sI <preview>/tools/rtl-markdown-check/ | grep -i '^content-security-policy'`: it contains `connect-src 'none'`, `img-src data:` (with no `'self'` in `img-src`) and `script-src 'self'`, and not `cloudflareinsights` (proof the `!` detach dropped the global policy; joined policies would intersect and block `main.js`). Then open `<preview>/tools/rtl-markdown-check/` in Safari with Web Inspector → Network. Paste `Fixtures/markdown/hostile.md`, then `![d](/private-project/architecture.png)` and `![d](https://tegelapps.com/x.png?token=abc)`. Expected: no alert or navigation, and the Network tab shows no request after the page load, same-origin images included (K15). Screenshot to `docs/growth/evidence/tool-hostile.png`.
@@ -744,7 +743,7 @@ test('the tool drops every non-data: image source, same-origin paths included', 
 **Rules** (paywalls skill; UX-writing per `apple-design`):
 - The `pro` window opens only when the user invokes a Pro action: Open Folder, Export as PDF, or choosing a Pro theme. Never on launch or on a timer, never to `isPro` users.
 - The page preview shows at most once per feature per session. Later invocations in the same session show the compact window (no preview).
-- No price in the app (plan 05 contract change request 5; X30). The checkout shows it.
+- No price in the app (plan 05 Task 3 Step 1; X30). The checkout shows it.
 
 **Files:**
 - Create `Packages/TegelKit/Sources/TegelStore/CheckoutLink.swift` and `Packages/TegelKit/Tests/TegelStoreTests/CheckoutLinkTests.swift`.
@@ -1256,26 +1255,16 @@ Run **Procedure P (master §11)** with these deltas (B1):
 
 ## Contract change requests
 
-1. **§3.1 layout, additive:** `docs/growth/`, `site/functions/api/`, `site/tools/`, `site/static/llms.txt`, `scripts/kpi.py`, `scripts/sync_buyers.py` and their tests.
-2. **§3.3 Swift API, additive:**
-   - `TegelKit.QuickLookSetup` (`settingsURL`, `SettingsPath`, `settingsPath(macOSMajor:)`);
-   - `PolarConfig.checkoutURL(ref:)`, the only TegelStore addition.
+CR 1–3, 4(a)–(c), 6 and 13 accepted and applied to master §3.1–§3.3, plans 01, 02, 04 and 05, and Task 4 Step 8 (27 Oct); history in `docs/reviews/m00-consolidated.md`. Open:
 
-   The MAS target (plan 07) drops TegelStore, and with it the upsell (`ProUpsellView.swift` moves to `Direct/`).
-
-   **Status:** accepted-modified (X11, X12, K18). Plan 02 Task 15 builds `QuickLookSetup` for its Welcome window. `UpsellFeature` stays app-side in `ProUpsellView.swift` (`String, Codable, Hashable, CaseIterable, Sendable`), and the once-per-feature state is the app's `UpsellContext.previewShown`; there is no `UpsellPolicy`. The PDF preview uses plan 02's `PDFExporter.makePDFData` (plan 02 CR-3).
-3. **§3.2 renderer (plan 01):** move the DOMPurify options into `Renderer/src/sanitize.js`, exporting `SANITIZE_CONFIG`, imported by `page.js`. Task 9 reuses it, so the site tool and the app sanitise identically. **Status:** accepted, done in plan 01 Step 7 (X8): `SANITIZE_CONFIG` plus `addHooks(purify, { fileImages = false } = {})`; the tool calls `addHooks(DOMPurify)`.
 4. **Plan 04 build/deploy:**
-   - (a) bundle `site/tools/*/main.js` into `site/public/tools/*/`, and render pages with front matter `tool: <name>` using `tool.html` and a page CSP with `connect-src 'none'`;
-   - (b) deploy so `site/functions/` is uploaded (run from `site/`);
-   - (c) the site tests allow same-origin scripts only under `/tools/`;
    - (d) include `partials/waitlist-form.html` on the home and RTL pages until 2 Feb 2027;
    - (e) every checkout link carries `?reference_id=site-<slug>`;
    - (f) `robots.txt` allows the AI crawlers in Task 13 Step 3.
 
-   **Status:** (a)–(c) are done in plan 04 (X9). The tool CSP is the `/tools/*` and `/:lang/tools/*` blocks in `site/static/_headers` (`! Content-Security-Policy` detaches the global policy), not a page meta tag. (f) is a no-op: `robots.txt` already allows all.
+   **Status:** (f) is a no-op: `robots.txt` already allows all.
 5. **Plan 04 schedule and wording:** the privacy page (with the Task 8 Step 4 text and the MailerLite DPA) goes **live by Mon 16 Nov**, before the waitlist, instead of with the W5 legal pages. Its buyer-sync sentence and its `pages.test.js` check use the opt-in label `Email me set-up tips and news about Tegel apps` (K9), and its tool sentence says images are dropped (K15, Task 9).
-6. **Plan 05 Task 2 Step 5:** the checkout field is `marketing_opt_in`, an unticked checkbox labelled `Email me set-up tips and news about Tegel apps` (K9, Tw 11.7 lid 1). **Status:** done in plan 05.
+<!-- numbers kept, so cross-plan references resolve -->
 7. **Plan 05 operations:**
    - Task 9 runbook gets a row at 09:30 for U 🔒 "Send the waitlist launch email (plan 08 Task 15)";
    - the Task 4 daily routine runs Task 14 Step 7's sync command (K1, no `.env` sourcing);
@@ -1289,5 +1278,5 @@ Run **Procedure P (master §11)** with these deltas (B1):
 10. **`make check`:** plan 04's `test-site` (`cd site && bun test`) discovers `site/test/functions/` and `site/tools/`; plan 08 changes it only if Task 7 Step 4 shows otherwise. The Python tests (`test_kpi.py`, `test_sync_buyers.py`, plan 05's `test_polar_sales.py`) run under plan 05's `test-scripts` target (X21).
 11. **Brief deviation:** the KPI script is `scripts/kpi.py`, not `kpi.ts`, so it imports plan 05's `polar_sales.py` instead of porting it.
 12. **Plan 06:** its "cross-sell email to App 1 buyers" exit item is delivered by Task 15 Step 2. Plan 06 Task 15 supplies the copy (`docs/launch/data-crosssell-email.md`) and the segment rule; plan 08 owns MailerLite and the send (P1-10).
-13. **Plan 05 `polar_sales.py`, additive (B8):** Task 4 Step 8 adds `summarise(orders, product_ids) -> {"count", "gross": {cur: amount}, "net": {cur: amount}}`, per currency (K10). Plan 07 G1 consumes it and adds only `--summary --products`.
+<!-- numbers kept, so cross-plan references resolve -->
 14. **Plan 04 deploy:** if the Pages project is configured from a `wrangler.toml`, it carries the `WAITLIST_KV` binding; otherwise Task 7 Step 6's dashboard binding stands. A missing binding fails closed (every sign-up gets `later`), so Task 7 Step 6's KV check is the gate.

@@ -32,12 +32,8 @@ Master §2/§3 and CLAUDE.md apply (platform, build Mac, product rules, secrets,
 - **Entitlements (D5, K4):**
   - App: `com.apple.security.app-sandbox`, `com.apple.security.files.user-selected.read-write`, `com.apple.security.files.bookmarks.app-scope`, `com.apple.security.network.client`, and `com.apple.security.temporary-exception.mach-lookup.global-name = [$(PRODUCT_BUNDLE_IDENTIFIER)-spks, $(PRODUCT_BUNDLE_IDENTIFIER)-spki]` [F4].
   - Quick Look extension: `app-sandbox` and `network.client` only, with **no** file exception. Quick Look renders with `baseURL: nil` and shows no local images.
-- **CSP, verbatim:** `default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: tegel-doc:; font-src 'self'`. `file:` is never allowed; `tegel-doc:` is plan 02's image scheme handler (K4).
-- **Second network barrier (K6, S7):** `RendererWebView` installs a `WKContentRuleList` that blocks `^https?:`, `^wss?:` and `^ftp:` before its first load. WebKit's `url-filter` has no `|`, so these are three rules.
-- **Sanitiser:** `Renderer/src/sanitize.js` is the one sanitiser that `page.js`, plan 08's site tool and plan 07's KaTeX import. DOMPurify forbids `script, iframe, object, embed, form, base, meta, style`, every `on*` attribute, `javascript:` and `file:` URLs, and `data:` URLs other than `data:image/*`. With `fileImages` (the app), `tegel-doc:` survives on `img[src]` only. Without it (plan 08's tool, K15), an `img` `src` survives only as `data:image/*`.
-- **Mermaid:** `securityLevel: 'strict'`, `startOnLoad: false`, `htmlLabels: false`, loaded only when a `[data-mermaid]` block exists. Each SVG is sanitised again with DOMPurify's svg profile before insertion (S8). `page.js` never reads a page global by name to decide anything (S11).
+- **Renderer security (CSP, content rule list, sanitiser, Mermaid pass):** master §3.2, built in Task 5; any change runs Procedure P.
 - **Limits:** files over **5 MB** (`maxBytes = 5_000_000`) render truncated with a banner, and nothing reads past the cap. Quick Look **never takes more than 2 s**, file I/O included (K11).
-- **`.env` (K1):** read and written only through `scripts/lib/env.sh` (Task 1), one key at a time: `KEY="$(envget KEY)" cmd`. It is never sourced.
 - **Scratch files:** `$SCRATCH` is `$TMPDIR/tegel-m01`. Each Bash call is a fresh shell, so every command block that uses it starts with `SCRATCH="$TMPDIR/tegel-m01"; mkdir -p "$SCRATCH"`.
 - **Design:** the window and Quick Look UI stay **unstyled scaffolding**: no colour, type, spacing or theme values. `DESIGN.md` arrives with plan 09 Drop A, which merges on Mon 2 Nov after this plan; plan 09 Task 6 supplies every theme value (DESIGN.md §7 names the CSS files).
 - **Approvals and budget:** any Scaleway order and any trademark filing need the user's yes. Budget: one Scaleway M1 day (lease L1), €3.19 incl. 21 % VAT (€2.64 before tax) [F9].
@@ -520,7 +516,7 @@ rsync -a --exclude node_modules Renderer/ "$SCRATCH/audit-probe/" && cd "$SCRATC
 ```
 Expected: `dompurify` listed with at least one advisory (3.1.2 predates the 3.1.3 prototype-pollution fix) and `exit=1`.
 
-markdown-it 15.0.3 and mermaid 12.2.0 also exist. The master pins majors 14 and 11, so this plan stays on them (see the open question in Contract change requests).
+markdown-it 15.0.3 and mermaid 12.2.0 also exist. The master pins majors 14 and 11, so this plan stays on them.
 
 - [ ] **Step 2: Write the failing tests**
 
@@ -1906,7 +1902,4 @@ Read each PNG, then run gstack `/design-review` on the six. Write `docs/reviews/
 
 ## Contract change requests
 
-1. **Master §3.2, the Mermaid SVG pass.** It reads `DOMPurify.sanitize(svg, {USE_PROFILES: {svg: true, svgFilters: true, html: true}, FORBID_TAGS})`. Since `FORBID_TAGS` now includes `style` (S10), that strips Mermaid's own `<style>` and unstyles every diagram, plan 09's fill test included; `html: true` also lets HTML back into the SVG. Request: `{USE_PROFILES: {svg: true, svgFilters: true}}` with no `FORBID_TAGS`, as Task 5 Step 7 does. Mermaid scopes its rules to `#tegel-mermaid-<n>`, and `htmlLabels: false` leaves no `foreignObject`.
-2. **Master §3.2, the second network barrier.** `^(https?|wss?|ftp):` is not a valid WebKit `url-filter`, which has no `|` alternation, so compiling it fails. Request: three rules, `^https?:`, `^wss?:` and `^ftp:`, as in Task 5 Interfaces.
-3. **Recorded choices.** `--benchmark` reads stdin (Task 7); bundle id = prefix + "." + target name (Task 7); `inactiveSchedulingPolicy = .none` (Task 5).
-   - **Accepted 27 Oct.** Master §3.1 records the bundle-id rule; nothing changes here.
+CR 1–3 accepted and applied to master §3.1 and §3.2 (27 Oct); history in `docs/reviews/m00-consolidated.md`.

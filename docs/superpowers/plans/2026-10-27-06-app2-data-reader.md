@@ -54,7 +54,6 @@ Master §2/§3 and `CLAUDE.md` apply (platform, machines and evidence naming, pr
 - **Pricing:** $15 once, 2 Macs; the bundle at $29 grants both licences; EUR prices per master K10 (user-confirmed amounts). Free = Quick Look for every format. Pro = window viewer, `.env` viewer, session mode, export (§6.2).
 - **Fixtures:** synthetic and secret-free; never copy a real transcript. Fixture filenames must not be `.env` or `.env.*` (`.gitignore` ignores both). Secret-shaped test strings are built by concatenation inside test files, never committed under `Fixtures/`.
 - **Quick Look limits:** reads ≤ 2 MB and shows ≤ 500 JSONL records or 1,000 CSV/TSV rows. It answers in < 2 s.
-- **`.env` in commands:** start with `. scripts/lib/env.sh` and pass keys one at a time (`KEY="$(envget KEY)" cmd`); never `set -a` (K1).
 - **Commits:** "Commit: `<paths>`, `<msg>` + trailer" means `git add <paths> && git commit -m "<msg>" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`.
 
 ## Review Focus
@@ -593,13 +592,13 @@ If the system previewer wins for a type (DF5 says it may), write that down. The 
 **Files:**
 - Modify: `Apps/Data/App/DataApp.swift`.
 - Create: `Apps/Data/App/DataWindow.swift` and `Apps/Data/App/WelcomeView.swift`.
-- Modify: `project.yml`. Add `Apps/Markdown/App/ProGate.swift`, `Apps/Markdown/App/LicenceSettingsView.swift` and `Apps/Markdown/App/UpdatesSettingsView.swift` (paths from Task 0 #7) to the `data` target's sources by path; don't copy them (CR 06-6). Add the Sparkle package product to `data` exactly as plan 03 adds it to `markdown`. [K12]
+- Modify: `project.yml`. Add `Apps/Markdown/App/ProGate.swift`, `Apps/Markdown/App/LicenceSettingsView.swift` and `Apps/Markdown/App/UpdatesSettingsView.swift` (paths from Task 0 #7) to the `data` target's sources by path; don't copy them. Add the Sparkle package product to `data` exactly as plan 03 adds it to `markdown`. [K12]
 
 **Interfaces:**
 - Consumes: `EnvironmentValues.isPro` (`ProGate.swift`); `LicenceSettingsView` (plan 03; no updater parameter, since Updates is its own tab); `UpdatesSettingsView(updater:)` (plan 03); `LicenseManager(client: PolarClient(config: .fromInfoPlist()))` and plan 03's 24 h refresh loop; `SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)`; `QuickLookSetup.settingsURL` and `QuickLookSetup.settingsPath(macOSMajor:)` (TegelKit, plan 02 Task 15); `RendererWebView`, `renderData`, `renderPaged`; `RecordIndex(url:quoteAware:)`, `DataFile.load(_:maxBytes:)`; `FileWatcher(url:debounce:onChange:)`; App 1's open-file pattern (Task 0 #7).
 - Produces: `struct DataWindow: View { let url: URL }` and `struct WelcomeView: View`. `WelcomeView` shows when there's no Pro licence or no file:
   - the Quick Look how-to: Space in Finder, then the Settings path chosen by `QuickLookSetup.settingsPath(macOSMajor:)` (the same copy as App 1's Welcome, never hard-coded here), with an "Open System Settings" button for `QuickLookSetup.settingsURL`;
-  - the Pro feature list, and "One-time purchase for 2 Macs" with a buy button (`PolarConfig.checkoutURL`). No price in the app: the checkout shows it (plan 05 CR-5);
+  - the Pro feature list, and "One-time purchase for 2 Macs" with a buy button (`PolarConfig.checkoutURL`). No price in the app: the checkout shows it (plan 05 Task 3 Step 1);
   - App 1's `LicenceSettingsView`.
 
 App wiring in `DataApp.swift` copies plan 03's `MarkdownApp` wiring line for line, nothing new [K12]:
@@ -733,7 +732,7 @@ test('token shapes masked in view and export unless revealed', () => {
 - Produces:
 
 ```swift
-// TegelKit (CR-2, master §3.3 signature): markdownFiles(in:limit:) becomes a call to this
+// TegelKit (master §3.3 signature): markdownFiles(in:limit:) becomes a call to this
 public static func files(in root: URL, extensions: Set<String>, limit: Int = maxFiles) throws -> [FolderItem]   // same skip list and 5,000 cap as markdownFiles
 // App
 @MainActor enum SessionSources {
@@ -861,7 +860,7 @@ swift -e 'import AppKit; print(NSWorkspace.shared.urlForApplication(withBundleId
 - Create: `site/content/en/claude-code-transcript-viewer.md` (target query "view claude code transcripts"). It explains where the transcripts live (DF9, DF10) and that the app only reads them.
 - Modify: `site/config.json`. Set `apps.data.priceEUR` and `regularPriceEUR` to Task 12's confirmed EUR amount (default `"15"`, pending the user, K10), and add `"bundle": { "name": "Tegel Bundle", "page": "/bundle/", "price": "29", "regularPrice": "29", "intro": false, "priceEUR": "29", "regularPriceEUR": "29", "checkoutURL": "" }` (plan 04 Task 16 assigns `apps.bundle` to this plan). **No nl or fr page prices App 2 or the bundle until these EUR amounts equal Task 12's Polar price query** (`[('eur', 1500), ('usd', 1500)]`; plan 04's build throws on an empty EUR amount).
 - Modify: `site/test/pages.test.js` (plan 04's file; B19).
-- Create: `site/content/en/bundle.md`, for plan 04's W14 bundle row (plan 06 owns the bundle, CR-5): "Both apps, one licence each, 2 Macs per app: {{price:bundle}}. Bought separately they cost {{price:markdown}} and {{price:data}}." Both prices are current and real, so there's no "was" price and no countdown (rule 6). It states the 14-day refund and "one key per app".
+- Create: `site/content/en/bundle.md`, for plan 04's W14 bundle row (plan 06 owns the bundle): "Both apps, one licence each, 2 Macs per app: {{price:bundle}}. Bought separately they cost {{price:markdown}} and {{price:data}}." Both prices are current and real, so there's no "was" price and no countdown (rule 6). It states the 14-day refund and "one key per app".
 
 **Interfaces:**
 - Consumes: plan 04's page register, front-matter keys, build command and sitemap (Task 0 #10).
@@ -981,13 +980,14 @@ Run **Procedure P (master §11)** with these deltas (B1):
 - [ ] **Step 1: Run Procedure P** with the deltas above. Commit: `docs/reviews/m06.md docs/reviews/m06-design`, `docs(m06): pipeline results` + trailer; then merge and push per P.
 - [ ] **Step 2: Build the release DMG** (Mon 1 Feb, on `main`). `scripts/release.sh data 1.0.0 --no-upload`. Expected: notarised and stapled; `spctl` accepted; the DMG path printed last. Then `APP_NAME="Tegel Data" FIXTURES=Fixtures/data scripts/smoke-dmg.sh <dmg> docs/reviews/m06-smoke` (plan 05's script). Expected: exit 0.
 - [ ] **Step 3: Publish** (**user approval**; one approval covers the DMG, the appcast and the Task 14 demo upload to R2). `scripts/release.sh data 1.0.0 --from-dmg <Step 2 path>` publishes that tested DMG with no rebuild (K7). Expected: `curl -s https://downloads.tegelapps.com/data/appcast.xml | grep -c 'sparkle:edSignature'` → `1`, and `https://downloads.tegelapps.com/markdown/appcast.xml` is unchanged.
-- [ ] **Step 4: A real update on the production feed** (K12). On the build Mac with RC2 (Task 14) in `/Applications`: "Check for Updates…" offers 1.0.0, installs it and relaunches; About shows `1.0.0`; the QA licence is still Pro. Then download the public DMG and confirm that a Sparkle check on it finds no update. Record both in `m06.md`.
-- [ ] **Step 5: Close the QA licence** 🔒. Revoke the `POLAR_QA_LICENSE_KEY_DATA` key in the dashboard and archive the `QA-DATA` discount and its link. Then `. scripts/lib/env.sh; envset POLAR_QA_LICENSE_KEY_DATA ''; [ -z "$(envget POLAR_QA_LICENSE_KEY_DATA)" ] && echo gone`. Expected: `gone`.
+- [ ] **Step 4: Site keys (plan 04 CR-5).** On `content/release-data-1.0.0`, set `apps.data.version` → `"1.0.0"` and `apps.data.downloadURL` → the URL on Step 3's `published …` line in `site/config.json`; `(cd site && bun test)` → 0 fail; run review stages 2, 3 and 9; merge, push, and deploy with plan 04's production deploy command (plan 04 Task 10 Step 2). Expected: `curl -s https://tegelapps.com/data/ | grep -cF "<downloadURL>"` ≥ 1.
+- [ ] **Step 5: A real update on the production feed** (K12). On the build Mac with RC2 (Task 14) in `/Applications`: "Check for Updates…" offers 1.0.0, installs it and relaunches; About shows `1.0.0`; the QA licence is still Pro. Then download the public DMG and confirm that a Sparkle check on it finds no update. Record both in `m06.md`.
+- [ ] **Step 6: Close the QA licence** 🔒. Revoke the `POLAR_QA_LICENSE_KEY_DATA` key in the dashboard and archive the `QA-DATA` discount and its link. Then `. scripts/lib/env.sh; envset POLAR_QA_LICENSE_KEY_DATA ''; [ -z "$(envget POLAR_QA_LICENSE_KEY_DATA)" ] && echo gone`. Expected: `gone`.
 
 ## Launch runbook (no code; every outward action needs user approval)
 
-- [ ] **Mon 1 Feb:** the Task 16 release is done (production products since Thu 28 Jan, Task 12 Step 3). The site deploy is staged; Task 12's EUR amounts are in `site/config.json` (Task 13).
-- [ ] **Tue 2 Feb:** production site deploy of `/data/*` before 09:00 CET; Product Hunt at 00:01 PT (09:01 CET); the cross-sell email (plan 08 Task 15 Step 2 sends it at 09:30 CET, with Task 15's copy and segment rule); r/macapps; Show HN around 15:00 CET. Each post uses the draft as approved.
+- [ ] **Mon 1 Feb:** the Task 16 release is done (production products since Thu 28 Jan, Task 12 Step 3), and its Step 4 deploy put `/data/*` live with the download link; Task 12's EUR amounts are in `site/config.json` (Task 13).
+- [ ] **Tue 2 Feb:** Product Hunt at 00:01 PT (09:01 CET); the cross-sell email (plan 08 Task 15 Step 2 sends it at 09:30 CET, with Task 15's copy and segment rule); r/macapps; Show HN around 15:00 CET. Each post uses the draft as approved.
 - [ ] **Daily until 4 Mar:** log support minutes (§6.4: ≤ 20 min/day).
 - [ ] **Thu 4 Mar 2027:** fill in `docs/gates/G1b.md` (the Task 15 sales loop, rule, decision), commit to `main`, push, and tell the user the outcome. If the stop rule fires, the studio stops (§12) through plan 07 Task G7 (Procedure S): new sales stop first, then a final build of each app keeps Pro for every stored licence with no further online checks (K14).
 
@@ -1001,10 +1001,10 @@ Run **Procedure P (master §11)** with these deltas (B1):
 
 ## Contract change requests
 
-1. **CR-1 (P0, TegelStore, D16): moved to plan 03 (D1, CR 06-1).** `PolarConfig.benefitID` from the Info.plist key `TGPolarBenefitID`; `PolarError.wrongProduct`; `validate` sends `benefit_id`; `activate` checks `license_key.benefit_id` and deactivates on a mismatch. **Why:** without it, any key in the organisation unlocks any Tegel app [DF6]. It ships in App 1 v1.0, so there's no App 1 licensing release in January. Plan 06 only adds `TG_POLAR_BENEFIT_ID_DATA` (Task 1) and fills it (Task 12).
-2. **CR-2 (TegelKit `FolderIndex`):** add `files(in root: URL, extensions: Set<String>, limit: Int = maxFiles) throws -> [FolderItem]` (already in master §3.3); `markdownFiles(in:limit:)` becomes a call to it. If Task 0 #3 finds a 5 MB per-file cap in `search`, add `maxBytesPerFile: Int = 5_000_000` to `search(_:in:limit:)`; session mode passes 128 MB.
+CR 1, 5 and 6, and CR-2's `files(in:extensions:limit:)`, accepted and applied to master §3.3 and §4 and to Task 8 (27 Oct); history in `docs/reviews/m00-consolidated.md`. Open:
+
+2. **CR-2 (TegelKit `FolderIndex.search`, conditional):** if Task 0 #3 finds a 5 MB per-file cap in `search`, add `maxBytesPerFile: Int = 5_000_000` to `search(_:in:limit:)`; session mode passes 128 MB.
 3. **CR-3 (TegelKit and renderer additions):** Swift `DataFormat`, `DataFile`, `DataFileError`, `RecordIndex`, `RecordIndexError`, `DataIssue`, `DataRenderResult`, `RendererWebView.renderData(…)`, `RendererWebView.renderPaged(…)` and the `tegelData` reply handler. JS `window.tegel.renderData`, `openPaged`, `transcriptMarkdown({ reveal })`, and `maskSecrets` (K12). Swift `DataFile.secretFile`, `DataFile.isSecret(filename:)`, `RecordIndexError.truncated`. Layout: §3.1 gains `Renderer/src/data/` and `src/css/data.css`; the bundle gains `data.js`.
 4. **CR-4 (D5, narrowing):** the Data Quick Look extension omits `temporary-exception.files.absolute-path.read-only = /`. That exception exists only for Markdown's local images, and data files load none.
-5. **CR-5 (roadmap §8 item 5; accepted):** the $29 bundle moves from post-launch into plan 06, which owns it (Tasks 12, 13). BUSINESS-PLAN §6.2 sells it with App 2. It reuses both existing licence benefits. Plan 07 C1 only verifies it.
-6. **CR-6 (decided, CR 06-6; extended by K12):** App 2 compiles App 1's `Apps/Markdown/App/LicenceSettingsView.swift` and `UpdatesSettingsView.swift` by path, like `ProGate.swift`, links the same Sparkle package, and copies plan 03's updater and licence-refresh wiring (Task 8). No TegelKit or TegelStore change.
+<!-- numbers kept, so cross-plan references resolve -->
 7. **CR-7 (§3.4 fixtures):** add `Fixtures/data/`: committed `sample.*`, `hostile.*`, `quoted-newline.csv` and `sessions/`. `make fixtures` generates `big-200mb.jsonl` and `big-1m.csv` (gitignored `Fixtures/data/big-*`).

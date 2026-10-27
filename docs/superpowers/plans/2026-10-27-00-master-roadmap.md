@@ -179,7 +179,7 @@ mac-utility-studio/
 - **CSP** (meta in `index.html`): `default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: tegel-doc:; font-src 'self'`. No `connect-src` and no `file:`, so there's no network and no direct file read. Any change runs pipeline stage 4 (`/cso`).
   - **Second network barrier (K6):** `RendererWebView` installs a `WKContentRuleList` that blocks `^https?:`, `^wss?:` and `^ftp:` (three rules; WebKit's `url-filter` has no `|`) before the first load, so a CSP gap still can't reach the network.
   - **Conditional (K6):** a WebKit test injects a document-folder `.js` as `<script src>`. If it runs under `script-src 'self'` on the `file:` origin, the renderer moves to a `tegel-renderer://` scheme handler (plan 01's fallback).
-- **Local images (K4; plan 02 CR-1, now unconditional):**
+- **Local images (K4; plan 02 Task 8):**
   - A `WKURLSchemeHandler` for `tegel-doc:` serves only `UTType.image` files.
   - The file's `standardizedFileURL.resolvingSymlinksInPath()` must lie under the security-scoped grant root that contains the document, compared by `pathComponents` (never by string prefix). Anything else returns 404.
   - Quick Look passes `baseURL: nil` and shows no local images.
@@ -225,7 +225,7 @@ public enum PaperSize: String, CaseIterable, Sendable { case a4, letter }
 // app's container and deletes it before returning. No file is left after the call (plan 02 Task 11).
 public struct FolderItem: Sendable, Hashable, Identifiable { public let url: URL; public let relativePath: String; public var id: URL { url } }
 public enum FolderIndex { public static func markdownFiles(in root: URL, limit: Int = maxFiles) throws -> [FolderItem]   // skips .git, node_modules, .build, DerivedData, Pods, dist
-                          public static func files(in root: URL, extensions: Set<String>, limit: Int = maxFiles) throws -> [FolderItem]  // plan 06 CR-2
+                          public static func files(in root: URL, extensions: Set<String>, limit: Int = maxFiles) throws -> [FolderItem]  // plan 06 Task 10
                           public static func search(_ query: String, in items: [FolderItem], limit: Int = 200) -> [SearchHit] }
 public enum QuickLookSetup { public static let settingsURL: URL; public enum SettingsPath: Sendable, Equatable { case privacySecurityExtensions, loginItemsExtensions }
                              public static func settingsPath(macOSMajor: Int) -> SettingsPath }   // used by both apps' Welcome
@@ -424,15 +424,7 @@ The source is CLAUDE.md's "Mandatory 9-stage review pipeline", and CLAUDE.md win
 1. **Bloat audit (pre):** run `~/.claude/skills/code-upgrade/bloat-audit.md` over `git diff $BASE...HEAD` and the touched files. Strip self-introduced bloat. Pre-existing findings go under "Questions for the user".
 2. **Baseline:** `git status --short` is empty, then `make check`. Record the pass/fail counts; later stages must not regress them.
 3. **Code review:** a cold review of `git diff $BASE...HEAD`, bugs, security and correctness first (gstack `/review`, or a code-review subagent).
-4. **Security:** `/cso` with the plan's scope, whenever the diff touches a CLAUDE.md stage-4 trigger:
-   - renderer HTML/JS, CSP or DOMPurify config;
-   - file parsing;
-   - entitlements or sandbox exceptions;
-   - security-scoped bookmarks;
-   - licensing, Polar calls or the Keychain;
-   - Sparkle, appcast or EdDSA;
-   - `scripts/release.sh`, `.env` handling;
-   - site forms or external URLs.
+4. **Security:** `/cso` with the plan's scope, whenever the diff touches a CLAUDE.md stage-4 trigger.
 5. **Adversarial:** `/codex` challenge mode on the same diff (fallback: the closest agent).
 6. **Consolidate:** merge and dedupe the findings. Write a P0/P1/P2 table in the review file and decide what gets fixed.
 7. **Patch + re-review:** fix every P0/P1 and the actionable P2s. Re-run `make check`, the targeted tests and the reviews until they close. Every new guard is watched failing first.

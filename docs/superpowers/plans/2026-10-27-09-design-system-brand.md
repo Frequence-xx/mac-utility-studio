@@ -39,7 +39,7 @@ Master §2/§3 and CLAUDE.md apply (build Mac and evidence rules, product rules 
 - **Commits:** a step written "Commit `<paths>`: `<msg>`" means `git add <paths> && git commit -m "<msg>" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`. Never `git add -A`.
 - **Build Mac tools:** Xcode 26.3 (17C529), bun at `~/.local/bin/bun`.
 - **Liquid Glass evidence** comes only from the GitHub `macos-26` runner (arm64) [V16]. No Scaleway lease is booked for it; the only pre-launch leases are L1 (G0) and L2 (Thu 26 Nov).
-- **Renderer CSP:** master §3's, verbatim (`default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: tegel-doc:; font-src 'self'`); this plan never changes it. Fonts come only from the system, through generic families or `local()` [V3].
+- **Renderer CSP:** master §3.2; this plan never changes it. Fonts come only from the system, through generic families or `local()` [V3].
 - **Document direction (plan 01, CR-P1-2):** `dir="auto"` sits on top-level blocks only; nested `li`, `th`, `td` and `p` inherit their container's direction. Theme CSS reads direction with `:dir()`, never with a `[dir="rtl"]` or `[dir="ltr"]` selector, which misses every block whose direction comes from `dir="auto"` (guarded in Task 6).
 - **No bundled font files and no web fonts** on the site or in the apps. A face would have to earn its place in a recorded decision, and none has.
 - **Letter-spacing:** every shipped CSS file has zero non-zero `letter-spacing` (guarded). Tracking comes from the system's optical sizes (apple-design typography Rule 2), and Arabic must never be tracked.
@@ -1038,7 +1038,7 @@ ls /System/Library/Fonts /System/Library/Fonts/Supplemental | grep -E 'GeezaPro|
     3. when `run_app_shots` is set: open `docs/design/samples/en-spec.md` and `ar-spec.md` in the app and run `screencapture -x shots/window-<n>.png`. If the runner blocks capture (TCC), the step logs that and continues;
     4. upload `fonts.txt` and `shots/` as `design-shots-${{ matrix.os }}`.
 
-  Run `make test-shell`. Expected: `env_test: PASS` and exit 0, so plan 01's guard accepts every pin. Then temporarily change one `uses:` to `@v7.0.1` and re-run. Expected: exit 1, listing that `design-shots.yml` line. Revert.
+  Run `make test-shell`. Expected: `env_test: PASS` and exit 0, so plan 01's guard accepts every pin.
 - [ ] **Step 8: Commit** `Apps/Markdown/App/AppIcon.icon project.yml Renderer/test/design.test.js .github/workflows/design-shots.yml`: "feat(icon): Tegel Markdown AppIcon.icon with ten-size actool guard; design-shots workflow"
 - [ ] **Step 9: Land the workflow on `main`, then run it on the branch.** GitHub dispatches only workflows that exist on the default branch. This needs `gh auth login` by the user (CLAUDE.md Tools); if that hasn't happened, ask, and record the step as blocked.
 
@@ -1082,7 +1082,7 @@ gh run watch "$ID" && gh run download "$ID" -n design-shots-macos-14 -n design-s
   - background #F5F5F7, text 40 px weight 500 #1D1D1F;
   - start-aligned at x 192, which lines up with the video's left edge;
   - vertically centred.
-- **Demo frame** (Contract change request 9): the 1536×960 recording, centred on a 1920×1080 #F5F5F7 canvas, sits above a 120 px caption band. Captions are PNG bands overlaid at y 960, because the build Mac's ffmpeg has no `drawtext` [V18]. This is the chosen caption path (decided 27 Oct): plan 05 Task 5 uses these bands and drops `drawtext`, Arial and the `ffmpeg-full` install.
+- **Demo frame:** the 1536×960 recording, centred on a 1920×1080 #F5F5F7 canvas, sits above a 120 px caption band. Captions are PNG bands overlaid at y 960, because the build Mac's ffmpeg has no `drawtext` [V18]. This is the chosen caption path (decided 27 Oct): plan 05 Task 5 uses these bands and drops `drawtext`, Arial and the `ffmpeg-full` install.
 - **One-time human step:** grant the terminal app Screen Recording and Accessibility in System Settings › Privacy & Security on the build Mac. `screencapture -l` needs both, and so does any window resizing through System Events.
 
 - [ ] **Step 1: Write the script.** Check it with `make run-app FILES="docs/design/samples/en-spec.md" & sleep 3; scripts/window-shot.sh "Tegel Markdown" /tmp/w.png && sips -g pixelWidth /tmp/w.png`. Expected: a width > 0. Run `scripts/window-shot.sh Nope /tmp/x.png; echo $?` → `2`.
@@ -1148,6 +1148,8 @@ Run **Procedure P (master §11)** with id `m09`, branch `m09-design` and `BASE=$
 
 ## Contract change requests
 
+CR 9 and 13 accepted and applied to plan 05 Task 5 and master §3.2 (27 Oct); history in `docs/reviews/m00-consolidated.md`. Open:
+
 1. **Master §3.1 and §4/§7.**
    - Add to the file layout:
      - `DESIGN.md`;
@@ -1187,12 +1189,7 @@ Run **Procedure P (master §11)** with id `m09`, branch `m09-design` and `BASE=$
    - OG renders from `docs/design/templates/og.html` through gstack browse. Any Chrome headless run gets `--user-data-dir="$(mktemp -d)"`.
    - Add a page-weight budget test (DESIGN.md §12 m04).
 8. **Plan 04 `_headers`:** add `media-src 'self'` so plan 05's demo `<video>` can load. The current CSP's `default-src 'none'` blocks it.
-9. **Plan 05 Task 5:**
-   - captions become PNG bands from `docs/design/templates/caption.html`, composited with `pad` + `overlay` [V18], replacing `drawtext` with Arial;
-   - PH gallery images come from `gallery.html`;
-   - `thumb-240.png` is made from the compiled `AppIcon.icns`.
-   - **Accepted 27 Oct** as the caption path; plan 05 also drops the `ffmpeg-full` install.
+<!-- numbers kept, so cross-plan references resolve -->
 10. **Plan 06:** `Apps/Data/App/AppIcon.icon` from D-5's Data pick. Task 11's guard covers it automatically. Plan 06 sets `ASSETCATALOG_COMPILER_APPICON_NAME` on its target.
 11. **Plans 01–06, pipeline tasks:** add the design-review gate step from DESIGN.md §12, with output `docs/reviews/design-<milestone>.md`. Plans 01 and 03 were added on 27 Oct: their UI is the Quick Look preview, the Licence and Updates tabs, and the Sparkle prompts.
 12. **`project.yml`** (plan 01 owns it): plan 09 Task 11 adds `ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon` to the Markdown app target.
-13. **Master §3.2, the Mermaid SVG pass.** Task 7's fill test needs Mermaid's own `<style>` to survive sanitising. The master's `{svg, svgFilters, html} + FORBID_TAGS` pass strips it now that `FORBID_TAGS` includes `style`. This plan relies on plan 01's `{ USE_PROFILES: { svg: true, svgFilters: true } }` pass; plan 01's contract change request 1 asks the master to match.

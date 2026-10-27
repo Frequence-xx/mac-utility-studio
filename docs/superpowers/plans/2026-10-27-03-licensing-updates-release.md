@@ -17,16 +17,13 @@
 
 Master "Global constraints", master §3.3 (the TegelStore contract) and CLAUDE.md apply. This plan's deltas:
 
-- **Licence rules pinned here:** 30-day grace; **2 activations** [F3e]; a 404 never locks on the spot [F3d]; the app sends no API token.
-  - Pro holds only while `-1 day ≤ now − lastValidatedAt ≤ grace`. A clock set back further, or a stamp from the future, gives `.lapsed` until the next successful validation (K5). This replaces the earlier rule that a clock moved backwards stays Pro.
-  - A validation succeeds only on a 200 that decodes to `status == "granted"` with the stored activation id. Anything else is a failure: grace, never a lock.
+- **Licence rules:** master GC (K5); Tasks 4–7 implement them; the app sends no API token.
 - **Sandbox product:** $19, 2 Macs (the live $14 intro price is plan 05, D15). Polar can't toggle payment methods [F3g], so BNPL is inspected and recorded (product rule 7).
 - **D5 entitlements:** `app-sandbox`, `files.user-selected.read-write`, `files.bookmarks.app-scope`, `network.client`, plus Sparkle's mach-lookup exception [F4]. The Quick Look extension gets no Sparkle and no TegelStore. `scripts/entitlements/<target>.plist` is the allowlist `release.sh` enforces (K7).
 - **D16:** `Debug.xcconfig` → sandbox; `Release.xcconfig` → production (placeholder until plan 05). The Info.plist keys are exactly `TGPolarAPIBase`, `TGPolarOrganizationID`, `TGPolarCheckoutURL`, `TGPolarPortalURL`, `TGPolarBenefitID`.
 - **Benefit binding (D1, ships in 1.0.0):** a key unlocks only the app whose Polar benefit issued it. `validate` sends `benefit_id`; `activate` checks `license_key.benefit_id`, and on a mismatch releases the activation and throws `PolarError.wrongProduct`. One benefit id per app.
 - **D12 and Sparkle:** DMG via `hdiutil`; DMG and appcast on R2 bucket `tegel-downloads` behind `https://downloads.tegelapps.com`. **Sparkle 2.10.1 exactly** [F4]; `SUFeedURL` = `https://downloads.tegelapps.com/markdown/appcast.xml`; signed feed (`SURequireSignedFeed` and `SUVerifyUpdateBeforeExtraction` both true, K7); `SUEnableSystemProfiling` stays off.
 - **Betas are private (K7):** b1 and b2 are `--sandbox --no-upload` builds, served to the test account from a local signed feed. Nothing beta ever reaches R2.
-- **`.env` (K1):** every command that touches `.env` starts with `. scripts/lib/env.sh` (plan 01 Task 1) and uses its `envget`, `envset` and `need`. Never `set -a; . ./.env`; keys are passed one at a time (`KEY="$(envget KEY)" cmd`).
 - **Keys at rest (K3):** the Keychain holds the Developer ID key, the `tegel-notary` profile and the Sparkle EdDSA key. After each one-time import, the plaintext key files move to the user's encrypted offline store and are deleted from `$HOME`. `.env` holds no key path.
 - **Ask the user first:** enabling R2 (it may need a card), DNS on live `tegelapps.com`, any upload to R2, the sandbox close-out (Task 15), and anything in **production** Polar (untouched until plan 05).
 - **MoR-agnostic (§13 risk 7):** only `PolarClient.swift` knows Polar. A Lemon Squeezy fallback rewrites that one file.
@@ -274,7 +271,7 @@ No commit.
       @Test func proAtExactly30Days() { #expect(LicensePolicy.state(stored: lic, now: t0 + LicensePolicy.grace) == .pro(lic)) }
       @Test func lapsedAt30DaysPlusOneSecond() { #expect(LicensePolicy.state(stored: lic, now: t0 + LicensePolicy.grace + 1) == .lapsed(lic)) }
       @Test func smallBackwardSkewStaysPro() { #expect(LicensePolicy.state(stored: lic, now: t0 - 3_600) == .pro(lic)) }   // a Mac clock 1 h behind
-      @Test func clockMovedBackwardsBeyondSkewIsLapsedWithoutMovingStamp() {   // K5: was "stays Pro", which made grace unbounded
+      @Test func clockMovedBackwardsBeyondSkewIsLapsedWithoutMovingStamp() {   // K5
           let state = LicensePolicy.state(stored: lic, now: t0 - 400 * 86_400)
           #expect(state == .lapsed(lic))
           guard case .lapsed(let kept) = state else { return }
@@ -308,7 +305,7 @@ No commit.
   - it reads only `id`, `license_key.benefit_id` (activate), and `status`, `activation.id` and `expires_at` (validate);
   - every failure path goes through grace, so a drift costs nothing for 30 days.
 - **Validate decodes (K5):** a 200 counts only if `status == "granted"` (the schema's only value, polar.sh/docs/api-reference/customer-portal/license-keys/validate, checked 27 Oct) and `activation.id` equals the stored activation id. A proxy block page, a naive stub or a drifted body is a failure, never a success. The quarterly check below catches a rename before the 30 days run out.
-- Each quarter, while the new version sits in "Next" for 3 months, run Task 1 step 9 with `-H 'Polar-Version: <Next>'` (see Contract change requests).
+- Each quarter, while the new version sits in "Next" for 3 months, run Task 1 step 9 with `-H 'Polar-Version: <Next>'` (master §10 P3).
 
 **Files:**
 - Create: `Packages/TegelKit/Sources/TegelStore/PolarClient.swift`
@@ -1029,7 +1026,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
     15. **Post-upload:**
         - `curl -fsSI "$PREFIX$DMG_NAME" | head -1` → `HTTP/2 200`; `curl -fsS "$FEED?v=$BUILD" | grep -c "$DMG_NAME"` ≥ 1 (a read-back check only);
         - `cp "$OUT/feed/appcast.xml" "$PREV"`, the base for the next release;
-        - print `published $PREFIX$DMG_NAME`, the public DMG URL that plan 05 writes into `site/config.json`.
+        - print `published $PREFIX$DMG_NAME`: the `downloadURL` that the publishing plan copies into `site/config.json` with the version (plan 05 for App 1, plan 06 for App 2; plan 04 CR-5).
   - **Makefile:** `test-release: ; bash scripts/release_test.sh`, and add `test-release` to `check`'s prerequisites.
 - [ ] **Step 4: Run it to verify it passes.**
   - `bash scripts/release_test.sh`. Expected: `release_test: 18 passed, 0 failed`.
@@ -1101,7 +1098,6 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
 - [ ] **Step 8 (GUI): purchase.**
   - Settings → Licence → Buy Pro… → the sandbox checkout opens;
   - pay as `POLAR_EMAIL` with `4242 4242 4242 4242`. Expected: the success page.
-  - No second BNPL look: the sandbox isn't the live checkout, and Task 1 step 7 already recorded the sandbox one (B17). The live look is plan 05's.
 - [ ] **Step 9: Key email.** Record whether the email to `POLAR_EMAIL` contains the key. If it doesn't, take the key from the portal; that result feeds plan 05's FAQ.
 - [ ] **Step 10 (GUI): activate.**
   - Paste the key with leading spaces and a trailing newline → Activate. Expected: "Pro is active on this Mac", and folder mode works.
@@ -1128,16 +1124,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
     rm dist-release/m03-probe-ids
     ```
     Expected: `204`, `204`.
-  - **Another app's key is rejected (D1).** Paste `POLAR_SANDBOX_OTHER_LICENSE_KEY` (Task 1 step 10) as in step 10, then Activate → the `.wrongProduct` copy, and the app stays free. Then prove no activation was left on that key (its limit is 2):
-    ```bash
-    . scripts/lib/env.sh
-    O=$(envget POLAR_SANDBOX_ORGANIZATION_ID); K=$(envget POLAR_SANDBOX_OTHER_LICENSE_KEY); A=https://sandbox-api.polar.sh/v1/customer-portal/license-keys; T=$(mktemp)
-    act()   { curl -s -o "$T" -w '%{http_code}\n' -X POST "$A/activate" -H 'Content-Type: application/json' -d "{\"key\":\"$K\",\"organization_id\":\"$O\",\"label\":\"$1\"}"; }
-    deact() { curl -s -o /dev/null -w '%{http_code}\n' -X POST "$A/deactivate" -H 'Content-Type: application/json' -d "{\"key\":\"$K\",\"organization_id\":\"$O\",\"activation_id\":\"$1\"}"; }
-    act probe-1; I1=$(plutil -extract id raw -o - "$T"); act probe-2; I2=$(plutil -extract id raw -o - "$T")
-    deact "$I1"; deact "$I2"; rm -f "$T"
-    ```
-    Expected: `200`, `200`, `204`, `204`. A `403` on probe-2 means the app left an activation behind.
+  - **Another app's key is rejected (D1).** Paste `POLAR_SANDBOX_OTHER_LICENSE_KEY` (Task 1 step 10) as in step 10, then Activate → the `.wrongProduct` copy, and the app stays free. Then prove no activation was left on that key (its limit is 2): run Task 1 step 9's block with `K=$(envget POLAR_SANDBOX_OTHER_LICENSE_KEY)` and without `act probe-3`. Expected: `200`, `200`, `204`, `204`. A `403` on probe-2 means the app left an activation behind.
 - [ ] **Step 14 (GUI): the 404 rule, live.**
   1. Activate in the app.
   2. Manage activations… opens the portal; sign in with the emailed code and deactivate this Mac there. This exercises `enable_customer_admin`.
@@ -1228,23 +1215,4 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
 
 ## Contract change requests
 
-Status: 1–6 accepted (consolidation, 27 Oct); 3, 4 and 5 extended by the m00 review (K5, K7); master §3 already carries them.
-
-1. **`Polar-Version`: omitted, not pinned.** This changes master §10 P3's mitigation ("Calendar: bump `Polar-Version` every 6 months").
-   - **Reason:** an omitted header uses Current, while a pinned version 404s after about 9 months, which would remove Pro from every install that doesn't update (polar.sh/docs/api-reference/2026-10/versioning.md).
-   - **New mitigation:** each quarter, when a version enters Next, run Task 1 step 9 against the sandbox with `-H 'Polar-Version: <Next>'`, and ship a fix within the 3-month Next window if it breaks. The 30-day grace still covers 404s and a drifted validate body.
-2. **§3.1 layout: add `Config/PolarSandbox.xcconfig`.**
-   - **Reason:** notarised betas (Task 13) need sandbox Polar values in a *Release* build. One file, included by `Debug.xcconfig` and passed as `xcodebuild -xcconfig` by `release.sh --sandbox`, keeps a single source of sandbox values.
-3. **`scripts/release.sh <app> <version>` gains `[--sandbox] [--yes] [--no-upload] [--print-config] [--from-dmg <path>]`, and versions may end `-bN` or `-rcN`**, in CLAUDE.md's Commands table and §3.1.
-   - **Reason:** sandbox betas that stay private (`--sandbox` requires `--no-upload`); a confirmation prompt for an outward-facing upload, skipped only by an explicit flag after user approval; RCs built with `--no-upload` (plans 05–07); `--print-config` to assert each app's destinations (CR-P0-1); `--from-dmg` so the published DMG is the smoke-tested one (CR-P2-2).
-4. **§3.1: add `scripts/release_test.sh`, a Makefile `test-release` target in `check`, and `scripts/entitlements/<target>.plist`.**
-   - **Reason:** the release guards (dirty tree, missing key, placeholder values, private betas, destinations, `--from-dmg` checks, the entitlement allowlist) need a regression test that runs without signing or network.
-5. **Clarifications to §3.3, no signature change:**
-   - `LicenseManager.isPro` is computed (true only for `.pro`).
-   - `deactivate()` treats `PolarError.notFound` as success, because the activation was already removed.
-   - `refresh` ignores `validate`'s `expires_at`.
-   - `KeychainStore` throws `NSError(NSOSStatusErrorDomain)`; its internal `failSaves` is a test seam.
-   - Key normalisation strips all whitespace, not only the ends.
-   - K5: `LicensePolicy` gives `.pro` only for `-1 day ≤ now − lastValidatedAt ≤ grace` (internal `skew`). `validate` throws `.http(200)` unless the 200 decodes to `status == "granted"` with the stored activation id. `LicenseManager` allows one activate/deactivate at a time (another call throws `CancellationError`) and releases the new activation when the Keychain save fails.
-6. **§3.3 and D16: licence keys bind to one app** (decision D1; interfaces X2). `PolarConfig.benefitID` (Info.plist `TGPolarBenefitID`, build setting `TG_POLAR_BENEFIT_ID_MARKDOWN`), `PolarError.wrongProduct`, `benefit_id` on validate, and the activate check.
-   - **Reason:** without it, any key in the Polar organisation (a later Data or bundle key) unlocks App 1. Plan 07 F1 generalises the single id to a set only if v2 needs it.
+CR 1–6 accepted and applied to master §3.1, §3.3, §10 (P3) and D16 (27 Oct); history in `docs/reviews/m00-consolidated.md`.

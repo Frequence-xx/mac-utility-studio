@@ -94,7 +94,7 @@ Master §2/§3 and CLAUDE.md apply (platform, read-only, no network, imagery, ho
 | `Packages/TegelKit/Sources/TegelKit/DocumentImageHandler.swift` | the `tegel-doc:` scheme handler and `URL.isInside(_:)` | 8 |
 | `Packages/TegelKit/Sources/TegelKit/QuickLookSetup.swift` | Quick Look settings path and deep link (plan 08's interface) | 15 |
 | `Packages/TegelKit/Sources/TegelKit/RendererWebView.swift` | + `scroll(toLine:)`, `find`, `readAccessURL`, `loadedImages(outside:)` | 6, 7, 8 |
-| `Apps/Markdown/App/{MarkdownApp,DocumentView}.swift` (plan 01) | bounded document open | 1 |
+| `Apps/Markdown/App/MarkdownApp.swift` (plan 01) | `isPro` environment, `pro` window | 1 |
 | `Renderer/src/{markdown.js,page.js,build.js}` | line anchors, scroll, relative images → `tegel-doc:` via `baseHref`, image wait and errors, version file | 6, 8, 13 |
 | `Renderer/src/css/{base,print}.css` | `.tg-hit`, print breaks (theme CSS: plan 09 Task 6) | 6, 11 |
 | `Apps/Markdown/App/{ReaderController,FindBar,OutlineView,AppCommands}.swift` | per-window model, find, outline, menus, toolbar | 7 |
@@ -108,7 +108,7 @@ Master §2/§3 and CLAUDE.md apply (platform, read-only, no network, imagery, ho
 
 ---
 
-### Task 1: App test target, bounded document open and the Pro seam
+### Task 1: App test target, bounded-open test and the Pro seam
 
 **UI spec:** app-ui-spec Step 6 (Pro window).
 
@@ -117,11 +117,10 @@ Master §2/§3 and CLAUDE.md apply (platform, read-only, no network, imagery, ho
 - Modify: `Makefile`: add `test-app` and `run-app`, and make `check` also run `test-app`.
 - Create: `Apps/Markdown/App/ProGate.swift`, `Apps/Markdown/App/ProUpsellView.swift`
 - Modify: `Apps/Markdown/App/MarkdownApp.swift`: inject `.environment(\.isPro, isPro)` into every scene, and add `WindowGroup("Tegel Markdown Pro", id: "pro", for: UpsellFeature.self) { $feature in ProUpsellView(feature: feature) }.windowResizability(.contentSize)`.
-- Modify: plan 01's `MarkdownFile` (wherever Step 1's grep finds it) and `Apps/Markdown/App/DocumentView.swift`: bounded open (K11).
 - Test: `Apps/Markdown/AppTests/ProGateTests.swift`, `Apps/Markdown/AppTests/LargeFileOpenTests.swift`
 
 **Interfaces:**
-- Consumes: `RendererTheme` (contract); `TextFileLoader.load(_:maxBytes:)` (plan 01: a `FileHandle` read of at most `maxBytes`).
+- Consumes: `RendererTheme` (contract); plan 01 Task 7's bounded open (`DocumentView` loads through `TextFileLoader.load`).
 - Produces:
 ```swift
 extension EnvironmentValues { @Entry var isPro: Bool = false }
@@ -138,9 +137,6 @@ enum UpsellFeature: String, Codable, Hashable, CaseIterable, Sendable { case fol
 struct ProUpsellView: View { let feature: UpsellFeature? }   // opened anywhere with openWindow(id: "pro", value: UpsellFeature.<x>)
 ```
 - The upsell is a small window rather than a sheet, so menu commands can open it when no document window is focused. Each call site passes the triggering feature: `.folder` (Open Folder…, folder drops, licence lapse), `.pdf` (Export as PDF…), `.theme` (a Pro theme). Plan 02 shows the same copy for every feature. Plan 08 Task 12 adds the feature-specific copy and, for `.pdf`, a preview of at most two page images (`PDFExporter.makePDFData` → `PDFDocument(data:)` → `PDFPage.thumbnail`; no file left after the call), shown once per feature per launch through `UpsellContext.previewShown: Set<UpsellFeature>` (K18).
-- Bounded open (K11), on SwiftUI's document API ([`DocumentGroup(viewing:)`](https://developer.apple.com/documentation/swiftui/documentgroup) with a [`FileDocument`](https://developer.apple.com/documentation/swiftui/filedocument)):
-  - `MarkdownFile.init(configuration:)` reads nothing. It throws `CocoaError(.fileReadCorruptFile)` unless `configuration.file.isRegularFile`, keeps `openedAt`, and never touches `configuration.file.regularFileContents`.
-  - `DocumentView` reads the text from `fileURL` ([`FileDocumentConfiguration.fileURL`](https://developer.apple.com/documentation/swiftui/filedocumentconfiguration/fileurl), set for every document opened from disk) with `TextFileLoader.load`, in a detached task started from its `.task`, then renders `displayMarkdown`. The `LoadedText` moves from `MarkdownFile` into `DocumentView` state. A nil `fileURL` shows plan 01's error text.
 - Make targets:
   - `make test-app [ONLY=Class[/testMethod]]`: depends on `generate` (CR-P2-17), then `xcodebuild test -project Tegel.xcodeproj -scheme markdown -derivedDataPath build -only-testing:MarkdownAppTests[/$(ONLY)]`.
   - `make run-app [FILES="path…"] [ARGS="…"]`: Debug build into `build` (plan 01's derived-data path), then `open -n -a "build/Build/Products/Debug/Tegel Markdown.app" $(FILES) --args $(ARGS)`.
@@ -148,8 +144,8 @@ struct ProUpsellView: View { let feature: UpsellFeature? }   // opened anywhere 
 
 - [ ] **Step 1: Check plan 01's names**
 
-Run: `grep -nE '^name:|type: (application|app-extension)' project.yml; ls Apps/Markdown/App; grep -nE '^[a-z-]+:' Makefile; xcodebuild -project Tegel.xcodeproj -scheme markdown -showBuildSettings | grep ' PRODUCT_MODULE_NAME '; grep -rn 'struct MarkdownFile\|regularFileContents' Apps/Markdown/App; grep -n 'tegel-doc' Renderer/src/sanitize.js Renderer/src/index.html`
-Expected: the names in "Assumed from plan 01"; `PRODUCT_MODULE_NAME = Tegel_Markdown`; the file that holds `MarkdownFile` (and whether it still reads `regularFileContents`); a `tegel-doc` hit in both renderer files. Write down any differences and substitute them from here on. If `tegel-doc` is missing from either file, stop: Task 8 depends on plan 01's K4 pieces.
+Run: `grep -nE '^name:|type: (application|app-extension)' project.yml; ls Apps/Markdown/App; grep -nE '^[a-z-]+:' Makefile; xcodebuild -project Tegel.xcodeproj -scheme markdown -showBuildSettings | grep ' PRODUCT_MODULE_NAME '; grep -n 'tegel-doc' Renderer/src/sanitize.js Renderer/src/index.html`
+Expected: the names in "Assumed from plan 01"; `PRODUCT_MODULE_NAME = Tegel_Markdown`; a `tegel-doc` hit in both renderer files. Write down any differences and substitute them from here on. If `tegel-doc` is missing from either file, stop: Task 8 depends on plan 01's K4 pieces.
 
 - [ ] **Step 2: Branch and baseline**
 
@@ -215,7 +211,7 @@ Expected: `1` or more. This is the check failing on a build that has the overrid
 Run: `xcodebuild -project Tegel.xcodeproj -scheme markdown -configuration Release -derivedDataPath build CODE_SIGNING_ALLOWED=NO build >/dev/null && strings "build/Build/Products/Release/Tegel Markdown.app/Contents/MacOS/"* | grep -c 'Pro (debug override)'`
 Expected: `0`.
 
-- [ ] **Step 7: Write the bounded-open test, and run it against plan 01's open path** (`Apps/Markdown/AppTests/LargeFileOpenTests.swift`)
+- [ ] **Step 7: Write the bounded-open test** (`Apps/Markdown/AppTests/LargeFileOpenTests.swift`)
 
 ```swift
 import XCTest
@@ -240,17 +236,13 @@ import AppKit
 ```
 
 Run: `make test-app ONLY=LargeFileOpenTests`
-Expected: FAIL (`peak RSS grew` ≥ 256 MB) if plan 01's `MarkdownFile` still reads `regularFileContents` into memory. If it already passes (plan 01 made the open bounded, or SwiftUI maps the file), record the measured growth in `docs/reviews/m02.md`.
+Expected: `Executed 1 test, with 0 failures` (plan 01 Task 7 made the open bounded).
 
-- [ ] **Step 8: Make the open bounded, then watch the guard fail**
+- [ ] **Step 8: Watch the guard fail**
 
-Change `MarkdownFile` and `DocumentView` as in Interfaces (skip the edit if Step 1 found no `regularFileContents`). Run `make test-app ONLY=LargeFileOpenTests`.
-Expected: `Executed 1 test, with 0 failures`.
-- **If it still fails** with a contents-free `init`, SwiftUI itself reads the whole file. Stop and report: the window needs an `NSDocument`-based open (a contract change), and the test isn't loosened.
+Add `_ = try? String(contentsOf: fileURL!, encoding: .utf8)` (a whole-file read) as the first line of `DocumentView`'s load task, rerun, and expect FAIL (`peak RSS grew` ≥ 256 MB). Remove the line and rerun: `Executed 1 test, with 0 failures`.
 
-Then add `_ = try? String(contentsOf: fileURL!, encoding: .utf8)` (a whole-file read) as the first line of `DocumentView`'s load task, rerun, and expect FAIL (`peak RSS grew` ≥ 256 MB). Remove the line and rerun: `Executed 1 test, with 0 failures`.
-
-- [ ] **Step 9: Commit** `project.yml Makefile Apps/Markdown/App Apps/Markdown/AppTests/ProGateTests.swift Apps/Markdown/AppTests/LargeFileOpenTests.swift docs/reviews/m02.md`, "feat(app): isPro seam with Debug-only override, Pro window, bounded document open"
+- [ ] **Step 9: Commit** `project.yml Makefile Apps/Markdown/App Apps/Markdown/AppTests/ProGateTests.swift Apps/Markdown/AppTests/LargeFileOpenTests.swift docs/reviews/m02.md`, "feat(app): isPro seam with Debug-only override, Pro window, bounded-open regression test"
 
 ---
 
@@ -1812,13 +1804,8 @@ Expected: `make check` green on `main`; the push succeeds; `graphify update .` r
 
 ## Contract change requests
 
-- **CR-1 (accepted as K4, applied unconditionally in Task 8): document images go through a `WKURLSchemeHandler`, never `file:`.** For master §3:
-  - §3.2: with `baseHref` (a `tegel-doc:` URL of the document), a relative `img` `src` becomes `new URL(src, baseHref).href`. CSP `img-src 'self' data: tegel-doc:` and the `fileImages` branch that keeps `tegel-doc:` on `img[src]` only are plan 01's.
-  - §3.3 `RendererWebView`: `readAccessURL` is the grant root the handler serves images from (nil → the document's folder; no `baseURL` → nothing); add `public func loadedImages(outside folder: URL) -> [URL]`.
-  - §3.3 TegelKit: add `extension URL { public func isInside(_ root: URL) -> Bool }`.
-  - **Reason:** WebKit's helper processes can't be relied on to read user folders in a sandboxed app, and a "common ancestor" read root is `/` (S3, S12, CX1, CR-P2-16, CR-P2-24). The handler reads with the app's own grant and enforces the root.
+CR 1, 3 and 4 accepted and applied to master §3.2 and §3.3 (27 Oct); history in `docs/reviews/m00-consolidated.md`. Open:
+
 - **CR-2: add a language option to the renderer.**
   - **Change:** add `lang?: string` to `window.tegel.render` opts and `RenderOptions.language: String?`.
   - **Reason:** the renderer's own strings (truncation notice, Mermaid error label, front-matter summary) would follow the UI language (D6). Without it, the Arabic, Dutch and French UIs show those few strings in English inside the document view. Plan 02 ships without it; it can land in v1.0.1.
-- **CR-3: `PDFExporter.makePDFData(_:paper:) async throws -> Data`** (Task 11); `export(_:to:paper:)` writes its result. Task 12 and plan 08's upsell preview (K18) call it.
-- **CR-4 (K18): `UpsellFeature` stays app-side** in `ProUpsellView.swift`; master §3.3 drops its TegelStore declaration and `UpsellPolicy`.
