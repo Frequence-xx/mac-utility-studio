@@ -180,6 +180,7 @@ Each 🔒 step is a live, outward-facing change. Show the user the exact values,
 
 - [ ] **Step 0 (user, by Fri 20 Nov, H5):** Create the Polar **production** organisation and start Stripe identity + payout verification, so it can complete before Tue 1 Dec. Record the date here.
 - [ ] **Step 1 (Tue 24 Nov):** In the Polar production dashboard, record the verification status (pending or verified) here.
+  - **Save the organisation id** (Steps 3, 7 and 9, Task 3 R9 and `polar_sales.py` read it): copy it from org settings, then `. scripts/lib/env.sh; envset POLAR_ORGANIZATION_ID '<id>'; need POLAR_ORGANIZATION_ID && echo saved` → `saved`. Check it with plan 03 Task 1 Step 2's block, with `sandbox-api.polar.sh` → `api.polar.sh` and `POLAR_SANDBOX_ORGANIZATION_ID` → `POLAR_ORGANIZATION_ID`. Expected: `404` (`422` means the id was saved wrong).
   - **Check step:** can products be created and sold before verification completes? If selling is blocked, Task 3 R9 on `m27-arm` uses whatever exists on lease day and is otherwise deferred to `m15-intel` in Task 10.
 - [ ] **Step 2 🔒 Org details:**
   - name `Tegel`; website `https://tegelapps.com`; support email `hello@tegelapps.com`;
@@ -263,6 +264,7 @@ Each 🔒 step is a live, outward-facing change. Show the user the exact values,
   - `grep -c REPLACE_IN_PLAN_05 Config/Release.xcconfig` → `0`;
   - `/usr/libexec/PlistBuddy -c 'Print :TGPolarAPIBase' "$APP/Contents/Info.plist"` → `https://api.polar.sh`;
   - `[ "$(/usr/libexec/PlistBuddy -c 'Print :TGPolarBenefitID' "$APP/Contents/Info.plist")" = "$(envget POLAR_BENEFIT_ID_MARKDOWN)" ] && echo benefit-ok` → `benefit-ok`;
+  - `O=$(/usr/libexec/PlistBuddy -c 'Print :TGPolarOrganizationID' "$APP/Contents/Info.plist"); [ -n "$O" ] && [ "$O" = "$(envget POLAR_ORGANIZATION_ID)" ] && echo org-ok` → `org-ok` (an empty id fails every buyer's activation);
   - `grep -c sandbox Config/Release.xcconfig` → `0`.
 - [ ] **Step 10: Commit** `git add .env.example Config/Release.xcconfig docs/gates/evidence/1.0/polar`, message `chore(release): point Release config at Polar production` + trailer.
 - [ ] **Step 11 (Tue 1 Dec, after H5 is verified): BNPL check [F3g].** This is the one BNPL procedure; plans 06 and 07 run it for their live checkouts (B17). Open `POLAR_CHECKOUT_URL_MARKDOWN` in Safari (Apple Pay set up) and in Chrome. Then set the billing country to Netherlands, then United States. **Do not pay.**
@@ -311,6 +313,7 @@ Notes the doc must carry:
 
 - [ ] **Step 1: Price-string check** (the app shows no price; the checkout does). `grep -rnE '(\$|€) ?1[49]\b' Apps/Markdown || echo "no price in app"`. Expected: `no price in app`. A hit means 15 Dec would need an app release, so raise it before RC1.
 - [ ] **Step 2: Build RC1 and store it privately.**
+  - Commit first, since `release.sh` stops on a dirty tree (plan 03 step 2): `git add docs/gates/test-matrix-1.0.md docs/gates/evidence/1.0 docs/superpowers/plans/2026-10-27-05-release-readiness-launch.md && git commit -m "docs(gates): test matrix 1.0 before the RC build"` + trailer, then `git status --porcelain` → empty. Before RC1 this holds the matrix template and Task 2 Steps 0–1's records ("here" is this plan file); before RC2 (Step 6), the cells, evidence and records so far.
   - `scripts/release.sh markdown 1.0.0-rc1 --no-upload`; DMG = the last stdout line.
   - `gh release create v1.0.0-rc1 "$DMG" --prerelease --title "1.0.0-rc1 (internal)" --notes "internal test build"`. The repo is private, so this is not an outward action.
   - Expected: `gh release view v1.0.0-rc1 --json assets -q '.assets[].name'` lists the DMG.
@@ -346,7 +349,7 @@ Notes the doc must carry:
     3. Leave this Mac activated for the 403 test in Step 5.
   - **R10 (K7, CX13), first:** `--no-upload` writes no appcast, so the production feed never offers an RC.
     1. Install b2: mount `dist-release/markdown/beta-feed/TegelMarkdown-1.0.0-b2.dmg`, drag the app to Applications (replacing any copy) and launch it once. Watch the check fail first: `defaults read "/Applications/Tegel Markdown.app/Contents/Info" CFBundleShortVersionString` → `1.0.0-b2`.
-    2. Build the RC feed in its **own folder**, so `beta-feed/` keeps only b1 and b2 for plan 03's L2 leg (plan 03 Hand-offs 1 and 3): `cp -R dist-release/markdown/beta-feed dist-release/markdown/rc-feed`, copy the RC DMG into `rc-feed/`, and re-run plan 03 Task 13 Step 6's `generate_appcast` with `F=dist-release/markdown/rc-feed`. Expected: `grep -c '<item>' dist-release/markdown/rc-feed/appcast.xml` → `3` and the same count on `beta-feed/appcast.xml` → `2`. Stop any server on port 8765 (`pkill -f 'http.server 8765'`), then serve `rc-feed/` as plan 03 Task 13 Step 1 serves its folder.
+    2. Build the RC feed in its **own folder**, so `beta-feed/` keeps only the betas (b1, b2, and b3 if plan 03 Task 14's stage 7 built one) for plan 03's L2 leg (plan 03 Hand-offs 1 and 3): `cp -R dist-release/markdown/beta-feed dist-release/markdown/rc-feed`, copy the RC DMG into `rc-feed/`, and re-run plan 03 Task 13 Step 6's `generate_appcast` with `F=dist-release/markdown/rc-feed`. Expected: `grep -c '<sparkle:shortVersionString>1.0.0-rc1<' dist-release/markdown/rc-feed/appcast.xml` → `1` (not an item count: `--maximum-versions` defaults to 3, plan 03 Task 12); `grep -c '<item>' dist-release/markdown/beta-feed/appcast.xml` → `2` (or `3` with b3) and `grep -c -- '-rc' dist-release/markdown/beta-feed/appcast.xml` → `0`. Stop any server on port 8765 (`pkill -f 'http.server 8765'`), then serve `rc-feed/` as plan 03 Task 13 Step 1 serves its folder.
     3. Quit, `open -a "Tegel Markdown" --args -SUFeedURL http://localhost:8765/appcast.xml` (the Sparkle 2.10.1 feed override plan 03 verified), then Check for Updates… → Install and Relaunch. Expected: the same `defaults read` → `1.0.0-rc1`, and About shows `1.0.0-rc1`.
     4. Remove the override afterwards, as plan 03 describes, so Task 10 Step 7 tests the production feed.
   - **R11:** Copy Diagnostics, then `pbpaste > m15-intel/R11.txt`.
@@ -355,11 +358,12 @@ Notes the doc must carry:
     - `grep -c '/Users/' R11.txt` → `0`.
 - [ ] **Step 5: Scaleway lease L2 (`m27-arm`), H6.**
   - **Ask the user first:** "Lease one Scaleway M1 for 24 h, Thu 26 Nov 09:00 → Fri 27 Nov 09:00, macOS 27, at €3.19 incl. VAT (€2.64 before tax) [F9]?" Record the approval here.
+  - **Order and save access** (L1's server, key and host key were deleted in plan 01 Task 12 Step 10): after the yes, repeat plan 01 Task 12 Step 4 for this lease. Order the M1 (PARIS 3, macOS 27) in the console; `envset` `REMOTE_MAC_HOST`, `REMOTE_MAC_USER`, `REMOTE_MAC_PASSWORD` and `REMOTE_MAC_VNC_PORT` from the Overview page; then run its key block after prefix line P (`ssh-keygen` for `~/.ssh/id_ed25519_scaleway`, `ssh-copy-id -o StrictHostKeyChecking=accept-new` through the askpass file, never the password in argv). Expected: its `R 'sw_vers -productVersion; uname -m; who'` → `27.x`, `arm64` and a `console` line.
   - **L2 is shared, in this order:** (1) this plan's matrix on macOS 27; (2) plan 03's arm64/macOS 27 acceptance with b2; (3) plan 02's pending arm64 checks; (4) plan 08's Quick Look deep-link check; (5) **last:** reinstall macOS 14 if offered, then the macOS 14 leg.
   - **Operator:**
     - SSH parts: Claude via `REMOTE_MAC_*`;
     - GUI rows: the user over Screen Sharing, or Claude through the computer-use skill driving Screen Sharing on the build Mac.
-  - **Run:** `scp` the DMG, `Fixtures/` and Step 4's `rc-feed/` over, and serve `rc-feed/` on that Mac. Then, in Step 4's order: R10 first (b2 from the copied folder, then the update to rc1), then R1 with `smoke-dmg.sh`, R2–R9 and R11. Item (2), plan 03's leg, stops this server and serves its own `beta-feed/` (b1 and b2 only, with a sandbox key; plan 03 Hand-off 1).
+  - **Run:** `scp` the DMG, `Fixtures/` and Step 4's `rc-feed/` over, and serve `rc-feed/` on that Mac. Then, in Step 4's order: R10 first (b2 from the copied folder, then the update to rc1), then R1 with `smoke-dmg.sh`, R2–R9 and R11. Item (2), plan 03's leg, stops this server and serves its own `beta-feed/` (betas only: b1, b2 and any b3, with a sandbox key; plan 03 Hand-off 1).
   - **R9 extra:** with both Macs activated, the call below (run on the build Mac) returns `403` [F3a]. Then deactivate on both Macs. Expected: the customer portal shows 0 activations (screenshot).
 
     ```bash
@@ -370,12 +374,12 @@ Notes the doc must carry:
       -d "{\"key\":\"$(envget POLAR_QA_LICENSE_KEY)\",\"organization_id\":\"$(envget POLAR_ORGANIZATION_ID)\",\"label\":\"qa-third\"}"
     ```
 
-  - **Last, before the lease ends:** after items (2)–(4), if macOS 14 is offered, reinstall and repeat R1–R4, R8 and R9 (`m14-arm` manual cells). If it isn't, follow the matrix note "No GitHub runner covers macOS 14" (the user chooses).
-  - **Release the lease by Fri 27 Nov 09:00 and confirm with the user:** the Scaleway console shows no running server.
+  - **Last, before the lease ends:** after items (2)–(4), if macOS 14 is offered, reinstall and repeat R1–R4, R8 and R9 (`m14-arm` manual cells). The reinstalled server has a new host key, so first `. scripts/lib/env.sh; ssh-keygen -R "$(envget REMOTE_MAC_HOST)"`, `envset REMOTE_MAC_PASSWORD` again if the Overview page shows a new one, and re-run plan 01 Task 12 Step 4's key block without its `ssh-keygen` line (the key pair stays). If it isn't offered, follow the matrix note "No GitHub runner covers macOS 14" (the user chooses).
+  - **Release the lease by Fri 27 Nov 09:00 and confirm with the user:** delete the server as plan 01 Task 12 Step 10 does (Playwright, type `DELETE`), then remove `~/.ssh/id_ed25519_scaleway*` and the host key (`. scripts/lib/env.sh; ssh-keygen -R "$(envget REMOTE_MAC_HOST)"`) from the build Mac. Expected: the Scaleway console shows no running server.
 - [ ] **Step 6: Each FAIL becomes a fix.**
   - Open `gh issue create --label bug,1.0.0`.
   - Fix it on `m05-launch` using superpowers:systematic-debugging, then superpowers:test-driven-development (failing test in the layer that owns the bug, then PASS).
-  - Rebuild as `1.0.0-rc2` (Step 2) and re-run that row. After the lease, arm64 re-checks run on GitHub runners only; say so in the cell.
+  - Rebuild as `1.0.0-rc2` (Step 2, whose first bullet commits the matrix and evidence so far) and re-run that row. After the lease, arm64 re-checks run on GitHub runners only; say so in the cell.
 - [ ] **Step 7: Matrix green.** No `FAIL` cells remain: `grep -cE 'FAIL #[0-9]+' docs/gates/test-matrix-1.0.md` → `0` (an open issue cell). Commit `git add docs/gates/test-matrix-1.0.md docs/gates/evidence/1.0`, message `docs(gates): test matrix 1.0 with per-machine evidence` + trailer.
 
 ### Task 4: Support pages, templates and support log (Fri 27 – Mon 30 Nov)
@@ -816,7 +820,8 @@ Expected: every line starts with `200`. During launch week it can run on `/loop 
     4. Merge and push.
   - **Release** (the 1.0.0 order: smoke the DMG, then publish that same file; K7):
     - `git tag -a v1.0.1 -m "1.0.1" && git push origin v1.0.1`; `scripts/release.sh markdown 1.0.1 --no-upload` → `$DMG`;
-    - `gh release create v1.0.1 "$DMG" --title "1.0.1"` (private), read the CI minutes (Task 3 Step 3), then dispatch, watch and download with Task 3 Step 3's block (`--branch main`, `--ref main`, `-f tag=v1.0.1`) → 2 × 2 `PASS` (`macos-15`, `macos-26`);
+    - `gh release create v1.0.1 "$DMG" --title "1.0.1"` (private), read the CI minutes (Task 3 Step 3), then dispatch, watch and download with Task 3 Step 3's block (`--branch main`, `--ref main`, `-f tag=v1.0.1`, and `-D docs/gates/evidence/1.0.1/gh`, so 1.0.0's committed `1.0/gh` files are left alone) → 2 × 2 `PASS` (`macos-15`, `macos-26`);
+    - commit the evidence: `git add docs/gates/evidence/1.0.1 && git commit -m "docs(gates): 1.0.1 smoke evidence"` + trailer, then `git status --porcelain` → empty (the `--from-dmg` run below still runs `release.sh`'s clean-tree check, plan 03 step 2);
     - 🔒 `scripts/release.sh markdown 1.0.1 --yes --from-dmg "$DMG"` (no rebuild; `--yes` only after the user's yes for 1.0.1);
     - site keys (plan 04 CR-5): on `content/release-1.0.1`, set `apps.markdown.version` → `"1.0.1"` and `downloadURL` → the printed `published …` URL, add the `/changelog/` entry, run review stages 2, 3 and 9, merge, and deploy with plan 04's production deploy command → `curl -s https://tegelapps.com/download/ | grep -cF "<downloadURL>"` ≥ 1;
     - Task 10 Step 7's `same-dmg` comparison with `v1.0.1` and the public 1.0.1 DMG URL → `same-dmg`;

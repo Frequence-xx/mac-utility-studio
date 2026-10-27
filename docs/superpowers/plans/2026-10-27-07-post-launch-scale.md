@@ -137,6 +137,7 @@ def test_summary_cli_maps_names_and_needs_no_markdown_id(self):
 
 **Thresholds (verbatim):** continue if "Combined net ≥ **€300/month** → build app 3". Kill / change if "€100–300 → no new app, ≤ 10 h/week. **< €100 → stop development**; keep the apps on sale". **Window:** `2027-03-31T00:00:00+02:00` → `2027-04-30T00:00:00+02:00`.
 
+- [ ] **Step 0: Rotate the Pages deploy token (Thu 29 Apr 2027, before any deploy).** Plan 04 Task 3 Step 5's `CLOUDFLARE_API_TOKEN` ends Fri 30 Apr 2027, and Step 6's deploy, A7, D7, G7 and plan 08's later deploys all need it. Repeat plan 04 Task 3 Step 5 (same name, scope and account; TTL start today, end Fri 29 Oct 2027) and save the new token with its `envset … "$(pbpaste)"` line. Delete the old token (the one ending 30 Apr 2027) in My Profile → API Tokens. Then plan 04 Task 3 Step 6's TTL and no-zone checks → `active True` and `0`.
 - [ ] **Step 1: Polar, all products.** The gate sales command with `--from 2027-03-31 --to 2027-04-30` (no `--products`). Record `count`, and `gross`/`net`/`refunds_older` per currency.
 - [ ] **Step 2: Payout ratio `r` from actual payout data.** Polar dashboard → Finance → Payouts: the USD withdrawn in the last 3 payouts; the user reads the EUR credited for each on the bank statement. `r = Σ EUR credited ÷ Σ USD withdrawn`. With fewer than 3 payouts: `r = 0.995 ÷ ECB USD-per-EUR` (§9's "about 0.5% payout/FX").
 - [ ] **Step 3: Other channels.** MAS: App Store Connect → Sales and Trends → Proceeds for the window, converted at the ECB rate. Setapp: the developer-account statistics, if live.
@@ -149,7 +150,7 @@ def test_summary_cli_maps_names_and_needs_no_markdown_id(self):
 
 **Thresholds (verbatim):** continue if "≥ **€1,000/month** net → bundle, Setapp, app 4". Kill / change if "Otherwise wind down to maintenance". **Window:** `2027-09-29T00:00:00+02:00` → `2027-10-29T00:00:00+02:00`.
 
-- [ ] **Step 0: Renewals (about Wed 20 Oct 2027, before G4).** The Apple Developer membership (paid 27 Oct 2026) and the domain (bought about 30 Oct 2026) renew around the gate. Ask the user (U-49): renew each, or turn auto-renew off first. A renewal is a purchase, so it needs the user's approval. Also list the Developer ID Application certificate: it expires Fri 26 Nov 2027, and its renewal is plan 03 Task 3 Step 6, due by Fri 12 Nov 2027 (run that step; without it no new build can be signed, Procedure S's final builds included). Record the answers in `docs/gates/G4.md`.
+- [ ] **Step 0: Renewals (about Wed 20 Oct 2027, before G4).** The Apple Developer membership (paid 27 Oct 2026) and the domain (bought about 30 Oct 2026) renew around the gate. Ask the user (U-49): renew each, or turn auto-renew off first. A renewal is a purchase, so it needs the user's approval. Also list the Developer ID Application certificate: it expires Fri 26 Nov 2027, and its renewal is plan 03 Task 3 Step 6, due by Fri 12 Nov 2027 (run that step; without it no new build can be signed, Procedure S's final builds included). Also the Pages deploy token: G3 Step 0's ends Fri 29 Oct 2027, so repeat G3 Step 0 now with an end date six months on (no purchase, no ask). Record the answers in `docs/gates/G4.md`.
 - [ ] **Step 1: Measure.** Repeat G3 Steps 1–4 for this window, including App 3 (`select` in `products.json`), MAS proceeds and Setapp payouts.
 - [ ] **Step 2: Write `docs/gates/G4.md`:** stretch ≥ €1,450, `Decision: CONTINUE | WIND-DOWN`, the cancellation list, sign-off.
 - [ ] **Step 3: Apply.** **WIND-DOWN cancels** F, app 4 and any pending Homebrew work; macOS maintenance and support continue, and Task G7 runs before maintenance ends (K14). **CONTINUE** makes F eligible; app 4 gets its own plan via `superpowers:brainstorming`.
@@ -186,6 +187,7 @@ def test_summary_cli_maps_names_and_needs_no_markdown_id(self):
 - [ ] **Step 2: Write the failing test.** `testFinalBuildKeepsStoredLicenceWithoutNetwork`: `PolarConfig` with `finalBuild: true`; a stored licence last validated at `t0`; plan 03's URLProtocol stub recording every request; the manager built through plan 03's designated `LicenseManager(client:keychain:now:)` (its `makeManager` helper) with `now: t0 + 400 * 86_400`, so the test never reads the real clock. `await m.refresh(now: t0 + 400 * 86_400)` → `state == .pro(lic)`, `isPro == true`, `keychain.load() == lic` (the key is kept), and the stub saw 0 requests. Run `swift test --package-path Packages/TegelKit --filter FinalBuildTests` → FAIL to compile (`finalBuild` missing).
 - [ ] **Step 3: Implement** one guard at the top of `refresh()` and one where the manager applies `LicensePolicy` (`finalBuild` with a stored licence → `.pro(stored)`); then the updater lines above in each app entry file and the two `project.yml`/xcconfig settings. Build-setting expansion turns `SUEnableAutomaticChecks` into a string (`NO`/`YES`), so first read Sparkle 2.10.1's source to confirm it reads that Info.plist key through `boolValue`, making the string `NO` off and `YES` on; note the file and line for Step 6. If Sparkle accepts only a boolean there, keep plan 03's boolean `SUEnableAutomaticChecks: true`, rely on `startingUpdater: !finalBuild` (Step 5 watches it), and drop Step 5's `SUEnableAutomaticChecks` print.
 - [ ] **Step 4: Watch it pass, then watch each guard fail.** Re-run → PASS. Comment out the `refresh()` guard → FAIL (the stub records 1 request; `state` still holds `.pro` through the policy guard); restore. Comment out the policy guard → FAIL (`state == .lapsed(lic)`, `isPro == false`: 400 days is past plan 03's grace); restore → PASS. `swift test --package-path Packages/TegelKit` → all pass, plan 03's grace tests included. Commit: `Packages/TegelKit Apps project.yml Config`, `feat(stop): final build keeps Pro without licence calls or update checks` + trailer (Step 5's `release.sh` needs a clean tree).
+- [ ] **Step 4b: Run Procedure P (master §11)** with id `m07-stop` and review file `docs/reviews/m07-stop.md`, through its merge and push, before Step 5 builds anything. This changes licensing and the updater (master §11, out of cadence), and a final build checks for no updates, so a bug that ships in it can never be fixed. `/cso` scope: the two `finalBuild` guards (no network call; a stored licence reads `.pro` and is never removed); `TG_FINAL_BUILD` and `TG_SU_AUTOMATIC_CHECKS` set only in `Config/Release.xcconfig`; `startingUpdater: !finalBuild` and the hidden update UI in each app entry file. Design review: the Licence tab and the app menu of a final build, light, dark and Arabic.
 - [ ] **Step 5: Final builds** (**user approval** per release). For each direct app:
   - `scripts/release.sh <app> <v> --no-upload`; `PlistBuddy -c 'Print TGFinalBuild'` → `YES` and `-c 'Print SUEnableAutomaticChecks'` → `NO` (a string, which Step 3 confirmed Sparkle reads as off).
   - **Watch the update guard fail on the shipped build.** On the build Mac's activated copy, with `D=~/Library/Containers/<bundle id>/Data/Library/Preferences/<bundle id>` (App 3, unsandboxed: `~/Library/Preferences/<bundle id>`): `defaults write "$D" SUEnableAutomaticChecks -bool YES; defaults write "$D" SULastCheckTime -date "2000-01-01 00:00:00 +0000"` (a user who turned checks on, with a check long overdue). Launch, wait 60 s, quit. `defaults read "$D" SULastCheckTime` → today's date: it checked.
@@ -438,8 +440,8 @@ func testRejectsNonPDF() { XCTAssertThrowsError(try PDFStamper.stamp(Data("no".u
   [ "$ID" != "$OLD" ] && gh run watch --exit-status "$ID"
   ```
   Expected: the macOS jobs are green; link the run URL.
-- [ ] **Step 3: macOS 27 arm64 on Scaleway** (M1, €3.19 incl. VAT for 24 h [F9], master H6; purchase approval first). Install a notarised release candidate from `scripts/release.sh markdown 1.1.0-rc1 --no-upload`. Run the new rows plus the G0 timing for `g0-1mb.md` and a math-heavy file (< 1 s).
-- [ ] **Step 4: Commit** the matrix.
+- [ ] **Step 3: macOS 27 arm64 on Scaleway** (M1, €3.19 incl. VAT for 24 h [F9], master H6; purchase approval first). Commit Steps 1–2's rows first (Commit: `docs/qa/v1.1-matrix.md`, `docs(qa): v1.1 matrix, local and macOS 26 rows` + trailer; `git status --porcelain` → empty, since `release.sh` needs a clean tree). Then install a notarised release candidate from `scripts/release.sh markdown 1.1.0-rc1 --no-upload`. Run the new rows plus the G0 timing for `g0-1mb.md` and a math-heavy file (< 1 s).
+- [ ] **Step 4: Commit** the matrix (Step 3's rows).
 
 ### Task A7: Pipeline P, then release v1.1.0
 
@@ -770,6 +772,7 @@ Plan 06 creates the $29 bundle (Polar product, BNPL check, site copy at `site/co
   ```
   `bash scripts/release_test.sh` → `0 failed`. Commit: `scripts/release.sh scripts/release_test.sh scripts/entitlements`, `build(setapp): release.sh markdown-setapp channel, zip, no Polar or Sparkle checks` + trailer (`release.sh` needs a clean tree).
 - [ ] **Step 3: Watch it pass.** `scripts/release.sh markdown-setapp 1.1.1 --no-upload` → `verify-store-build: PASS`, exit 0, the zip path last. `unzip -l dist-release/markdown-setapp/1.1.1/TegelMarkdown-setapp-1.1.1.zip | grep -c "Tegel Markdown.app/Contents/Info.plist"` → 1. `plutil -extract CFBundleIdentifier raw` on the extracted app → `com.tegelapps.markdown-setapp`.
+- [ ] **Step 3b: Review before upload.** Run Task C6 now, through its merge and push: the `release.sh`, entitlement and Setapp SDK changes are reviewed before Step 4 sends a build out (master §11). If stage 7 changed anything, re-run Step 3 on `main` and upload that zip.
 - [ ] **Step 4: Upload** (approval). Setapp developer account → Apps → Add First Version → build validation shows no blocking finding. Record the review outcome in `docs/setapp/application.md`.
 
 ### Task C5: Homebrew go/no-go (Mon 2 Aug 2027) → `docs/gates/homebrew.md`
@@ -786,7 +789,7 @@ Plan 06 creates the $29 bundle (Polar product, BNPL check, site copy at `site/co
   - `brew audit --new --cask tegel-markdown && brew style --cask tegel-markdown && brew install --cask tegel-markdown` → no offences, and the install succeeds.
   - The PR, with the notability evidence, is opened only after the user approves it.
 
-### Task C6: Pipeline P for `m07c`
+### Task C6: Pipeline P for `m07c` (if C4 runs, at its Step 3b, before the upload)
 
 - [ ] **Step 1: Run Procedure P (master §11).** `/cso` scope: the Setapp SDK, its mach-lookup exception and `NSUpdateSecurityPolicy`; no licence bypass reaching the direct build; the `release.sh` changes. Design review: the Setapp edition's UI, if C3 ran (the bundle page is plan 06's).
 - [ ] **Step 2: Merge and push.**
@@ -979,14 +982,18 @@ func testDismissMonitorWatchesNoKeys() { XCTAssertTrue(ActionPanel.dismissMask.i
 
 ### Task D7: Polar product, site page, release, launch (outward-facing)
 
-- [ ] **Step 1: Polar.** Sandbox: product at the D1 price with a licence-key benefit (2 activations); buy it and activate in Debug. Then live (approval). Record the live product id under `select` in `scripts/gates/products.json` (G0 Step 3 left it `[]`; G4 counts App 3 from it, and an App 3 refund missing from the window orders would be subtracted again as an older one) and commit it.
+- [ ] **Step 1: Polar.** Sandbox: product at the D1 price with a licence-key benefit (2 activations); buy it and activate in Debug. Then live (approval): the product, its benefit and a checkout link.
+  - **Production ids** (D6 left plan 03's placeholders in `Config/Release.xcconfig`): `. scripts/lib/env.sh`, then `envset POLAR_PRODUCT_ID_SELECT '<id>'`, `envset POLAR_BENEFIT_ID_SELECT '<id>'` and `envset POLAR_CHECKOUT_URL_SELECT '<url>'`; `need POLAR_PRODUCT_ID_SELECT POLAR_BENEFIT_ID_SELECT POLAR_CHECKOUT_URL_SELECT POLAR_SANDBOX_CHECKOUT_URL_SELECT && echo saved` → `saved` (the sandbox one is D6 Step 3b's). Replace the placeholders of `TG_POLAR_BENEFIT_ID_SELECT` and `TG_POLAR_CHECKOUT_URL_SELECT` in `Config/Release.xcconfig` with those values, the URL in the `https:/$()/` form (plan 05 Task 2 Step 9). Expected: `grep -c REPLACE_IN_PLAN_05 Config/Release.xcconfig` → `0`, and `. scripts/lib/env.sh; grep -cF "TG_POLAR_BENEFIT_ID_SELECT = $(envget POLAR_BENEFIT_ID_SELECT)" Config/Release.xcconfig` → `1` (Step 3's `check_app` compares the built app with that line).
+  - Record the live product id under `select` in `scripts/gates/products.json` (G0 Step 3 left it `[]`; G4 counts App 3 from it, and an App 3 refund missing from the window orders would be subtracted again as an older one).
   - **BNPL check** (rule 7): run plan 05 Task 2 Step 11's procedure, unchanged, on the live App 3 checkout link before it goes public; screenshots to `docs/reviews/m07d-polar/checkout-{safari,chrome}-{nl,us}.png`. Its stop rule applies (B17).
   - The product carries plan 05's opt-in field (`marketing_opt_in`, unticked) and a EUR price set by the user (K10).
+  - Commit: `scripts/gates/products.json Config/Release.xcconfig docs/reviews/m07d-polar`, `build(select): production Polar ids and BNPL evidence` + trailer; `git status --porcelain` → empty, since Step 3's `release.sh` needs a clean tree.
 - [ ] **Step 2: Site.** `site/content/<slug from D1>.md`: a permission explanation, a privacy statement (what is read, and when), a silent captioned demo (rules 2 and 4). Deploy; URL → 200.
+- [ ] **Step 2b: Review before release.** Run Task D8 now, through its merge and push: App 3 brings new licensing, Sparkle, entitlement and `release.sh` code, so the full Procedure P runs before Step 3 publishes it (master §11). Step 3 then builds from `main`.
 - [ ] **Step 3: Release.** `select` joined `release.sh` in D6 Step 3b. `scripts/release.sh select 1.0.0 --no-upload`, QA on that DMG, then `scripts/release.sh select 1.0.0 --yes --from-dmg <path>` (approval; `--yes` only after it, since without a terminal the prompt aborts) → `spctl -a -vv` shows `accepted`.
 - [ ] **Step 4: Launch Tue 20 Jul** with plan 08's playbook: PH, r/macapps (≥ 30 days after our last post), Show HN, IH, and a cross-sell email to App 1/2 buyers who ticked the checkout opt-in (`marketing_opt_in`, K9), sent by plan 08 (it owns MailerLite) under the segment rule from plan 06 Task 15. Each post and email is approved first.
 
-### Task D8: Pipeline P for `m07d`
+### Task D8: Pipeline P for `m07d` (runs at D7 Step 2b, before the release)
 
 - [ ] **Step 1: Run Procedure P (master §11).** `/cso` scope: AX reading and the secure-field exclusion; the global monitor mask; hotkey registration; the temp file's lifetime; pasteboard writes; the search URL encoding and https-only template; the non-sandboxed Hardened Runtime; Sparkle without a sandbox; TegelStore reuse; `verify-no-keylogging.sh` PASS on the release build; each claim in `docs/gates/app3-review.md`. Design review: onboarding, panel, settings, Arabic UI.
 - [ ] **Step 2: Merge and push.**
@@ -1022,7 +1029,13 @@ func testDismissMonitorWatchesNoKeys() { XCTAssertTrue(ActionPanel.dismissMask.i
 ### Task E4: Pipeline P, release by Tue 31 Aug 2027
 
 - [ ] **Step 1: Run Procedure P (master §11) for `m07e`.** `/cso` scope: whatever the fixes touched. Design review if any UI changed.
-- [ ] **Step 2: Merge, push, release.** `scripts/release.sh markdown <v> --yes` (and `data`, `select`; `--yes` only after that release's approval, since without a terminal the prompt aborts); the MAS update via `mas.yml upload=true`; the Setapp build via C4 — each with approval.
+- [ ] **Step 2: Merge, push, release.** Merge and push (P step 11). Then, per app (`markdown`, `data`, and `select` only if App 3 shipped), the K7 order every other release follows:
+  - on `main`, `scripts/release.sh <app> <v> --no-upload`; `<path>` = the last stdout line;
+  - on that DMG, E2's failing rows again on a macOS 28 beta M1 (E2 Step 1's lease and route, purchase approval first; Step 3 reuses it within 24 h), and on the build Mac `APP_NAME="<app name>" FIXTURES=<its fixtures> INSTALL_DIR="$(mktemp -d)" scripts/smoke-dmg.sh <path> docs/qa/macos28-release/<app>` (plan 06 Task 16 Step 2's form). Expected: every `smoke.txt` line `PASS`; for `select`, which has no Quick Look extension, every line but `quicklook`;
+  - record the rows in `docs/qa/macos28-beta.md`, then Commit: `docs/qa`, `docs(qa): macOS 28 release evidence for <app>` + trailer; `git status --porcelain` → empty, since `--from-dmg` still runs `release.sh`'s clean-tree check;
+  - `scripts/release.sh <app> <v> --yes --from-dmg <path>` (`--yes` only after that release's approval, since without a terminal the prompt aborts).
+
+  Then the MAS update via `mas.yml upload=true` and the Setapp build via C4, each with approval.
 - [ ] **Step 3: September RC.** Re-run only the previously failing rows on the release candidate (reuse the lease within 24 h, otherwise a new lease with approval) → `docs/qa/macos28-rc.md`.
 
 ---
@@ -1084,11 +1097,16 @@ Plan 03 already binds each key to one benefit (D1): `PolarConfig.benefitID: Stri
 
 ### Task F2: The `hasV2` seam and a v1.x that accepts v2 keys
 
-**Files:** Modify `Apps/Markdown/App/ProGate.swift` (adds `EnvironmentValues.hasV2: Bool`; true under `UNLOCKED`) and `Config/Release.xcconfig` (adds the v2 benefit id to `TG_POLAR_BENEFIT_IDS_MARKDOWN`)
+**Files:** Modify `Apps/Markdown/App/ProGate.swift` (adds `EnvironmentValues.hasV2: Bool`; true under `UNLOCKED`), `Config/Release.xcconfig` (adds the v2 benefit id to `TG_POLAR_BENEFIT_IDS_MARKDOWN` and `TG_POLAR_V2_BENEFIT_IDS_MARKDOWN`, Step 2b) and `.env.example` (`POLAR_PRODUCT_ID_MARKDOWN_V2`, `POLAR_BENEFIT_ID_MARKDOWN_V2`)
 
 - [ ] **Step 1: Write the failing test.** `MarkdownAppTests/ProGateTests.testHasV2DefaultsFalseForV1Key` with F1's `LicenseManager` stub; `xcodebuild test -scheme markdown -destination 'platform=macOS' -only-testing:MarkdownAppTests/ProGateTests` → FAIL (no member `hasV2`).
 - [ ] **Step 2: Implement the seam;** the test passes.
-- [ ] **Step 3: Ship and commit.** Ship the last v1.x with the v2 benefit in `TG_POLAR_BENEFIT_IDS_MARKDOWN` **before** v2 goes on sale, so v2 buyers on older systems still get v1 Pro. Commit `Apps/Markdown/App/ProGate.swift Config/Release.xcconfig` first (`release.sh` needs a clean tree), then `scripts/release.sh markdown <v1.x> --no-upload`, QA on that DMG, then `scripts/release.sh markdown <v1.x> --yes --from-dmg <path>` (approval; `--yes` only after it, since without a terminal the prompt aborts).
+- [ ] **Step 2b 🔒: The live v2 product and benefit** (approval: a live Polar product). In Polar production, create the benefit "Tegel Markdown 2 licence" with plan 05 Task 2 Step 4's settings (License keys, `limit: 2`, `enable_customer_admin: true`, no expiry, no usage limit), and the product "Tegel Markdown 2": one-time, F0's v2 price in USD and EUR, that benefit, plan 05's `marketing_opt_in` field (unticked), and a description that states the licence limits. No checkout link yet, since v2 isn't on sale: check that Polar's storefront doesn't list it (as plan 06 Task 12 Step 3).
+  - `. scripts/lib/env.sh`, then `envset POLAR_PRODUCT_ID_MARKDOWN_V2 '<id>'` and `envset POLAR_BENEFIT_ID_MARKDOWN_V2 '<id>'`; `need POLAR_PRODUCT_ID_MARKDOWN_V2 POLAR_BENEFIT_ID_MARKDOWN_V2 && echo saved` → `saved`. Add both names to `.env.example`.
+  - In `Config/Release.xcconfig`, append the v2 benefit id to `TG_POLAR_BENEFIT_IDS_MARKDOWN` (space-separated, after the v1 id) and set `TG_POLAR_V2_BENEFIT_IDS_MARKDOWN` to it, so F1's legacy rule (`benefitIDs.subtracting(v2BenefitIDs)`) still leaves the single v1 id. Expected: `. scripts/lib/env.sh; grep -cE "^TG_POLAR_(V2_)?BENEFIT_IDS_MARKDOWN = .*$(envget POLAR_BENEFIT_ID_MARKDOWN_V2)" Config/Release.xcconfig` → `2`.
+  - Commit: `Apps/Markdown/App/ProGate.swift Config/Release.xcconfig .env.example`, `feat(v2): hasV2 seam; v1.x accepts the v2 benefit` + trailer.
+- [ ] **Step 2c: Review before release.** Run Procedure P (master §11) on `m07f-v2` with F4's `/cso` scope and design review (its discount-script items wait for F3), through its merge and push. Step 3 ships F1's licence, Keychain and `release.sh` changes, so the full P runs first (master §11, out of cadence); F4 runs it again over F3.
+- [ ] **Step 3: Ship.** Ship the last v1.x with the v2 benefit in `TG_POLAR_BENEFIT_IDS_MARKDOWN` **before** v2 goes on sale, so v2 buyers on older systems still get v1 Pro. On `main` (Step 2b committed it and Step 2c merged it; `release.sh` needs a clean tree): `scripts/release.sh markdown <v1.x> --no-upload`, QA on that DMG, then `scripts/release.sh markdown <v1.x> --yes --from-dmg <path>` (approval; `--yes` only after it, since without a terminal the prompt aborts).
 
 ### Task F3: Upgrade codes for v1 owners
 
@@ -1103,7 +1121,7 @@ Plan 03 already binds each key to one benefit (D1): `PolarConfig.benefitID: Stri
 - [ ] **Step 2: Watch it fail.** `bun test scripts/v2` → FAIL (module missing).
 - [ ] **Step 3: Implement.** Codes come from `crypto.getRandomValues`. `--apply` calls `POST /v1/discounts/` and writes `local-docs/v2/codes.csv` (gitignored; it holds emails).
 - [ ] **Step 4: Watch it pass, then a sandbox run.** `bun test scripts/v2` → PASS. A sandbox `--apply` against a sandbox v2 product with both prices: one code checks out at the USD upgrade price from a USD checkout (record how that currency was reached: Polar picks it by geolocation), another at the EUR upgrade price from a EUR checkout (the build Mac's Dutch IP, as in plan 04 Task 14 Step 3), and a second use of either is refused. If a total differs from the stated upgrade price, stop: the site would state a price Polar doesn't charge.
-- [ ] **Step 5: Live.** The user creates `POLAR_DISCOUNTS_TOKEN` (`discounts:write` only) and it goes into `.env` with `envset`. The live run (approval of the live discounts); the owner email through plan 08's MailerLite buyer groups to opted-in owners only (K9; approval), stating the v2 price, the upgrade price, and that v1 keeps working. Owners who didn't opt in get their code on request through `hello@tegelapps.com`, which the v2 page says.
+- [ ] **Step 5: Live.** The user creates `POLAR_DISCOUNTS_TOKEN` (`discounts:write` only) and it goes into `.env` with `envset`. The live run, with `--v2-product "$(envget POLAR_PRODUCT_ID_MARKDOWN_V2)"` (F2 Step 2b; approval of the live discounts); the owner email through plan 08's MailerLite buyer groups to opted-in owners only (K9; approval), stating the v2 price, the upgrade price, and that v1 keeps working. Owners who didn't opt in get their code on request through `hello@tegelapps.com`, which the v2 page says.
 - [ ] **Step 5b 🔒: Delete the one-off token.** Revoke it in the Polar dashboard, then `. scripts/lib/env.sh; envset POLAR_DISCOUNTS_TOKEN ''; [ -z "$(envget POLAR_DISCOUNTS_TOKEN)" ] && echo gone`. Expected: `gone`.
 - [ ] **Step 6: Commit** `scripts/v2`.
 

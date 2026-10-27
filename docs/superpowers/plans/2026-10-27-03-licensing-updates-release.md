@@ -75,7 +75,7 @@ Needs H3 (studio inbox) and H5 (sandbox org). Sandbox only, so no confirmation i
 
 **Interfaces:**
 - Consumes: `.env` `STUDIO_EMAIL` (H3).
-- Produces these `.env` names, used by Tasks 8, 9, 13 and 15: `POLAR_EMAIL`, `POLAR_SANDBOX_ORGANIZATION_ID`, `POLAR_SANDBOX_BENEFIT_ID_MARKDOWN`, `POLAR_SANDBOX_PRODUCT_ID_MARKDOWN`, `POLAR_SANDBOX_CHECKOUT_URL_MARKDOWN`, `POLAR_SANDBOX_PORTAL_URL`, `POLAR_SANDBOX_TEST_LICENSE_KEY`, and `POLAR_SANDBOX_OTHER_LICENSE_KEY` (step 10, used by Task 13).
+- Produces these `.env` names, used by Tasks 8, 9, 13 and 15: `POLAR_EMAIL`, `POLAR_SANDBOX_ORGANIZATION_ID`, `POLAR_SANDBOX_BENEFIT_ID_MARKDOWN`, `POLAR_SANDBOX_PRODUCT_ID_MARKDOWN`, `POLAR_SANDBOX_CHECKOUT_URL_MARKDOWN`, `POLAR_SANDBOX_PORTAL_URL`, `POLAR_SANDBOX_TEST_LICENSE_KEY`, and `POLAR_SANDBOX_OTHER_LICENSE_KEY` (step 10, used by Task 13); also `POLAR_SANDBOX_ACCESS_TOKEN` (step 11, used by plans 06, 07 and 08).
 
 - [ ] **Step 1: Sign up.** Playwright `browser_navigate` to `https://sandbox.polar.sh/start` and sign up with the H3 inbox (`. scripts/lib/env.sh; envget STUDIO_EMAIL`); the **user** enters the emailed code. Then `. scripts/lib/env.sh; envset POLAR_EMAIL "$(envget STUDIO_EMAIL)"; need POLAR_EMAIL && echo saved` → `saved`.
 - [ ] **Step 2: Create the org.** Name `Tegel`, slug `tegelapps` (or the nearest free slug). Copy the organization ID from org settings and `. scripts/lib/env.sh; envset POLAR_SANDBOX_ORGANIZATION_ID '<id>'`. Check that the saved id is well formed (step 9 proves it is the right org):
@@ -118,6 +118,10 @@ Needs H3 (studio inbox) and H5 (sandbox org). Sandbox only, so no confirmation i
   - Benefits → New → **License Keys**: description `Tegel Test Other licence`, activation limit 2, `enable_customer_admin` ON.
   - Products → New → `Tegel Test Other (not for sale)`, one-time $19, with only that benefit attached. Create a checkout link and buy it as in step 7 (test card; the BNPL look isn't repeated).
   - Copy the key from the portal and `. scripts/lib/env.sh; envset POLAR_SANDBOX_OTHER_LICENSE_KEY '<key>'`. Never echo it. Result: `. scripts/lib/env.sh; need POLAR_SANDBOX_OTHER_LICENSE_KEY && echo saved` → `saved`.
+- [ ] **Step 11: Sandbox access token**, read later by plan 08 Task 4 Step 1 (orders; checkouts if `reference_id` sits there), plan 06 Task 12 Step 1 and plan 07 F3 Step 4 (a sandbox `--apply` that reads orders and posts discounts).
+  - Settings → Organization access tokens → New, named `tegel-sandbox`, no expiry or the longest offered (F3 runs after G4, Oct 2027). Scopes: `orders:read`, `products:read`, `checkouts:read`, `discounts:read`, `discounts:write`. No benefit, product or checkout-link write scope, so plan 06 Task 12 Step 1 takes its dashboard route. A sandbox discount moves no money, so this token isn't one-off like production's `POLAR_DISCOUNTS_TOKEN` (plan 07 F3).
+  - Copy it the moment it's shown and save it without it touching a command line: `. scripts/lib/env.sh && envset POLAR_SANDBOX_ACCESS_TOKEN "$(pbpaste)" && pbcopy </dev/null`. The name is already in `.env.example`.
+  - Expected: `. scripts/lib/env.sh; need POLAR_SANDBOX_ACCESS_TOKEN && echo saved` → `saved`, and `. scripts/lib/env.sh; curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $(envget POLAR_SANDBOX_ACCESS_TOKEN)" "https://sandbox-api.polar.sh/v1/orders/?organization_id=$(envget POLAR_SANDBOX_ORGANIZATION_ID)&limit=1"` → `200`.
 
 No commit: the outputs are gitignored. Task 4 adds the new key names to `.env.example`.
 
@@ -1075,7 +1079,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
     6. **Export:** `ExportOptions.plist` generated in `$OUT` with `plutil -create xml1` + `-insert` (`method developer-id`, `signingStyle manual`, `signingCertificate "Developer ID Application"`, `teamID`; method names checked against `xcodebuild -help` on Xcode 26.3), then `xcodebuild -exportArchive … -exportPath "$OUT/export"`; `APP=$(echo "$OUT"/export/*.app)`.
     7. **Pre-notary checks** (each failure → exit 1):
        - PlistBuddy `CFBundleShortVersionString == $V` and `CFBundleVersion == $BUILD`;
-       - `TGPolarAPIBase` == `https://sandbox-api.polar.sh` (`--sandbox`) or `https://api.polar.sh`; `TGPolarBenefitID` non-empty (D1);
+       - `TGPolarAPIBase` == `https://sandbox-api.polar.sh` (`--sandbox`) or `https://api.polar.sh`; `TGPolarBenefitID` (D1) and `TGPolarOrganizationID` non-empty (an empty organisation id fails every buyer's activation);
        - `lipo -archs` on the app and appex executables contains both `x86_64` and `arm64`;
        - **entitlements (K7):** for `$APP` and each `$APP/Contents/PlugIns/*.appex` that exists (the same `[ -e "$b" ] || continue` loop as `check_app`: App 3 has no extension), `check_ents "$b" "scripts/entitlements/${id#com.tegelapps.}.plist"`, where `id` is the bundle's `CFBundleIdentifier`;
        - `codesign --verify --deep --strict --verbose=2 "$APP"`; `syspolicy_check notary-submission "$APP"`.
@@ -1251,7 +1255,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   - **Design review shots** (against `DESIGN.md` and plan 09's Settings spec):
     - the Licence tab (free, Pro, and the `.wrongProduct` error) and the Updates tab, on a Debug build on the build Mac, each in light, dark (System Settings ▸ Appearance) and Arabic (`-AppleLanguages '(ar)'`): `screencapture -x -w docs/reviews/m03-design/<licence-free|licence-pro|licence-error|updates>-<light|dark|ar>.png`;
     - Sparkle's update prompt: copy Task 13 step 7's `/Users/Shared/m03/sparkle-prompt-*.png` into `docs/reviews/m03-design/`.
-  - **Stage 7 extra:** if `release.sh`, the entitlements, Info.plist or TegelStore changed, build `1.0.0-b3 --sandbox --no-upload`, add it to `dist-release/markdown/beta-feed/`, re-run Task 13 step 6's `generate_appcast`, and repeat Task 13 steps 3–4, 7 and 11. It stays local, so no ask.
+  - **Stage 7 extra:** if `release.sh`, the entitlements, Info.plist or TegelStore changed, first commit the review so far (Commit: `docs/reviews/m03.md docs/reviews/m03-design/`, "docs(reviews): m03 pipeline results before b3"; `git status --porcelain` → empty, since `release.sh` needs a clean tree), then build `1.0.0-b3 --sandbox --no-upload`, add it to `dist-release/markdown/beta-feed/`, re-run Task 13 step 6's `generate_appcast`, and repeat Task 13 steps 3–4, 7 and 11. It stays local, so no ask.
   - **Stage 9 output:** `cubic review -b "$BASE" -j > dist-release/cubic-<n>.json`.
   - **Before the merge:** Commit: `docs/reviews/m03.md docs/reviews/m03-design/`, "docs(reviews): m03 pipeline results".
   - **Merge message:** `merge: m03 licensing, updates, release`. Expected: `make check` matches the stage 2 counts, and the push succeeds.
@@ -1281,11 +1285,11 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
 
 1. **arm64 / macOS 27 leg** on Scaleway M1 lease L2 (Thu 26 Nov 09:00 → Fri 27 Nov 09:00), second after plan 05's macOS 27 matrix, using b2.
    - **The feed holds betas only:** b1, b2, and b3 if Task 14's stage 7 extra built one. Plan 05 keeps its RC entries in its own `dist-release/markdown/rc-feed/` (plan 05 Task 3 Step 4), so `beta-feed/` is still Task 13 step 6's feed. Check before copying: `grep -c '<item>' dist-release/markdown/beta-feed/appcast.xml` → `2` (or `3` with b3) and `grep -c -- '-rc' dist-release/markdown/beta-feed/appcast.xml` → `0`. Steps 7 and 10–12 then expect the update to the newest beta (b2, or b3). With an rc entry, b1 would be offered the RC (production Polar) and those steps would fail.
-   - On the lease, stop plan 05's feed server first (`pkill -f 'http.server 8765'`). Copy `beta-feed/` over (`scp -r`), serve it exactly as in Task 13 step 1, then repeat Task 13 steps 3–4, 7 and 10–12. Step 3 replaces plan 05's rc1 install with b1; step 7.5 must show `1.0.0-b2` before step 10.
+   - On the lease, stop plan 05's feed server first (`pkill -f 'http.server 8765'`). Copy `beta-feed/` over (`scp -r`), serve it exactly as in Task 13 step 1, then repeat Task 13 steps 3–4, 7 and 10–12. Step 3 replaces plan 05's rc1 install with b1; step 7.5 must show the newest beta (`1.0.0-b2`, or `1.0.0-b3`) before step 10.
    - **Licence key (steps 10–12):** b2 is a `--sandbox` build, so it talks to sandbox Polar. Use `POLAR_SANDBOX_TEST_LICENSE_KEY` (both its slots are free after Task 13 step 13), put on the clipboard with Task 9 step 3 item 1's command and pasted over Screen Sharing; never `POLAR_QA_LICENSE_KEY`, which is production.
    - Record the rows in `docs/gates/m03-acceptance.md` labelled "Scaleway M1, macOS 27". Task 15 runs after this leg.
 2. **Nothing beta is on R2.** The first objects under `markdown/` are 1.0.0's, published with `scripts/release.sh markdown 1.0.0 --from-dmg <the smoke-tested DMG>`; compare the printed `sha256` with the smoked file's. That run is also the first real use of `release.sh`'s appcast and upload half.
-3. **RC Sparkle acceptance:** RC builds use a local signed feed and the `-SUFeedURL` override as in Task 13 steps 6–7, but in their own folder, `dist-release/markdown/rc-feed/` (a copy of `beta-feed/` plus the RC), so `beta-feed/` stays b1/b2 for the L2 leg. No RC goes on the public feed (K7).
+3. **RC Sparkle acceptance:** RC builds use a local signed feed and the `-SUFeedURL` override as in Task 13 steps 6–7, but in their own folder, `dist-release/markdown/rc-feed/` (a copy of `beta-feed/` plus the RC), so `beta-feed/` stays b1/b2(/b3) for the L2 leg. No RC goes on the public feed (K7).
 4. **Replace `REPLACE_IN_PLAN_05` in `Config/Release.xcconfig`** in all four settings: `TG_POLAR_ORGANIZATION_ID`, `TG_POLAR_CHECKOUT_URL_MARKDOWN`, `TG_POLAR_PORTAL_URL` and `TG_POLAR_BENEFIT_ID_MARKDOWN` (the live Markdown licence benefit). Create the live product with the same benefit settings (limit 2, `enable_customer_admin`) at $14 (D15). Check with a Release build (`xcodebuild -scheme markdown -configuration Release -derivedDataPath build`), not `make build` (Debug).
 5. **Live BNPL row** in `docs/gates/bnpl.md` [F3g].
 6. **FAQ input:** whether the key arrives by email (Task 13 step 9), and the error copy from Task 9.
