@@ -105,7 +105,7 @@ def test_summary_cli_maps_names_and_needs_no_markdown_id(self):
     def fake(token, org, pid, after, before):
         seen.append(pid)
         return [{"id": "o-" + pid, "currency": "usd", "status": "paid", "product_id": pid, "total_amount": 1900, "net_amount": 1900,
-                 "platform_fee_amount": 145, "refunded_amount": 0, "refunded_tax_amount": 0}]
+                 "platform_fee_amount": 145, "platform_fee_currency": "usd", "refunded_amount": 0, "refunded_tax_amount": 0}]
     def fake_refunds(token, org, after, before):   # one refund of a window order (already in net), one of an older order
         return [{"order_id": "o-p1", "currency": "usd", "amount": 1900, "tax_amount": 0},
                 {"order_id": "o-old", "currency": "usd", "amount": 1500, "tax_amount": 0}]
