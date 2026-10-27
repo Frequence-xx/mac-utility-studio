@@ -1087,6 +1087,9 @@ This was email 1 of 2. The second comes when the next Tegel app launches; then t
   - delete the production mail token: `. scripts/lib/env.sh && CLOUDFLARE_API_TOKEN="$(envget CLOUDFLARE_API_TOKEN)" CLOUDFLARE_ACCOUNT_ID="$(envget CLOUDFLARE_ACCOUNT_ID)" bunx wrangler@4.151.2 pages secret delete MAILERLITE_API_TOKEN --project-name tegel --env production`;
   - deploy with plan 04's production command (a deployment keeps the secrets it was made with: Task 7 Step 6).
   - Expected: `curl -s https://tegelapps.com/ | grep -c 'action="/api/waitlist"'` → `0`, the same for the RTL page, and a valid POST with Task 8 Step 7's headers and `email=<STUDIO_EMAIL+closed@…>&consent=on&website=` → `303 https://tegelapps.com/waitlist/error/` with no email sent.
+- [ ] **Step 1c 🔒 Late confirmations** (Mon 14 Dec, the last intro-price day). A sign-up made before the close but confirmed after Step 1's send hasn't had the launch email it was promised. U approves "send the launch email to late confirmations, then drop unconfirmed sign-ups":
+  - in MailerLite, segment the waitlist group by "subscribed after <Step 1's recorded send time>" and send it the Step 1 campaign unchanged; record the count (often 0);
+  - delete the subscribers still `unconfirmed` in the waitlist group (they never gave consent; nothing is kept), so nobody can confirm into a promise that can't be kept. Record the count.
 - [ ] **Step 2: App 2 emails** (Tue 2 Feb 2027, 09:30 CET). The product facts and the price come from plan 06; if plan 06 sets an intro price, use its dated wording verbatim (HR3).
   - **To `waitlist`** (email 2 of 2). Subject `Tegel Data is out (and this list is now closed)`. Body:
     - what Tegel Data reads: JSON, JSONL, YAML, TOML, CSV, `.env` masked;
