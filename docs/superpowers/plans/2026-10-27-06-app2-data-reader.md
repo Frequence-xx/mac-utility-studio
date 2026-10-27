@@ -430,7 +430,7 @@ import { test, expect } from 'bun:test';
 import { parseDotenv, envHTML, maskSecrets } from '../src/data/dotenv.js';
 import { parseDocument } from '../src/data/parse.js';
 import { treeHTML } from '../src/data/tree.js';
-import { tableRowsHTML } from '../src/data/table.js';
+import { tableRowsHTML, detectHeader } from '../src/data/table.js';
 import { jsonlRowHTML } from '../src/data/jsonl.js';
 const SRC = ['# comment line', 'export API_KEY=sk-test-AAAA1111', "SINGLE='lit $HOME'", 'DOUBLE="line1\\nline2"',
   'MULTI="first', 'second"', '# OLD_TOKEN=tok-old-BBBB2222', 'INLINE=val-CCCC3333 # note', 'not a valid line sk-zzz', 'EMPTY='].join('\r\n');
@@ -502,9 +502,10 @@ test('secret-named keys and columns are masked in tree, row and table views', ()
   expect(jsonlRowHTML(1, adc, undefined, { maskNames: true })).not.toContain('cs-not-real-1');
   const table = tableRowsHTML([['demo', 'pw-not-real-3']], 1, ['user', 'POSTGRES_PASSWORD'], { maskNames: true });
   expect(table).not.toContain('pw-not-real-3'); expect(table).toContain('demo');
-  const rows = [['user', 'password'], ['root', 'pw-not-real-4']];   // detectHeader(rows) is false (vote −2)
+  const rows = [['user', 'password'], ['root', 'pw-not-r']];   // equal lengths per column: vote −1 −1 = −2
+  expect(detectHeader(rows)).toBe(false);
   const noHeader = tableRowsHTML(rows, 0, null, { maskNames: true, nameRow: rows[0] });
-  expect(noHeader).not.toContain('pw-not-real-4'); expect(noHeader).toContain('root');
+  expect(noHeader).not.toContain('pw-not-r'); expect(noHeader).toContain('root');
 });
 ```
 
@@ -635,7 +636,7 @@ View rules:
   - **`testHostileStringsNeverExecute`:** for each `hostile.*`, `DataFile.load(url, maxBytes: 2_000_000)` then `renderData` (mode `.window`). Assert `evaluateJavaScript("String(window.__pwned)") == "undefined"`, `document.querySelectorAll('#doc img,#doc script,#doc svg,#doc iframe,#doc a[href^=javascript]').length == 0`, and the `#doc` innerText contains `<script>` (so the container exists and the empty-query assertions aren't vacuous).
   - **`testDotenvMaskedUntilClicked`:** render `sample.env` in `.window`. `documentElement.outerHTML` contains none of its values; after `document.querySelector('.secret').click()`, exactly the first value appears and the second doesn't.
   - **`testDotenvQuickLookNeverReveals`:** the same in `.quicklook`. After the click, no value appears.
-  - **`testQuickLookMasksSecretFiles`** (K12): write a temp `.netrc` (`machine example.com login demo password not-a-real-secret-9`), a temp `id_rsa` whose PEM header and footer are built by concatenation around the body `ZmFrZS1ib2R5LWxpbmU=`, and a temp `key.json` holding that PEM as `{"private_key": "<PEM, newlines as \n>", "client_secret": "not-a-real-secret-5"}`. For each, `DataFile.load`, then `renderData` in mode `.quicklook` with `secretFile: file.secretFile`. `documentElement.outerHTML` contains none of `not-a-real-secret-9`, `ZmFrZS1ib2R5` and `not-a-real-secret-5`, and does contain the file's own non-secret sentinel: `machine` (`.netrc`), `-----BEGIN` (`id_rsa`: the header's first token, which the whole-file rule keeps) and `client_secret` (`key.json`'s key). For `key.json`, `document.querySelector('#doc details')` is non-null and `mark.err` is null (the tree rendered, masked, not an error view).
+  - **`testQuickLookMasksSecretFiles`** (K12): write a temp `.netrc` (`machine example.com login demo password not-a-real-secret-9`), a temp `id_rsa` whose PEM header and footer are built by concatenation around the body `ZmFrZS1ib2R5LWxpbmU=`, and a temp `key.json` holding that PEM as `{"private_key": "<PEM, newlines as \n>", "client_secret": "not-a-real-secret-5"}`. For each, `DataFile.load`, then `renderData` in mode `.quicklook` with `secretFile: file.secretFile`. `documentElement.outerHTML` contains none of `not-a-real-secret-9`, `ZmFrZS1ib2R5` and `not-a-real-secret-5`, and does contain the file's own non-secret sentinel: `machine` (`.netrc`), `-----BEGIN` (`id_rsa`: the header's first token, which the whole-file rule keeps) and `client_secret` (`key.json`'s key). For `key.json`, `document.querySelector('#doc details')` is non-null and `mark.err` is null (the tree rendered, masked, not an error view). Last, a temp `creds.csv` of `login,password` and `zq-71,pw-not-r`, whose header the vote rejects (equal lengths per column, −2): the HTML lacks `pw-not-r` and contains `zq-71`.
   - **`testYAMLErrorLine`:** the bad YAML from Task 2 gives `errors.first?.line == 4`, and `document.querySelector('mark.err') != null`.
   - **`testPaged1MRows`:** `XCTSkip` without the fixture. `renderPaged(RecordIndex(url: big-1m.csv, quoteAware: true), format: .csv, …)` returns `records == 1_000_001` in < 2 s (timed after the index is built). After `document.scrollingElement.scrollTop = 1e9` and 500 ms, the last visible row's first cell is `"999999"`.
   - **`testPaged200MBLastRecordReachable`** (K12): `XCTSkip` without the fixture. `renderPaged` over `RecordIndex(url: big-200mb.jsonl, quoteAware: false)`. After `scrollTop = 1e9` and 500 ms, the last visible row's `data-line` equals `index.count`. After scrolling to `1_600_000 / index.count` of the maximum `scrollTop`, a `.row.bad` is visible (the plain-height list stops near record 1,525,000).
@@ -646,6 +647,7 @@ View rules:
   - set `MAX_SPACER_PX = Infinity` in `view.js`, `make renderer`, run `--filter testPaged200MBLastRecordReachable`. Expected: FAIL, the last visible `data-line` is about 1,525,000;
   - replace the `maskSecrets(…)` call in `view.js` with its `text` argument, `make renderer`, run `--filter testQuickLookMasksSecretFiles`. Expected: FAIL, `not-a-real-secret-9` is in the HTML;
   - pass `maskNames: false` in `quicklook` mode, `make renderer`, run `--filter testQuickLookMasksSecretFiles`. Expected: FAIL, `not-a-real-secret-5` is in the HTML;
+  - drop `nameRow` from the `quicklook` table calls (so it defaults to the rejected header), `make renderer`, run `--filter testQuickLookMasksSecretFiles`. Expected: FAIL, `pw-not-r` is in the HTML;
   - remove the `preparePage()` call from `renderData`, run `--filter testHostileStringsNeverExecute`. Expected: FAIL with a JavaScript error (`window.tegel` is undefined on the unloaded page).
 - [ ] **Step 6: Commit:** `Renderer/src/data/view.js Renderer/src/data/labels.js Renderer/src/css/data.css Renderer/build.js Renderer/src/page.js Packages/TegelKit/Sources/TegelKit/DataRender.swift Packages/TegelKit/Sources/TegelKit/RendererWebView.swift Packages/TegelKit/Sources/TegelKit/Resources/Renderer Packages/TegelKit/Tests/TegelKitTests/WebView/DataRenderTests.swift Fixtures/data/hostile.*`, `feat(tegelkit): data view bridge with scaled paging, masking and hostile-input tests` + trailer.
 
@@ -971,7 +973,7 @@ swift -e 'import AppKit; print(NSWorkspace.shared.urlForApplication(withBundleId
 - [ ] **Step 1: Create the Polar sandbox objects** (sandbox, so no approval needed; Polar API with `POLAR_SANDBOX_ACCESS_TOKEN`, or the dashboard). Record every id in `.env` under the Task 1 key names.
   - Benefit **"Tegel Data licence"**: `license_keys`, prefix `TGDATA`, `limit_activations: 2`, `enable_customer_admin: true`, no expiry.
   - Product **"Tegel Data"**: $15 one-time and a EUR price, that benefit. Product **"Tegel Bundle"**: $29 one-time and a EUR price, benefits [Markdown licence, Data licence]. EUR amounts: €15 and €29, **pending the user's confirmation** (K10; same open question as App 1's €19/€14). Both carry plan 05's opt-in field (`marketing_opt_in`, label "Email me set-up tips and news about Tegel apps", unticked; Task 0 #11) and say "2 Macs per licence"; the bundle adds "one key per app".
-  - A sandbox checkout link for each product, saved as `POLAR_SANDBOX_CHECKOUT_URL_DATA` and `POLAR_SANDBOX_CHECKOUT_URL_BUNDLE` (Step 2 buys through the second; Task 13's site build uses both).
+  - A sandbox checkout link for each product, saved as `POLAR_SANDBOX_CHECKOUT_URL_DATA` and `POLAR_SANDBOX_CHECKOUT_URL_BUNDLE` (Step 2 buys through the second; the site never uses either).
   - Fill the sandbox `TG_POLAR_BENEFIT_ID_DATA` and `TG_POLAR_CHECKOUT_URL_DATA`, then `xcodegen generate && make build` and `/usr/libexec/PlistBuddy -c 'Print TGPolarBenefitID' "build/Build/Products/Debug/Tegel Data.app/Contents/Info.plist"`. Expected: the sandbox Data benefit id, not the Markdown one. Commit: `Config`, `build(data): sandbox Polar ids for Tegel Data` + trailer.
 
 - [ ] **Step 2: Sandbox end-to-end** (Debug builds of both apps; test card). Buy the bundle, then confirm:
