@@ -966,7 +966,7 @@ func testDismissMonitorWatchesNoKeys() { XCTAssertTrue(ActionPanel.dismissMask.i
 
 ### Task D6: Onboarding, settings, licence, updates, localisation
 
-**Files:** Create `Apps/Select/App/{OnboardingView.swift,SettingsView.swift,MenuBar.swift}`, `Apps/Select/App/Localizable.xcstrings` (EN/NL/FR/AR), `scripts/entitlements/select.plist`. Modify `Config/Release.xcconfig` and the sandbox xcconfig (add `TG_POLAR_CHECKOUT_URL_SELECT` and `TG_POLAR_BENEFIT_ID_SELECT` for App 3's Polar product, as plan 06 Task 1 adds `_DATA`; `check_app` reads `TG_POLAR_BENEFIT_ID_<SLUG>` from `Config/Release.xcconfig`), `scripts/release.sh`, `scripts/release_test.sh` (Step 3b)
+**Files:** Create `Apps/Select/App/{OnboardingView.swift,SettingsView.swift,MenuBar.swift}`, `Apps/Select/App/Localizable.xcstrings` (EN/NL/FR/AR), `scripts/entitlements/select.plist`. Modify `Config/Release.xcconfig` and the sandbox xcconfig (add `TG_POLAR_CHECKOUT_URL_SELECT` and `TG_POLAR_BENEFIT_ID_SELECT` for App 3's Polar product, as plan 06 Task 1 adds `_DATA`; `check_app` reads `TG_POLAR_BENEFIT_ID_<SLUG>` from `Config/Release.xcconfig`), `.env.example` (add `POLAR_PRODUCT_ID_SELECT`, `POLAR_BENEFIT_ID_SELECT`, `POLAR_CHECKOUT_URL_SELECT`, `POLAR_SANDBOX_CHECKOUT_URL_SELECT`, as plan 06 Task 1 does for `_DATA`; D7 fills them with `envset`), `scripts/release.sh`, `scripts/release_test.sh` (Step 3b)
 
 - [ ] **Step 1: Write the failing test.** `testOnboardingShowsWhenUntrusted`: with `OnboardingModel(isTrusted: { false })`, `MenuBarModel(onboarding:).showsOnboarding == true`; with `{ true }`, false. Then `xcodebuild test -scheme Select -destination 'platform=macOS' -only-testing:SelectTests` → FAIL (`MenuBarModel` missing).
 - [ ] **Step 2: Implement.**
