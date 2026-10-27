@@ -6,7 +6,7 @@ gates and every number come from `BUSINESS-PLAN.md`. The execution plan is
 
 - **App 1** (`Apps/Markdown`): Markdown + Mermaid reader. Quick Look extension, RTL, paginated PDF.
 - **App 2** (`Apps/Data`, from W10): JSON/JSONL/YAML/TOML/CSV/.env reader and Quick Look pack, plus a session-transcript mode.
-- **Shared code:** `Renderer/` (HTML/CSS/JS, built with bun into `Renderer/dist`, which is committed) and `Packages/TegelKit` (Swift).
+- **Shared code:** `Renderer/` (HTML/CSS/JS sources and tests) and `Packages/TegelKit` (Swift libraries `TegelKit` and `TegelStore`). bun builds the renderer into `Packages/TegelKit/Sources/TegelKit/Resources/Renderer/`, which is committed so Xcode builds never need bun.
 - **Other parts:** `site/` (static site → Cloudflare Pages); `scripts/` (release, notarise, appcast).
 
 Repo: `git@github-mus:Frequence-xx/mac-utility-studio.git` (SSH alias in `~/.ssh/config`, deploy key `~/.ssh/id_ed25519_mus`). Branch `main`.
@@ -19,7 +19,7 @@ Repo: `git@github-mus:Frequence-xx/mac-utility-studio.git` (SSH alias in `~/.ssh
 |---|---|
 | Everything the pipeline's stage 2 needs | `make check` |
 | JS renderer tests | `bun test` (in `Renderer/`) |
-| Rebuild renderer bundle | `make renderer` (then commit `Renderer/dist`) |
+| Rebuild renderer bundle | `make renderer` (then commit `Packages/TegelKit/Sources/TegelKit/Resources/Renderer/`) |
 | Swift package tests | `swift test --package-path Packages/TegelKit` |
 | Generate Xcode project | `xcodegen generate` (the `.xcodeproj` is generated and gitignored; edit `project.yml`, never the pbxproj) |
 | Build app targets | `make build` |
@@ -47,6 +47,43 @@ These bind code, UI copy, site copy, screenshots, demo videos and launch posts:
 7. **No riba.** BNPL methods are disabled in the MoR checkout. One-time prepaid licence only.
 8. **No ads**, in or around the apps.
 9. **Excluded app categories:** power/thermal, captions/accessibility-critical, health/posture, camera gaze, now-playing/music, desktop pets, novelty sound, AI interview copilots, wallpaper content.
+
+## Design standard (MANDATORY for any UI, icon, renderer theme, site page, screenshot or demo)
+
+**The bar:** work a senior Apple-platform designer with 20 years' experience would sign. It should feel native, quiet and exact, with nothing that reads as "AI-generated".
+
+**The single source of truth is `DESIGN.md`**, built in plan 09: type scale, grid, spacing, colour tokens, icon grid, voice. No UI work starts before it exists, and no UI value is invented outside it.
+
+**Skills.** Brief each one into any subagent that touches UI:
+- **App UI:** `macos-design-guidelines` (HIG rules for menus, windows, toolbars, sidebars, keyboard, pointer, Settings); `apple-design` (Apple typography, SF Symbols, Liquid Glass, UX writing, animation).
+- **Site:** `web-design-guidelines` (WCAG 2.2, responsive, performance); `frontend-design`.
+- **Design-system work:** `design-consultation`.
+- **Review:** `plan-design-review` (plans) and `design-review` (built UI, with screenshots).
+
+The first three were installed into `~/.claude/skills` on 27 Oct from MIT repos; their `SOURCE` file gives the origin. They are available as skills.
+
+**Native first:**
+- System controls, materials, SF Pro / SF Arabic / SF Hebrew, SF Symbols, standard menus and shortcuts, `Settings` scene.
+- Liquid Glass on macOS 26+, falling back gracefully on 14/15.
+- Respect Reduce Motion, Increase Contrast and the accent colour.
+
+**Banned AI-slop patterns:**
+- purple/blue gradients;
+- glassmorphism blobs and decorative orbs;
+- emoji as icons;
+- a generic hero, then three feature cards with icons, then testimonials;
+- "Supercharge / Unleash / Seamless / Effortless" copy;
+- centred everything;
+- uniform 16px rounded cards everywhere;
+- drop shadows on everything;
+- Inter as a default on the site;
+- fake app screenshots;
+- stock illustrations;
+- placeholder lorem.
+
+**Typography is the product.** Reading themes get a modular scale, a 60–75ch measure, real line-height for Arabic (larger than for Latin), and **no letter-spacing on Arabic**. They also need correct quotes and dashes, tabular figures in tables, and hanging punctuation where WebKit supports it.
+
+**Verification:** design claims need screenshots (light, dark and Arabic UI), plus a `design-review` pass before a milestone closes.
 
 ## Outward-facing actions: confirm with the user first
 
