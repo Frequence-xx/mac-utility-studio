@@ -124,7 +124,7 @@ Master §2/§3 and CLAUDE.md apply (build Mac and evidence rules, product rules 
 | `docs/design/proto/` | Prototype renders (PNG) and hero variants (HTML) | 4, 10 |
 | `Apps/Markdown/App/AppIcon.icon/` | `icon.json` + `Assets/*.svg` | 11 |
 | `project.yml` | `ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon` on the Markdown app target | 11 |
-| `.github/workflows/design-shots.yml` | `workflow_dispatch` only: one build on `macos-26` with Xcode 26.3, then font probe, icon render and app screenshots on `macos-14` and `macos-26` from that artefact | 11 |
+| `.github/workflows/design-shots.yml` | `workflow_dispatch` only: one build on `macos-26` with Xcode 26.3, then font probe, icon render and app screenshots on `macos-26` from that artefact (no `macos-14` runner after 2 Nov, master D11) | 11 |
 | `scripts/window-shot.sh` | Capture one app window by owner name, with or without the native shadow | 12 |
 | `docs/design/templates/{gallery,caption}.html` | PH gallery 1270×760 frame; demo caption band 1920×120 | 12 |
 | `docs/reviews/design-m09.md`, `docs/reviews/m09.md` | Design review and 9-stage pipeline results | 5, 13, 14 |
@@ -1056,7 +1056,7 @@ test.skipIf(process.platform !== 'darwin')('every app icon compiles to all ten m
     2. xcodegen 2.46.0 from its release zip behind the sha256 check, with the same env values and lines as plan 01's `ci.yml`;
     3. `make build`;
     4. `tar -cf app.tar -C build/Build/Products/Debug "Tegel Markdown.app"` (an artefact drops file modes; the tar keeps them), uploaded as `app`.
-  - **Job `shots`**, `needs: build`, matrix `os: [macos-14, macos-26]` [V16]. The `macos-14` image has no Xcode 26 (runner-images README, checked 27 Oct), so this job never builds. It checks out, downloads `app`, runs `tar -xf app.tar`, then:
+  - **Job `shots`**, `needs: build`, matrix `os: [macos-26]` [V16]. No `macos-14` leg: GitHub retires that label on Mon 2 Nov 2026, before this task (master D11). This job never builds. It checks out, downloads `app`, runs `tar -xf app.tar`, then:
     1. the font probe:
 
 ```bash
@@ -1088,17 +1088,17 @@ git push origin main && git switch m09-design && git push origin m09-design
 OLD=$(gh run list --workflow design-shots.yml --branch m09-design -L1 --json databaseId -q '.[0].databaseId')
 gh workflow run design-shots.yml --ref m09-design -f run_app_shots=false
 for i in $(seq 30); do ID=$(gh run list --workflow design-shots.yml --branch m09-design -L1 --json databaseId -q '.[0].databaseId'); [ -n "$ID" ] && [ "$ID" != "$OLD" ] && break; sleep 2; done
-[ "$ID" != "$OLD" ] && gh run watch "$ID" && gh run download "$ID" -n design-shots-macos-14 -n design-shots-macos-26 -D docs/design/proto/runner
+[ "$ID" != "$OLD" ] && gh run watch "$ID" && gh run download "$ID" -n design-shots-macos-26 -D docs/design/proto/runner
 ```
 
   `gh workflow run` creates the run asynchronously, so the loop waits up to 60 s for a run ID that differs from the one before the dispatch.
 
   Expected:
-  - the `build` job prints `Xcode 26.3`, and both `shots` legs start from its artefact;
+  - the `build` job prints `Xcode 26.3`, and the `shots` leg starts from its artefact;
   - `docs/design/proto/runner/design-shots-macos-26/` contains the Liquid Glass icon renders;
-  - `fonts.txt` lists Damascus and GeezaPro on both runners.
+  - `fonts.txt` lists Damascus and GeezaPro.
 
-  Record the results in `decisions.md` D-4/D-5, naming the machine. GitHub's runner-images notice ends `macos-14` support on 2 Nov: if that leg gets no runner, cancel it and record "n/a: image retired". Commit `docs/design/proto docs/design/decisions.md`: "design(icon): runner icon renders and font probe".
+  Record the results in `decisions.md` D-4/D-5, naming the machine. macOS 14 has no runner leg (master D11): record its row as "n/a: image retired" unless lease L2's macOS 14 reinstall (plan 05 Task 3) covers it. Commit `docs/design/proto docs/design/decisions.md`: "design(icon): runner icon renders and font probe".
 
 ### Task 12: Screenshot, caption, gallery and OG system (Sat 7 Nov)
 

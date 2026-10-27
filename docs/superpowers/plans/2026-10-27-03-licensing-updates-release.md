@@ -757,7 +757,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   - `LicenseManager`, `PolarClient(config:)`, `PolarConfig.fromInfoPlist()`, `PolarError` (Tasks 4–7);
   - `EnvironmentValues.isPro` (plan 02, `ProGate.swift`).
 - Produces:
-  - `struct LicenceSettingsView: View`, reading `@Environment(LicenseManager.self)`;
+  - `struct LicenceSettingsView: View { let proSummary: LocalizedStringKey }`, reading `@Environment(LicenseManager.self)`. `proSummary` is the text of its `.free` row: App 1 passes its sentence below, and plan 06's App 2 passes its own;
   - the App injects `.environment(license)` and `.environment(\.isPro, license.isPro)` (OR'd with plan 02's `#if DEBUG` override, which stays Debug-only) on every scene.
 
 - [ ] **Step 1: Write the failing check (GUI).** Run `make build` (plan 01: Debug, ad-hoc signed) and open `build/Build/Products/Debug/Tegel Markdown.app`. Expected FAIL: Settings has no **Licence** tab, and Pro features follow only the Debug override.
@@ -769,7 +769,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
 
   | State | Content |
   |---|---|
-  | `.free` | Text "Pro adds folder mode with search and live reload, paginated PDF export and three themes. One-time purchase for up to 2 Macs, with a 14-day refund." · Button **"Buy Pro…"** → `openURL(config.checkoutURL)` · TextField "Licence key" + Button **"Activate"** (disabled while empty or busy) |
+  | `.free` | Text `proSummary`, which App 1 passes as "Pro adds folder mode with search and live reload, paginated PDF export and three themes. One-time purchase for up to 2 Macs, with a 14-day refund." · Button **"Buy Pro…"** → `openURL(config.checkoutURL)` · TextField "Licence key" + Button **"Activate"** (disabled while empty or busy) |
   | `.pro` | Text "Pro is active on this Mac." · Button **"Deactivate this Mac"** · Button **"Manage activations…"** → `openURL(config.portalURL)` |
   | `.lapsed` | Text "Tegel couldn't confirm your licence for more than 30 days. Connect to the internet, then click Check Again." · Button **"Check Again"** → `refresh()` · **"Manage activations…"** · Button **"Remove Licence…"** → a confirmation dialog "Remove the licence from this Mac?" with **"Remove Licence"** (destructive) and "Cancel" → `deactivate()`. A 404 (activation already removed in the portal) counts as done, so the `.free` row comes back and the key can be entered again; other errors show their copy below |
   | error `.limitReached` | "This key is already active on 2 Macs, or it is no longer valid. Free up a Mac in Manage activations, then try again." |
@@ -781,7 +781,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
 
   - A `CancellationError` shows nothing: it only means another licence action was already running.
   - The activation label is the hardware model (`hw.model`, such as `iMac19,1`), never the computer name; `LicenseManager` sends it (Task 7).
-  - Add the tab `.tabItem { Label("Licence", systemImage: "key") }` to the Settings `TabView`.
+  - Add the tab `LicenceSettingsView(proSummary: "Pro adds folder mode with search and live reload, paginated PDF export and three themes. One-time purchase for up to 2 Macs, with a 14-day refund.")` with `.tabItem { Label("Licence", systemImage: "key") }` to the Settings `TabView`.
 - [ ] **Step 3: Run the smoke test (GUI), on the build Mac with a Debug build against the sandbox.**
   1. `. scripts/lib/env.sh; envget POLAR_SANDBOX_TEST_LICENSE_KEY | sed 's/^/  /;s/$/\n/' | pbcopy`. This puts the key on the clipboard with leading spaces and a trailing newline, without printing it.
   2. Paste it, then click Activate. Expected: "Pro is active on this Mac", and folder mode is enabled.
@@ -849,6 +849,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
 - [ ] **Step 4: Run it to verify it passes.**
   - Step 1's block. Expected:
     - `https://downloads.tegelapps.com/markdown/appcast.xml`, `true`, `true`, `true`, `true`;
+    - after plan 07 G7 templates `SUEnableAutomaticChecks` from a build setting, its line reads the string `YES` (`NO` in a final build) instead of `true`; `YES` also passes;
     - then `com.tegelapps.markdown-spki`, `com.tegelapps.markdown-spks`, `network.client`.
   - `test -d "build/Build/Products/Debug/Tegel Markdown.app/Contents/Frameworks/Sparkle.framework" && echo embedded` → `embedded`.
   - `find ~/.tegel-signing ~/.tegel-secrets -type f \( -name '*.key' -o -name '*.p8' -o -name '*.p12' \) 2>/dev/null | wc -l` → `0`.

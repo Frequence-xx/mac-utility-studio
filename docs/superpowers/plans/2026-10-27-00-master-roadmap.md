@@ -39,7 +39,7 @@ Cluster ids (K1–K18) refer to `docs/reviews/m00-consolidated.md`.
   - Pro holds only while `-1 day ≤ now − lastValidatedAt ≤ grace`. Outside that window the state is `.lapsed`, and the next successful validation restores Pro (K5).
   - A validation succeeds only on a 200 that decodes to `status == "granted"` with the stored activation id. Anything else counts as a failure: grace, never a lock.
 - **Kill path (K14):** whenever sales end (G1b "stop the studio", the end of maintenance, or the user's call), new sales stop first. Then one final build ships that keeps Pro for any stored licence with no further online checks. G3 STOP stops development but keeps the apps on sale (BUSINESS-PLAN §12). That release still needs the user's approval (CLAUDE.md).
-- **No npm code at release time:** `scripts/release.sh` runs no npm or `bunx` code. Its R2 uploads use `curl` with AWS SigV4, which plan 03 implements. Every `bun install` runs against the committed `bun.lock` with `--frozen-lockfile --ignore-scripts`; the one exception is plan 01 Task 3's first install, which writes `bun.lock` and so takes `--ignore-scripts` alone.
+- **No npm code at release time:** `scripts/release.sh` runs no npm or `bunx` code, so no wrangler. Its R2 uploads use `curl` with AWS SigV4 and the R2 S3 credentials `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`, which plan 03 implements (`r2put`). Every `bun install` runs against the committed `bun.lock` with `--frozen-lockfile --ignore-scripts`; the one exception is plan 01 Task 3's first install, which writes `bun.lock` and so takes `--ignore-scripts` alone. Every `bun add` takes `--ignore-scripts`.
 - **Product rules 1–9 in `CLAUDE.md`** apply to all UI, copy and assets.
 - **Budget ceiling:** €200 cash, as itemised in §10 plus the remote-Mac line in §9 below.
 
@@ -223,6 +223,7 @@ public struct RenderResult: Sendable, Decodable { public let ms: Double; public 
     public var openLink: ((URL) -> Void)?                 // plan 02; gets only http/https/mailto link clicks; the window sets NSWorkspace.shared.open, Quick Look nil (§3.2)
     public init()
     public func render(_ markdown: String, options: RenderOptions) async throws -> RenderResult
+    func preparePage() async throws                       // plan 06 Task 6; internal: render's page load, extracted for renderData/renderPaged
     public func scroll(toHeading id: String) async
     public func scroll(toLine line: Int) async -> Bool    // plan 02
     public func find(_ text: String, backwards: Bool) async -> Bool   // plan 02
@@ -239,7 +240,7 @@ public enum PaperSize: String, CaseIterable, Sendable { case a4, letter }
 public struct FolderItem: Sendable, Hashable, Identifiable { public let url: URL; public let relativePath: String; public var id: URL { url } }
 public enum FolderIndex { public static func markdownFiles(in root: URL, limit: Int = maxFiles) throws -> [FolderItem]   // skips .git, node_modules, .build, DerivedData, Pods, dist
                           public static func files(in root: URL, extensions: Set<String>, limit: Int = maxFiles) throws -> [FolderItem]  // plan 06 Task 10
-                          public static func search(_ query: String, in items: [FolderItem], limit: Int = 200) -> [SearchHit] }
+                          public static func search(_ query: String, in items: [FolderItem], limit: Int = 200, maxBytesPerFile: Int = 5_000_000) -> [SearchHit] }  // maxBytesPerFile: plan 06 Task 10
 public enum QuickLookSetup { public static let settingsURL: URL; public enum SettingsPath: Sendable, Equatable { case privacySecurityExtensions, loginItemsExtensions }
                              public static func settingsPath(macOSMajor: Int) -> SettingsPath }   // used by both apps' Welcome
 public struct SearchHit: Sendable, Hashable { public let item: FolderItem; public let line: Int; public let snippet: String }
@@ -344,7 +345,7 @@ Credentials go to `.env` the moment an account exists; `.env.example` names ever
 | Service | Purpose | Created by | When |
 |---|---|---|---|
 | GitHub (`Frequence-xx`) | repo, CI | exists | done |
-| Cloudflare | Registrar, DNS, Pages, R2, Email Routing | Claude via Playwright; user: 2FA + card (H4) | W1 |
+| Cloudflare | Registrar, DNS, Pages, R2, Email Routing; Workers KV `tegel-waitlist` (Production) and `tegel-waitlist-preview` (Preview), each bound as `WAITLIST_KV` (plan 08; ids `CLOUDFLARE_KV_WAITLIST_ID`, `CLOUDFLARE_KV_WAITLIST_PREVIEW_ID`) | Claude via Playwright; user: 2FA + card (H4) | W1 |
 | Polar (sandbox + production) | MoR, licence keys, customer portal | Claude via Playwright; user: production org, identity + payout (H5) | W1 sandbox, production by Fri 20 Nov (W4) |
 | Apple Developer / App Store Connect | Developer ID, notarisation, later MAS | **user only** (H2) | W1–W3 |
 | Scaleway | macOS 27 / arm64 test Mac | Claude via Playwright; user: card (H6) | W1 |

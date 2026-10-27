@@ -89,8 +89,7 @@ Modified: project.yml, Config/{Debug,Release}.xcconfig, Makefile, .gitignore, .e
           scripts/{release.sh,release_test.sh} (plan 03), scripts/{smoke-dmg.sh,test-smoke-dmg.sh} (plan 05),
           site/config.json, site/test/pages.test.js,
           Renderer/{package.json,bun.lock,build.js,src/page.js}, TegelKit Resources/Renderer (generated),
-          TegelKit {TextFileLoader,RendererWebView,FolderIndex}.swift (Tasks 5, 6, 10), Apps/Markdown/App/LicenceSettingsView.swift
-          and its call site (Task 8)
+          TegelKit {RendererWebView,FolderIndex}.swift (Tasks 6, 10)
 ```
 
 ---
@@ -184,10 +183,10 @@ swift scripts/check-data-types.swift "$BUILT/Tegel Data.app/Contents/PlugIns/Dat
 codesign -d --entitlements - --xml "$BUILT/Tegel Data.app/Contents/PlugIns/DataQuickLook.appex" | plutil -p - | grep -c absolute-path
 ```
 
-Expected: the two bundle-id checks print `1` each (bundle ids are permanent after W14); `CFBundleIconName` prints `AppIcon`; the three Sparkle flags print `true`; every type line ✓, exit 0. The last command prints `0`.
+Expected: the two bundle-id checks print `1` each (bundle ids are permanent after W14); `CFBundleIconName` prints `AppIcon`; the three Sparkle flags print `true` (after plan 07 G7, `SUEnableAutomaticChecks` prints the string `YES`, which also passes); every type line ✓, exit 0. The last command prints `0`.
 - [ ] **Step 5: Remote type matrix (K13).** Write `.github/workflows/types.yml` the way plan 09 Task 11 Step 7 writes `design-shots.yml`: `workflow_dispatch` only, no inputs, no secrets, `permissions: { contents: read }`, and the same SHA-pinned `checkout`/`upload-artifact`/`download-artifact` and checksummed xcodegen lines.
   - **Job `build`** on `macos-26`: checkout; `sudo xcode-select -s /Applications/Xcode_26.3.app`; xcodegen; `make build`; `tar -cf app.tar -C build/Build/Products/Debug "Tegel Data.app"`, uploaded as `app`.
-  - **Job `types`**, `needs: build`, matrix `os: [macos-14, macos-15, macos-26]`. It never builds (`macos-14` has no Xcode 26). It checks out, downloads `app`, runs `tar -xf app.tar` and `/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "Tegel Data.app"`, then `{ swift scripts/check-data-types.swift "Tegel Data.app/Contents/PlugIns/DataQuickLook.appex/Contents/Info.plist" && echo exit=0 || echo "exit=$?"; } > types.txt 2>&1`. The leg records the answer and doesn't gate on it. It uploads `types.txt` as `types-${{ matrix.os }}`.
+  - **Job `types`**, `needs: build`, matrix `os: [macos-15, macos-26]`. No `macos-14` leg: GitHub retired that label on Mon 2 Nov 2026 (master D11), and macOS 14 coverage is lease L2's reinstall slot only, which predates App 2. It never builds. It checks out, downloads `app`, runs `tar -xf app.tar` and `/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "Tegel Data.app"`, then `{ swift scripts/check-data-types.swift "Tegel Data.app/Contents/PlugIns/DataQuickLook.appex/Contents/Info.plist" && echo exit=0 || echo "exit=$?"; } > types.txt 2>&1`. The leg records the answer and doesn't gate on it. It uploads `types.txt` as `types-${{ matrix.os }}`.
 
   Run `make test-shell`. Expected: exit 0 (plan 01's pin guard). Commit Task 1 on the branch: `project.yml Makefile Apps/Data Config/Debug.xcconfig Config/Release.xcconfig .env.example scripts/check-data-types.swift .github/workflows/types.yml`, `feat(data): add Tegel Data app and Quick Look targets with UTType declarations` + trailer. Then land the workflow on `main`, because GitHub dispatches only workflows that exist there:
 
@@ -212,15 +211,15 @@ for i in $(seq 30); do ID=$(gh run list --workflow types.yml --branch m06-app2 -
 
   `gh workflow run` creates the run asynchronously, so the loop waits up to 60 s for a run ID that differs from the one before the dispatch (plan 09 Task 11 Step 9's pattern).
 
-  Expected: `differs=0`; `docs/reviews/m06-types/types-macos-{14,15,26}/types.txt`, each with one line per file and an `exit=` line. If the `macos-14` leg gets no runner, record `n/a: image retired`. Record each OS's actual identifiers in `docs/reviews/m06.md` § "UTType matrix", and macOS 27's per Task 14. The open questions are whether macOS 14 has `public.ndjson` and whether 26/27 declare `public.toml`.
-- [ ] **Step 6: Commit:** `docs/reviews/m06.md docs/reviews/m06-types`, `docs(m06): UTType matrix on macOS 14, 15 and 26` + trailer.
+  Expected: `differs=0`; `docs/reviews/m06-types/types-macos-{15,26}/types.txt`, each with one line per file and an `exit=` line. Record macOS 14 as `n/a: image retired`. Record each OS's actual identifiers in `docs/reviews/m06.md` § "UTType matrix", and macOS 27's per Task 14. The open questions are whether macOS 14 has `public.ndjson` and whether 26/27 declare `public.toml`.
+- [ ] **Step 6: Commit:** `docs/reviews/m06.md docs/reviews/m06-types`, `docs(m06): UTType matrix on macOS 15 and 26` + trailer.
 
 ---
 
 ### Task 2: Tree views for JSON, YAML and TOML
 
 **Files:**
-- Modify: `Renderer/package.json` and `Renderer/bun.lock`, via `cd Renderer && bun add --exact js-yaml@5.5.0 smol-toml@1.9.1 papaparse@5.7.0` (versions per Task 0 #14).
+- Modify: `Renderer/package.json` and `Renderer/bun.lock`, via `cd Renderer && bun add --exact --ignore-scripts js-yaml@5.5.0 smol-toml@1.9.1 papaparse@5.7.0` (versions per Task 0 #14).
 - Modify: the third-party notices file (Task 0 #12). Add each library's licence text; BSD-3 requires the notice in binary distributions.
 - Create: `Renderer/src/data/labels.js`, `Renderer/src/data/parse.js`, `Renderer/src/data/tree.js`.
 - Test: `Renderer/test/data-tree.test.js`.
@@ -518,11 +517,10 @@ test('secret-named keys and columns are masked in tree, row and table views', ()
 
 **Files:**
 - Create: `Packages/TegelKit/Sources/TegelKit/DataFile.swift`.
-- Modify: `Packages/TegelKit/Sources/TegelKit/TextFileLoader.swift` (plan 01's). Extract its byte decoding (UTF-8 → BOM UTF-16 → Windows-1252) into `static func decode(_ data: Data) -> String` (internal), which `load` then calls; no behaviour change.
 - Test: `Packages/TegelKit/Tests/TegelKitTests/DataFileTests.swift` (XCTest, or whatever Task 0 #8 found).
 
 **Interfaces:**
-- Consumes: `TextFileLoader.load(_:maxBytes:) -> LoadedText` (UTF-8 → BOM UTF-16 → Windows-1252).
+- Consumes: `TextFileLoader.load(_:maxBytes:) -> LoadedText` (UTF-8 → BOM UTF-16 → Windows-1252) and `TextFileLoader.decode(_:maxBytes:) -> LoadedText` (plan 01 Task 4, the same decoding over bytes in memory).
 - Produces (CR-3):
 
 ```swift
@@ -547,7 +545,7 @@ public final class RecordIndex: Sendable {
     public var count: Int { get }
     public let quoteRunaway: Bool                    // a quoted record passed 1 MB, or EOF was reached inside quotes -> rebuilt line-based
     public func records(in range: Range<Int>) throws -> [String]
-    // range clamped to 0..<count; trailing "\r" stripped; each record decoded by TextFileLoader.decode (so a Windows-1252
+    // range clamped to 0..<count; trailing "\r" stripped; each record decoded by TextFileLoader.decode(bytes, maxBytes: bytes.count).text (so a Windows-1252
     // CSV shows `é`, as in Quick Look), never lossy UTF-8. Opens a FileHandle, seeks to the first offset and reads
     // up to the end offset; if the file is now shorter than that end offset -> throws .truncated (never a mapped read, so no SIGBUS)
 }
@@ -578,7 +576,7 @@ public final class RecordIndex: Sendable {
   - comment out the size check in `records(in:)`, re-run `--filter testTruncatedFileThrowsNotCrash`. Expected: FAIL (no error thrown: the short read traps on the slice or returns wrong records);
   - make every `"` toggle quote mode, re-run `--filter testStrayQuoteInUnquotedField`. Expected: FAIL, `count == 3`;
   - decode records with `String(decoding:as: UTF8.self)`, re-run `--filter testWindows1252Record`. Expected: FAIL, `caf\u{FFFD},1`.
-- [ ] **Step 6: Commit:** `Packages/TegelKit/Sources/TegelKit/DataFile.swift Packages/TegelKit/Sources/TegelKit/TextFileLoader.swift Packages/TegelKit/Tests/TegelKitTests/DataFileTests.swift`, `feat(tegelkit): DataFormat routing, capped DataFile loading, offset-only RecordIndex` + trailer.
+- [ ] **Step 6: Commit:** `Packages/TegelKit/Sources/TegelKit/DataFile.swift Packages/TegelKit/Tests/TegelKitTests/DataFileTests.swift`, `feat(tegelkit): DataFormat routing, capped DataFile loading, offset-only RecordIndex` + trailer.
 
 ---
 
@@ -589,7 +587,7 @@ public final class RecordIndex: Sendable {
 - Modify: `Renderer/build.js` (a new entry, `src/data/view.js` → `data.js`, and copy `data.css`); `Renderer/src/data/labels.js` (adds `changed: 'The file changed on disk. Reloading…'`).
 - Modify: `Renderer/src/page.js`. Add stubs `window.tegel.renderData`, `openPaged` and `transcriptMarkdown`; they load `data.js` once through the Mermaid script loader (Task 0 #8). The CSP doesn't change.
 - Create: `Packages/TegelKit/Sources/TegelKit/DataRender.swift`.
-- Modify: `Packages/TegelKit/Sources/TegelKit/RendererWebView.swift` (plan 01's). A fresh renderer loads nothing yet (plan 01), and only `render` loads the page. Extract `render` steps 1–2 (cancel a pending render; if the page is dirty, install the rule list, (re)load `indexURL` and await `didFinish`) into `func preparePage() async throws` (internal), which `render` calls first. Markdown's behaviour doesn't change.
+- Modify: `Packages/TegelKit/Sources/TegelKit/RendererWebView.swift` (plan 01's). A fresh renderer loads nothing yet (plan 01), and only `render` loads the page. Extract `render` steps 1 and 3 (cancel a pending render; if the page is dirty, install the rule list, (re)load `indexURL` and await `didFinish`) into `func preparePage() async throws` (internal), which `render` calls first. Markdown's behaviour doesn't change.
 - Create: `Fixtures/data/hostile.{json,jsonl,yaml,toml,csv,env}`. Each embeds `<img src=x onerror="window.__pwned=1">`, `<script>window.__pwned=1</script>`, `"><svg onload=window.__pwned=1>` and `javascript:window.__pwned=1` in keys and values. `hostile.env` also carries them in a `#` comment line: comments are the only `.env` text that reaches the page (bad keys become error rows that never echo, and values are masked).
 - Regenerate: `Packages/TegelKit/Sources/TegelKit/Resources/Renderer/` (`make renderer`).
 - Test: `Packages/TegelKit/Tests/TegelKitTests/WebView/DataRenderTests.swift` (WebKit suites live under `WebView/`, plan 01 Task 5).
@@ -691,11 +689,11 @@ If the system previewer wins for a type (DF5 says it may), write that down. The 
 - Modify: `Apps/Data/App/DataApp.swift`.
 - Create: `Apps/Data/App/DataWindow.swift` and `Apps/Data/App/WelcomeView.swift`.
 - Modify: `project.yml`. Add `Apps/Markdown/App/ProGate.swift`, `Apps/Markdown/App/LicenceSettingsView.swift` and `Apps/Markdown/App/UpdatesSettingsView.swift` (paths from Task 0 #7) to the `data` target's sources by path; don't copy them. Add the Sparkle package product to `data` exactly as plan 03 adds it to `markdown`, and `- package: TegelKit, product: TegelStore` exactly as plan 03 Task 8 adds it to `markdown` (`LicenceSettingsView`, `LicenseManager` and `PolarConfig` live in TegelStore). [K12]
-- Modify: `Apps/Markdown/App/LicenceSettingsView.swift` (plan 03's) and App 1's Settings `TabView` call site (`grep -l 'LicenceSettingsView(' Apps/Markdown/App/*.swift`). The view gains `let proSummary: LocalizedStringKey`, the text of its `.free` row. App 1 passes its existing sentence unchanged, so its catalogue entry and NL/FR/AR still match; Data passes its own: "Pro adds the window viewer for large files, the .env viewer, session transcripts with search, and Markdown export. One-time purchase for up to 2 Macs, with a 14-day refund." Nothing else in the view changes.
+- No App 1 file changes: plan 03's `LicenceSettingsView` already takes `proSummary: LocalizedStringKey`, the text of its `.free` row, and App 1 passes its own sentence. Data passes its own: "Pro adds the window viewer for large files, the .env viewer, session transcripts with search, and Markdown export. One-time purchase for up to 2 Macs, with a 14-day refund."
 - Modify: `Apps/Data/Shared/Localizable.xcstrings`. A view compiled into `data` looks its strings up in Data's bundle, so add every string the three shared views show, with NL/FR/AR copied from `Apps/Markdown/App/Localizable.xcstrings`, plus Data's `proSummary`, the `WelcomeView` strings and the not-text copy below, translated to NL/FR/AR (D6).
 
 **Interfaces:**
-- Consumes: `EnvironmentValues.isPro` (`ProGate.swift`); `LicenceSettingsView(proSummary:)` (plan 03's view with this task's parameter; no updater parameter, since Updates is its own tab); `UpdatesSettingsView(updater:)` (plan 03); `LicenseManager(client: PolarClient(config: .fromInfoPlist()))` and plan 03's 24 h refresh loop; `SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)`; `QuickLookSetup.settingsURL` and `QuickLookSetup.settingsPath(macOSMajor:)` (TegelKit, plan 02 Task 15); `RendererWebView`, `renderData`, `renderPaged`; `RecordIndex(url:quoteAware:)`, `DataFile.load(_:maxBytes:)`; `FileWatcher(url:debounce:onChange:)`; App 1's open-file pattern (Task 0 #7).
+- Consumes: `EnvironmentValues.isPro` (`ProGate.swift`); `LicenceSettingsView(proSummary:)` (plan 03 Task 9; no updater parameter, since Updates is its own tab); `UpdatesSettingsView(updater:)` (plan 03); `LicenseManager(client: PolarClient(config: .fromInfoPlist()))` and plan 03's 24 h refresh loop; `SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)`; `QuickLookSetup.settingsURL` and `QuickLookSetup.settingsPath(macOSMajor:)` (TegelKit, plan 02 Task 15); `RendererWebView`, `renderData`, `renderPaged`; `RecordIndex(url:quoteAware:)`, `DataFile.load(_:maxBytes:)`; `FileWatcher(url:debounce:onChange:)`; App 1's open-file pattern (Task 0 #7).
 - Produces: `struct DataWindow: View { let url: URL }` and `struct WelcomeView: View`. `WelcomeView` shows when there's no Pro licence or no file:
   - the Quick Look how-to: Space in Finder, then the Settings path chosen by `QuickLookSetup.settingsPath(macOSMajor:)` (the same copy as App 1's Welcome, never hard-coded here), with an "Open System Settings" button for `QuickLookSetup.settingsURL`;
   - the Pro feature list, and "One-time purchase for 2 Macs" with a buy button (`PolarConfig.checkoutURL`). No price in the app: the checkout shows it (plan 05 Task 3 Step 1);
@@ -711,9 +709,10 @@ Routing rule in `DataWindow`:
 - Every other format, including `.text` → `DataFile.load(url, maxBytes: 100_000_000)` → `renderData(mode: .window)`.
 - A `DataFileError` (a binary or a non-regular file, which `public.data` in Task 1 lets through) shows "This file isn't a text file." and nothing else.
 - `FileWatcher` on the file → rebuild and re-render, keeping the scroll position (and sticking to the bottom if it was there).
+- Links: the window's `RendererWebView` gets `renderer.openLink = { NSWorkspace.shared.open($0) }`, as plan 02's `ReaderController` does for App 1, so only `http`, `https` and `mailto` links open, in the user's apps. The Quick Look extension (Task 7) leaves `openLink` nil and opens nothing.
 
 - [ ] **Step 1: Write the run checklist as the failing state.** On the current build, opening `sample.csv` from Finder ("Open With › Tegel Data") shows an empty window, the app menu has no "Check for Updates…", and ⌘, opens no Licence or Updates tab. That's FAIL.
-- [ ] **Step 2: Implement.** First the `project.yml` entries alone, then `xcodegen generate && make build && grep -rl 'folder mode' "build/Build/Products/Debug/Tegel Data.app" | wc -l`. Expected: ≥ 1, App 1's Pro copy compiled into Data (the failing state). Then the `proSummary` parameter, the three views, the app wiring and Data's strings.
+- [ ] **Step 2: Implement.** The `project.yml` entries, the three views, the app wiring and Data's strings.
 - [ ] **Step 3: Build.** `xcodegen generate && make build`. Expected: `** BUILD SUCCEEDED **` with no new warnings in `Apps/Data`. Then `grep -rl 'folder mode' "build/Build/Products/Debug/Tegel Data.app" | wc -l` → `0`, and App 1 is unchanged: `make test-app ONLY=LocalizationTests` passes.
 - [ ] **Step 4: Run the checklist on the build Mac, expect PASS.**
   - Debug `isPro` override **off**: opening any fixture shows `WelcomeView`.
@@ -729,7 +728,7 @@ F="$D/.env" swift -e 'import AppKit; let u = URL(fileURLWithPath: ProcessInfo.pr
 
     Expected: `true`, then an app other than `Tegel Data.app` (`Alternate` never takes the default). In Finder (⌘⇧. shows dotfiles), Open With on it lists Tegel Data and opens it with every value masked, and so does dropping it on the Dock icon. Watch it fail first: drop `public.data` from `LSItemContentTypes`, rebuild, `lsregister -f` the app, and the `swift -e` line prints `false`; restore it. Record in `docs/reviews/m06.md` what LaunchServices did at `Alternate`, including whether a `.png` now lists Tegel Data too (it may match `public.data` by conformance; the window then shows the not-text copy).
   - Relaunch with `-AppleLanguages '(nl)'`, then `(fr)`, then `(ar)`: Welcome, Licence and Updates show no English and no Markdown feature. In Arabic the Welcome text is right-to-left and the data stays left-to-right.
-- [ ] **Step 5: Commit:** `Apps/Data/App Apps/Data/Shared/Localizable.xcstrings Apps/Markdown/App/LicenceSettingsView.swift <App 1's settings TabView file> project.yml`, `feat(data): Pro window viewer, paging, .env reveal, live reload, App 1's licence and update wiring` + trailer.
+- [ ] **Step 5: Commit:** `Apps/Data/App Apps/Data/Shared/Localizable.xcstrings project.yml`, `feat(data): Pro window viewer, paging, .env reveal, live reload, App 1's licence and update wiring` + trailer.
 
 ---
 
@@ -873,6 +872,7 @@ struct SessionsView: View
 // SANITIZE_NAMED_PROPS pass (plan 01 CR 4; Task 0 #5).
 // The open session loads through TextFileLoader.load(url, maxBytes: 128_000_000) (truncated -> banner).
 // FileWatcher on the open file -> re-render, kept at the bottom if it was there. ⌘R rescans the sources.
+// The session's RendererWebView sets openLink exactly as DataWindow does (Task 8): http, https and mailto only.
 // A "Show internal records" toggle maps to showHidden. A "Show secrets" toggle (off on every launch, never persisted) maps to reveal [K12].
 ```
 
@@ -885,6 +885,7 @@ struct SessionsView: View
   - searching `needle-42` gives one hit, and opening it scrolls to L9 (`document.getElementById('user-content-L9').getBoundingClientRect().top` is near 0 in Web Inspector);
   - tool calls are collapsed;
   - appending a synthetic user line adds it within 1 s;
+  - a synthetic user line holding `[a](https://example.com) [b](file:///etc/hosts)`: clicking `a` opens the default browser, clicking `b` does nothing, and the session stays on screen;
   - a `.jsonl` that isn't a transcript shows generic rows;
   - a synthetic user line holding `'sk-' + 40 × 'a'` (typed into the temp copy, never into `Fixtures/`) shows as `••••••••` until "Show secrets" is on, and is masked again after a relaunch. Searching `sk-aaaa` with "Show secrets" off lists the hit as `<session file> · L<n>` with no snippet; with it on, the row adds the snippet. Watch it fail first: show the snippet unconditionally, `make build`, and the off-state row shows `sk-aaaa…`; restore it;
   - **Pro gate:** with the Debug `isPro` override **off**, ⌘⇧S opens the Sessions window showing only `WelcomeView` (no sources, no search field), and so does Window › Sessions. Watch it fail first: comment out the `!isPro` branch in `SessionsView`, `make build`, and ⌘⇧S shows the session browser with the bookmarked sources. Restore it and rebuild: `WelcomeView` again. (Every row above runs with the override **on**.)
@@ -1064,7 +1065,7 @@ Run `(cd site && bun test pages)`. Expected: FAIL, `APP2 pages exist` missing `/
 | Machine | Evidence source |
 |---|---|
 | macOS 15.7 Intel | build Mac |
-| macOS 14 arm64 | GitHub `macos-14` (automated tests only) |
+| macOS 14 arm64 | none: no GitHub `macos-14` runner after 2 Nov 2026, and lease L2's macOS 14 slot predates App 2 (master D11). Record `n/a: image retired`; H12 decides the minimum |
 | macOS 15 arm64 | GitHub `macos-15` |
 | macOS 26 arm64 | GitHub `macos-26` |
 | macOS 27 arm64 | GitHub `macos-27` if Task 0 #15 found one; otherwise lease L3, one Scaleway M1 day (≈ €3.19 incl. VAT, paid from revenue, **user approval**) |
@@ -1075,7 +1076,7 @@ Run `(cd site && bun test pages)`. Expected: FAIL, `APP2 pages exist` missing `/
   - **A real Data update** (K12): install RC1 in `/Applications` with no licence active (Settings › Licence › Deactivate this Mac if Step 3 activated it: RC2 validates against production, where a sandbox key doesn't exist), then run plan 03's RC Sparkle acceptance with the test feed listing RC2. Expected: "Check for Updates…" offers 1.0.0-rc2, installs it, relaunches, and About shows `1.0.0-rc2`. This exercises App 2's own Sparkle wiring (Task 8), signed feed included.
   - **Production licence:** on RC2, while it is still free (the key field only shows then), paste the `POLAR_QA_LICENSE_KEY` value (App 1's key, re-issued in Task 12 Step 3). Expected: the `wrongProduct` copy. Then paste the `POLAR_QA_LICENSE_KEY_DATA` value. Expected: Pro. Quit and relaunch: still Pro with no prompt (the stored licence and the 24 h refresh loop from plan 03).
   - Record each result in `docs/reviews/m06.md` § "RC2".
-- [ ] **Step 5: Record the demo.** A silent screen recording (no audio track; captions as text) of: Quick Look on JSONL, CSV and `.env` (masked) → window paging of 1M rows → a session transcript → export → open in Tegel Markdown. Use synthetic fixtures only. It goes up to R2 next to the DMG when Task 16 ships, under the same release approval (no separate ask).
+- [ ] **Step 5: Record the demo.** A silent screen recording (no audio track; captions as text) of: Quick Look on JSONL, CSV and `.env` (masked) → window paging of 1M rows → a session transcript → export → open in Tegel Markdown. Use synthetic fixtures only. It goes up to R2 next to the DMG when Task 16 ships, under the same release approval (no separate ask), with Task 16 Step 3's `r2put` command.
 - [ ] **Step 6: Commit:** `docs/reviews/m06.md`, `test(data): RC1 matrix, RC2 update and production licence` + trailer.
 
 ---
@@ -1138,6 +1139,16 @@ Run **Procedure P (master §11)** with these deltas (B1):
 - [ ] **Step 1: Run Procedure P** with the deltas above. Commit: `docs/reviews/m06.md docs/reviews/m06-design`, `docs(m06): pipeline results` + trailer; then merge and push per P.
 - [ ] **Step 2: Build the release DMG** (Mon 1 Feb, on `main`). `scripts/release.sh data 1.0.0 --no-upload`. Expected: notarised and stapled; `spctl` accepted; the DMG path printed last. Then `APP_NAME="Tegel Data" FIXTURES=Fixtures/data scripts/smoke-dmg.sh <dmg> docs/reviews/m06-smoke` (plan 05's script, with Task 14's Quick Look id). Expected: exit 0, and `grep -c '^PASS quicklook com.tegelapps.data.quicklook' docs/reviews/m06-smoke/smoke.txt` → `1`.
 - [ ] **Step 3: Publish** (**user approval**; one approval covers the DMG, the appcast and the Task 14 demo upload to R2). `scripts/release.sh data 1.0.0 --yes --from-dmg <Step 2 path>` publishes that tested DMG with no rebuild (K7). `--yes` goes on only after that approval (plan 05 Task 10 Step 7's rule): without a terminal, the confirmation prompt reads EOF and aborts (plan 03). Expected: `curl -s https://downloads.tegelapps.com/data/appcast.xml | grep -c 'sparkle:edSignature'` → `1`, and `https://downloads.tegelapps.com/markdown/appcast.xml` is unchanged.
+  Then, under the same approval, upload the Task 14 demo with plan 03's `r2put` (curl SigV4 with the R2 S3 credentials; no wrangler, K2). Sourcing `release.sh` defines its functions without running `main`; the values stay in unexported variables inside the subshell:
+
+```bash
+( . scripts/lib/env.sh; . scripts/release.sh
+  ACCOUNT=$(envget CLOUDFLARE_ACCOUNT_ID); R2_KEY_ID=$(envget R2_ACCESS_KEY_ID); R2_SECRET=$(envget R2_SECRET_ACCESS_KEY); R2_BUCKET=$(envget R2_BUCKET)
+  r2put "<Task 14 demo .mp4>" data/tegel-data-demo.mp4 video/mp4 "public, max-age=86400" )
+curl -sI https://downloads.tegelapps.com/data/tegel-data-demo.mp4 | grep -ciE '^(HTTP/2 200|content-type: video/mp4)'
+```
+
+  Expected: `2`.
 - [ ] **Step 4: Site keys (plan 04 CR-5).** On `content/release-data-1.0.0`, set `apps.data.version` → `"1.0.0"` and `apps.data.downloadURL` → the URL on Step 3's `published …` line in `site/config.json`, and add the download link `{{download:data}}` with "Version {{version:data}}" to `site/content/en/data.md` (Task 13 left it out while `downloadURL` was empty); `(cd site && bun test)` → 0 fail; run review stages 2, 3 and 9; merge, push, and deploy with plan 04's production deploy command (plan 04 Task 10 Step 2). Expected: `curl -s https://tegelapps.com/data/ | grep -cF "<downloadURL>"` ≥ 1.
 - [ ] **Step 5: A real update on the production feed** (K12). On the build Mac with RC2 (Task 14) in `/Applications`: "Check for Updates…" offers 1.0.0, installs it and relaunches; About shows `1.0.0`; the QA licence is still Pro. Then download the public DMG and confirm that a Sparkle check on it finds no update. Record both in `m06.md`.
 - [ ] **Step 6: Close the QA licences** 🔒. Revoke the `POLAR_QA_LICENSE_KEY_DATA` and `POLAR_QA_LICENSE_KEY` keys in the dashboard and archive the `QA-DATA` and `QA-MD-DATA` discounts and their links. Then `. scripts/lib/env.sh; for k in POLAR_QA_LICENSE_KEY_DATA POLAR_QA_LICENSE_KEY; do envset "$k" ''; [ -z "$(envget "$k")" ] && echo "gone $k"; done`. Expected: `gone POLAR_QA_LICENSE_KEY_DATA` and `gone POLAR_QA_LICENSE_KEY`.
@@ -1161,7 +1172,7 @@ Run **Procedure P (master §11)** with these deltas (B1):
 
 CR 1, 5 and 6, and CR-2's `files(in:extensions:limit:)`, accepted and applied to master §3.3 and §4 and to Task 8 (27 Oct); history in `docs/reviews/m00-consolidated.md`. Open:
 
-2. **CR-2 (TegelKit `FolderIndex.search`):** plan 02 Task 4 reads each file through `TextFileLoader`'s 5 MB cap, so add `maxBytesPerFile: Int = 5_000_000` to `search(_:in:limit:)` (Task 10); App 1 keeps the default, session mode passes 128 MB.
+2. **CR-2 (TegelKit `FolderIndex.search`), applied to master §3.3 and noted in plan 02 Task 4:** plan 02 Task 4 reads each file through `TextFileLoader`'s 5 MB cap, so add `maxBytesPerFile: Int = 5_000_000` to `search(_:in:limit:)` (Task 10); App 1 keeps the default, session mode passes 128 MB.
 3. **CR-3 (TegelKit and renderer additions):** Swift `DataFormat`, `DataFile`, `DataFileError`, `RecordIndex`, `RecordIndexError`, `DataIssue`, `DataRenderResult`, `RendererWebView.renderData(…)`, `RendererWebView.renderPaged(…)` and the `tegelData` reply handler. JS `window.tegel.renderData`, `openPaged`, `transcriptMarkdown({ reveal })`, and `maskSecrets` (K12). Swift `DataFile.secretFile`, `DataFile.isSecret(filename:)`, `RecordIndexError.truncated`. Layout: §3.1 gains `Renderer/src/data/` and `src/css/data.css`; the bundle gains `data.js`.
 4. **CR-4 (D5, narrowing):** the Data Quick Look extension omits `temporary-exception.files.absolute-path.read-only = /`. That exception exists only for Markdown's local images, and data files load none.
 <!-- numbers kept, so cross-plan references resolve -->

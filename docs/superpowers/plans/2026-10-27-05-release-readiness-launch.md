@@ -438,6 +438,8 @@ Notes the doc must carry:
 - [ ] **Step 5: Write `docs/ops/support-log.md`.**
   - **Routine:** once a day at 10:00 CET; target ≤ 20 min. Log **every** day, including `0`, so the average is honest.
   - **Buyer sync:** from Wed 9 Dec, once plan 08 Task 14 Step 7 has activated the lifecycle automation, the routine also runs plan 08 Task 14's daily sync command exactly as plan 08 writes it. It adds opted-in buyers only, reconciles every order since launch, and removes refunded buyers (K9).
+  - **Erasure requests** (the privacy page's deletion promise): handle each with plan 08 Task 14's **Erasure** procedure exactly as written (hash appended first, then the MailerLite forget), and log it in `notes` without the address.
+  - **Sending:** if replies go out as `hello@tegelapps.com` through anything other than MailerLite, that path must pass plan 08 Task 6 Step 3b's DMARC check (`dmarc=pass` or an aligned `dkim=pass`) before the DMARC record goes in; otherwise `p=quarantine` sends the replies to spam.
   - **Table:** `| date | minutes | mails | refunds | licence | bug/feature | notes |`.
   - **Gates:**
     - §12 support gate: > 30 min/day averaged over 14 days → fix the docs or raise the price **before any new feature**;
@@ -849,6 +851,7 @@ Expected: every line starts with `200`. During launch week it can run on `/loop 
   - `git switch main && git merge --no-ff m05-launch -m "Merge m05-launch: release readiness and launch kit"`;
   - `git push origin main`;
   - `graphify update .`.
+  - This merge (Mon 7 Dec) puts `polar_sales.py` on `main`, which unblocks plan 08's `m08-kpi-net` and `m08-lifecycle` merges (both cut from `m05-launch`; plan 08 Task 23).
 - [ ] **Step 4: Release review for the 1.0.0 tag (B21).** CLAUDE.md's "before every release tag" is met by Step 1 when the tag lands on the tree it reviewed.
   - `git diff --stat "$reviewed" main -- . ':!docs/reviews'`. Empty: write "1.0.0 tag = the Step 1 tree" under "Release 1.0.0" in `m05.md`.
   - Non-empty: run stages 2, 3, 4 and 9 on that diff, and the full Procedure P if it touches `Apps Packages Renderer scripts Config project.yml`. Append the results under "Release 1.0.0".

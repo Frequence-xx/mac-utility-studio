@@ -414,7 +414,7 @@ Then also resolve the item itself (`item.resolvingSymlinksInPath()`) and rerun `
 
 **Interfaces:**
 - Consumes: `TextFileLoader.load(_:maxBytes:)` (plan 01), `FolderItem` (Task 3).
-- Produces (contract): `FolderIndex.search(_ query: String, in items: [FolderItem], limit: Int = 200) -> [SearchHit]`; `SearchHit { item, line, snippet }`.
+- Produces (contract): `FolderIndex.search(_ query: String, in items: [FolderItem], limit: Int = 200) -> [SearchHit]`; `SearchHit { item, line, snippet }`. Plan 06 Task 10 later adds `maxBytesPerFile: Int = 5_000_000` (master §3.3); the default is this task's 5 MB cap, so App 1's behaviour and call sites don't change.
 - Semantics:
   - **Query:** trimmed; empty → `[]`. Literal matching via `range(of:options: [.caseInsensitive, .diacriticInsensitive])`, never a regex.
   - **Hits:** one hit per matching line. Lines are split on markdown-it's line breaks only, so `line` matches `data-line` (Task 6): `split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\n" || $0 == "\r\n" || $0 == "\r" })`. CRLF is one `Character`, so it counts once; `\.isNewline` would also split on VT, FF, NEL, U+2028 and U+2029. `line` is 1-based.
