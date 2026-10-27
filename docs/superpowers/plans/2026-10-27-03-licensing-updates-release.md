@@ -1025,7 +1025,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
       local r; r=$(ioreg -n Root -d1)
       if [[ $r == *'"CGSSessionScreenIsLocked"=Yes'* ]]; then die 1 "the screen is locked: unlock the Mac first"; fi; }
     check_unpublished() {   # the DMG is cached as immutable for a year, so a version is published once
-      if { [ -f "$PREV" ] && grep -qF "$DMG_NAME" "$PREV"; } || curl -fsI "$PREFIX$DMG_NAME" >/dev/null 2>&1; then
+      if { [ -f "$PREV" ] && grep -qF "$DMG_NAME" "$PREV"; } || curl -fsI "$PREFIX$DMG_NAME?probe=$$" >/dev/null 2>&1; then   # own cache key: a CDN-cached 404 must not reach step 15
         die 1 "$DMG_NAME already published; bump the version"; fi; }
     check_app() {   # <app>: a --from-dmg app is this app, signed by our team, with its allowlisted entitlements and benefit
       local p=/usr/libexec/PlistBuddy id b k w
@@ -1093,12 +1093,12 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
         - the Sparkle tools: `GA=build/release-dd/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_appcast`; if absent (a `--from-dmg` run in a fresh checkout), `xcodegen generate && xcodebuild -resolvePackageDependencies -derivedDataPath build/release-dd >/dev/null` first;
         - `"$GA" --account tegelapps --download-url-prefix "$PREFIX" -o "$OUT/feed/appcast.xml" "$OUT/feed"`;
         - checks: `grep "$DMG_NAME" "$OUT/feed/appcast.xml" | grep -q 'sparkle:edSignature='` and `grep -q '<!-- sparkle-signatures:' "$OUT/feed/appcast.xml"` (generate_appcast signs the whole feed because the app's Info.plist sets `SURequireSignedFeed`; Sparkle 2.10.1 `generate_appcast/FeedXML.swift`), then print `appcast signatures present`.
-    13. **Confirm.** First, always (with `--yes` too), `check_unpublished`: if `$PREV` already names `$DMG_NAME`, or `curl -fsI "$PREFIX$DMG_NAME"` succeeds, exit 1 with `<DMG> already published; bump the version`. The DMG is served `immutable` for a year, so re-signing the same version would leave cached users with a DMG that fails the new feed's signature. Then, unless `--yes`: print the DMG name, `du -h`, `shasum -a 256` and the two destination URLs; `read -r -p "Publish to downloads.tegelapps.com? [y/N] " a || a=`; anything but `y` → `aborted: nothing uploaded`, exit 1. With no TTY, `read` hits EOF and aborts.
+    13. **Confirm.** First, always (with `--yes` too), `check_unpublished`: if `$PREV` already names `$DMG_NAME`, or `curl -fsI "$PREFIX$DMG_NAME?probe=$$"` succeeds, exit 1 with `<DMG> already published; bump the version`. The DMG is served `immutable` for a year, so re-signing the same version would leave cached users with a DMG that fails the new feed's signature. Then, unless `--yes`: print the DMG name, `du -h`, `shasum -a 256` and the two destination URLs; `read -r -p "Publish to downloads.tegelapps.com? [y/N] " a || a=`; anything but `y` → `aborted: nothing uploaded`, exit 1. With no TTY, `read` hits EOF and aborts.
     14. **Upload** with `r2put`, DMG first so the appcast never points at a missing file. The bucket-scoped token's S3 credentials go to this one command only (K2), and no npm dependency tree is fetched while codesign, the notary profile and the Sparkle key are usable without a prompt:
         - `r2put "$OUT/feed/$DMG_NAME" "$SLUG/$DMG_NAME" application/x-apple-diskimage "public, max-age=31536000, immutable"`;
         - then `r2put "$OUT/feed/appcast.xml" "$SLUG/appcast.xml" application/xml "public, max-age=300"`.
     15. **Post-upload:**
-        - `curl -fsSI "$PREFIX$DMG_NAME" | head -1` → `HTTP/2 200`; `curl -fsS "$FEED?v=$BUILD" | grep -c "$DMG_NAME"` ≥ 1 (a read-back check only);
+        - `curl -fsSI "$PREFIX$DMG_NAME?v=$BUILD" | head -1` → `HTTP/2 200` (a query unique to this run, as on the feed, so the CDN can't answer with the 404 it may have cached from step 13; R2 ignores the query); `curl -fsS "$FEED?v=$BUILD" | grep -c "$DMG_NAME"` ≥ 1 (a read-back check only);
         - `cp "$OUT/feed/appcast.xml" "$PREV"`, the base for the next release;
         - print `published $PREFIX$DMG_NAME`: the `downloadURL` that the publishing plan copies into `site/config.json` with the version (plan 05 for App 1, plan 06 for App 2; plan 04 CR-5).
   - **Makefile:** `test-release: ; bash scripts/release_test.sh`, and add `test-release` to `check`'s prerequisites.
