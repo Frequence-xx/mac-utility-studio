@@ -330,7 +330,7 @@ Location: `Fixtures/markdown/`.
 | H9 | **Launch identity:** r/macapps transparency path vs megathread; the PH/HN/IH accounts to post from (no face photo, product rule 3) | Tue 1 Dec | Launch posts |
 | H10 | **Tax adviser** questions (§15, now for a **BV**: VAT treatment of Polar MoR payouts to the BV, booking app revenue next to the existing activities, MAS/Setapp VAT). KOR is likely moot given the BV's existing turnover. Ask the fee up front | Send by **Fri 13 Nov** | Bookkeeping; the btw-id on the imprint |
 | H11 | **Approve each outward-facing action** listed in CLAUDE.md | As they come up | |
-| H12 | **macOS 14 coverage** (D11). If neither a GitHub macOS 14 runner nor a Scaleway macOS 14 image exists before launch, Claude asks the user: keep the 14.0 deployment target untested, or raise the minimum to macOS 15 (then `project.yml`, `Package.swift`, the site's "macOS 14 or later" copy and the FAQ change with it) | **Fri 27 Nov**, at the end of lease L2 | The 1.0.0 deployment target |
+| H12 | **macOS 14 coverage** (D11). If neither a GitHub macOS 14 runner nor a Scaleway macOS 14 image exists before launch, Claude asks the user: keep the 14.0 deployment target untested, or raise the minimum to macOS 15 (then `project.yml`, `Package.swift`, the site's "macOS 14 or later" copy, every `minMacOS` in `site/config.json` (markdown, data and bundle) and the FAQ change with it) | **Fri 27 Nov**, at the end of lease L2 | The 1.0.0 deployment target |
 
 ## 6. Accounts register
 

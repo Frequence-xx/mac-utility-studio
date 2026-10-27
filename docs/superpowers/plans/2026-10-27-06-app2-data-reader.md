@@ -885,7 +885,7 @@ struct SessionsView: View
   - searching `needle-42` gives one hit, and opening it scrolls to L9 (`document.getElementById('user-content-L9').getBoundingClientRect().top` is near 0 in Web Inspector);
   - tool calls are collapsed;
   - appending a synthetic user line adds it within 1 s;
-  - a synthetic user line holding `[a](https://example.com) [b](file:///etc/hosts)`: clicking `a` opens the default browser, clicking `b` does nothing, and the session stays on screen;
+  - a synthetic user line holding `[a](https://example.com) [b](file:///etc/hosts)`: transcript prose is escaped plain text (Task 9), so both show literally, clicking them does nothing, and the session stays on screen;
   - a `.jsonl` that isn't a transcript shows generic rows;
   - a synthetic user line holding `'sk-' + 40 × 'a'` (typed into the temp copy, never into `Fixtures/`) shows as `••••••••` until "Show secrets" is on, and is masked again after a relaunch. Searching `sk-aaaa` with "Show secrets" off lists the hit as `<session file> · L<n>` with no snippet; with it on, the row adds the snippet. Watch it fail first: show the snippet unconditionally, `make build`, and the off-state row shows `sk-aaaa…`; restore it;
   - **Pro gate:** with the Debug `isPro` override **off**, ⌘⇧S opens the Sessions window showing only `WelcomeView` (no sources, no search field), and so does Window › Sessions. Watch it fail first: comment out the `!isPro` branch in `SessionsView`, `make build`, and ⌘⇧S shows the session browser with the bookmarked sources. Restore it and rebuild: `WelcomeView` again. (Every row above runs with the override **on**.)
