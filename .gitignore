@@ -1,0 +1,30 @@
+# secrets
+.env
+.env.*
+!.env.example
+*.p8
+*.p12
+*.cer
+sparkle_private_key*
+
+# local, unversioned notes (session prompt, handoffs)
+local-docs/
+
+# Xcode / SwiftPM (project is generated from project.yml by XcodeGen)
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+.build/
+.swiftpm/
+build/
+dist-release/
+
+# JS tooling (Renderer/dist IS committed — Xcode builds must not need bun)
+node_modules/
+site/public/
+
+# tools
+graphify-out/
+.playwright-mcp/
+.DS_Store
