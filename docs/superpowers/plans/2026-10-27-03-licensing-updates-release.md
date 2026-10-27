@@ -995,9 +995,14 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   # --from-dmg: another app's DMG renamed to this app's name fails on its bundle id.
   mkdir -p "$X/Data.app/Contents"; $P -c 'Add :CFBundleIdentifier string com.tegelapps.data' "$X/Data.app/Contents/Info.plist" >/dev/null
   SLUG=markdown fn from-dmg-wrong-app 1 "expected com.tegelapps.markdown, got com.tegelapps.data" check_app "$X/Data.app"
+  # An app with no extensions (App 3) checks only itself: the unmatched *.appex glob is skipped, so an ad hoc signed app reaches the benefit check.
+  mkdir -p "$X/Select.app/Contents/MacOS" "$D/scripts/entitlements"; cp /usr/bin/true "$X/Select.app/Contents/MacOS/Select"
+  $P -c 'Add :CFBundleIdentifier string com.tegelapps.select' -c 'Add :CFBundleExecutable string Select' "$X/Select.app/Contents/Info.plist" >/dev/null
+  codesign -f -s - --entitlements "$X/ok.plist" "$X/Select.app" 2>/dev/null; cp "$X/ok.plist" "$D/scripts/entitlements/select.plist"
+  cd "$D"; SLUG=select TEAM="not set" fn from-dmg-no-appex 1 "TGPolarBenefitID is not TG_POLAR_BENEFIT_ID_SELECT" check_app "$X/Select.app"; cd - >/dev/null
   echo "release_test: $pass passed, $fail failed"; [[ $fail == 0 ]]
   ```
-- [ ] **Step 2: Run it to verify it fails.** `bash scripts/release_test.sh`. Expected: FAIL, `cp: …/scripts/release.sh: No such file or directory`, … `release_test: 0 passed, 26 failed`.
+- [ ] **Step 2: Run it to verify it fails.** `bash scripts/release_test.sh`. Expected: FAIL, `cp: …/scripts/release.sh: No such file or directory`, … `release_test: 0 passed, 27 failed`.
 - [ ] **Step 3: Implement.**
   - **`scripts/entitlements/`** (the allowlist; any change to it is a reviewed commit, never generated from `project.yml`):
     ```bash
@@ -1009,7 +1014,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
     plutil -p "$A"; plutil -p "$Q"
     ```
     Expected: the app file holds D5's four keys plus the two mach-lookup names; the Quick Look file holds plan 01's Quick Look set after K4 (`app-sandbox`, `network.client`, no `files.absolute-path` exception). If plan 01's Quick Look set differs, copy plan 01's, never widen it here.
-  - **`scripts/release.sh`** runs under `set -euo pipefail` and **never uses `set -x`**. Its last line is `if [[ ${BASH_SOURCE[0]} == "$0" ]]; then main "$@"; fi`. `check_ents` and the other checks are below (the new cases ran under `/bin/bash` 3.2 against these bodies on the build Mac, 27 Oct: 7 passed; with `check_unpublished`'s `die` removed, 2 failed):
+  - **`scripts/release.sh`** runs under `set -euo pipefail` and **never uses `set -x`**. Its last line is `if [[ ${BASH_SOURCE[0]} == "$0" ]]; then main "$@"; fi`. `check_ents` and the other checks are below (the new cases ran under `/bin/bash` 3.2 against these bodies on the build Mac, 27 Oct: 7 passed; with `check_unpublished`'s `die` removed, 2 failed; `from-dmg-no-appex` passed, and without `[ -e "$b" ] || continue` it failed with `Print: Entry, ":CFBundleIdentifier", Does Not Exist`):
     ```bash
     check_ents() {   # <bundle> <expected.plist>: the signed entitlements must equal the allowlist exactly
       diff <(codesign -d --entitlements - --xml "$1" 2>/dev/null | plutil -convert xml1 -o - -) <(plutil -convert xml1 -o - "$2") >/dev/null \
@@ -1026,7 +1031,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
       local p=/usr/libexec/PlistBuddy id b k w
       id=$($p -c 'Print :CFBundleIdentifier' "$1/Contents/Info.plist"); [ "$id" = "com.tegelapps.$SLUG" ] || die 1 "expected com.tegelapps.$SLUG, got $id"
       [ "$(codesign -dv "$1" 2>&1 | sed -n 's/^TeamIdentifier=//p')" = "$TEAM" ] || die 1 "${1##*/} is not signed by the APPLE_TEAM_ID team"
-      for b in "$1" "$1"/Contents/PlugIns/*.appex; do id=$($p -c 'Print :CFBundleIdentifier' "$b/Contents/Info.plist"); check_ents "$b" "scripts/entitlements/${id#com.tegelapps.}.plist"; done
+      for b in "$1" "$1"/Contents/PlugIns/*.appex; do [ -e "$b" ] || continue; id=$($p -c 'Print :CFBundleIdentifier' "$b/Contents/Info.plist"); check_ents "$b" "scripts/entitlements/${id#com.tegelapps.}.plist"; done
       k=TG_POLAR_BENEFIT_ID_$(printf %s "$SLUG" | tr a-z- A-Z_); w=$(sed -n "s/^$k *= *//p" Config/Release.xcconfig)
       [ -n "$w" ] && [ "$($p -c 'Print :TGPolarBenefitID' "$1/Contents/Info.plist")" = "$w" ] || die 1 "TGPolarBenefitID is not $k from Config/Release.xcconfig"; }
     r2put() {   # <file> <key> <content-type> <cache-control>: S3 SigV4 PUT to R2 with curl; no npm code at release time (K2)
@@ -1098,17 +1103,17 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
         - print `published $PREFIX$DMG_NAME`: the `downloadURL` that the publishing plan copies into `site/config.json` with the version (plan 05 for App 1, plan 06 for App 2; plan 04 CR-5).
   - **Makefile:** `test-release: ; bash scripts/release_test.sh`, and add `test-release` to `check`'s prerequisites.
 - [ ] **Step 4: Run it to verify it passes.**
-  - `bash scripts/release_test.sh`. Expected: `release_test: 26 passed, 0 failed`.
+  - `bash scripts/release_test.sh`. Expected: `release_test: 27 passed, 0 failed`.
   - `bash -n scripts/release.sh && echo syntax-ok` → `syntax-ok`.
-  - `make check` → the baseline, plus TegelStore, plus `release_test: 26 passed`.
+  - `make check` → the baseline, plus TegelStore, plus `release_test: 27 passed`.
 - [ ] **Step 5: Watch the new guards fail.** One at a time, re-running `bash scripts/release_test.sh` after each, then restoring:
   - make `check_ents` `return 0` → `FAIL ents-extra (exit 0)`;
   - delete the `--sandbox` needs `--no-upload` rule → `FAIL sandbox-public` (it now meets the pre-release rule's message);
   - delete the pre-release needs `--no-upload` rule → `FAIL rc-public` (exit 1 at the placeholder guard);
   - delete the `stapler validate` line → `FAIL from-dmg-stapled` (the empty file then fails at `spctl`, with another message; `stapler` and `spctl` on an empty file exit 66 and 3, checked on the build Mac);
-  - make `check_direct`, `check_unlocked` and `check_app` each `return 0` in turn → `FAIL direct-store-flag`, `FAIL locked`, `FAIL from-dmg-wrong-app`;
+  - make `check_direct`, `check_unlocked` and `check_app` each `return 0` in turn → `FAIL direct-store-flag`, `FAIL locked`, `FAIL from-dmg-wrong-app`; drop `[ -e "$b" ] || continue` → `FAIL from-dmg-no-appex`;
   - delete `check_unpublished`'s `die` → `FAIL already-in-feed` and `FAIL already-on-r2`.
-  - Restored: `26 passed, 0 failed`.
+  - Restored: `27 passed, 0 failed`.
   - A `markdown/` literal can't be caught while `markdown` is the only app. Plan 06's `data` row adds the standing guard: a `print-config` case expecting `dist-release/data/<v>`, `…/data/appcast.xml` and `r2=$R2_BUCKET/data/`, watched failing (`unknown app: data`) before the row exists.
 - [ ] **Step 6: Commit:** `scripts/release.sh scripts/release_test.sh scripts/entitlements Makefile`, "feat(release): release.sh archive→notarise→DMG→signed appcast→R2, with print-config, from-dmg and an entitlement allowlist".
 - [ ] **Step 7: First real run (needs Task 3, done 27 Oct).** This is Task 13 step 1.
@@ -1228,7 +1233,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   - the proof is behavioural and comes with plan 05's first `v*` tag: its push shows the `macos` job running (no source grep, B16);
   - Commit: `.github/workflows/ci.yml`, "ci: run the macOS matrix on v* release tags".
 - [ ] **Step 1: Run Procedure P** with these deltas.
-  - **Stage 2 counts to record:** bun; swift (TegelKit + 41 TegelStore); `release_test: 26 passed`.
+  - **Stage 2 counts to record:** bun; swift (TegelKit + 41 TegelStore); `release_test: 27 passed`.
   - **Stage 4 `/cso` scope** (mandatory here: licensing, Keychain, entitlements, Sparkle, `release.sh`, `.env` handling):
     - **TegelStore:**
       - error → grace mapping (no 404 lock); the mid-flight race; key normalisation; no token or `Authorization` sent; HTTPS-only `apiBase`;

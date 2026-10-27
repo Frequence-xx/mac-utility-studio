@@ -38,7 +38,7 @@ The build Mac is an **Intel iMac19,1 on macOS 15.7, Xcode 26.3**. It can never r
 
 These bind code, UI copy, site copy, screenshots, demo videos and launch posts:
 
-1. **Read-only.** The apps never write to user files. The only writes are exports to a new file the user picked in a save panel (PDF; App 2's session transcript as Markdown, BUSINESS-PLAN §6.2), plus the app's own container. No telemetry, no accounts, no network calls except licence checks and Sparkle updates.
+1. **Read-only.** The apps never write to user files. The only writes are exports to a path the user picked in a save panel (PDF; App 2's session transcript as Markdown, BUSINESS-PLAN §6.2), plus the app's own container. No telemetry, no accounts, no network calls except licence checks and Sparkle updates.
 2. **Untrusted input.** Every opened file is untrusted. The renderer runs under a strict CSP: no network, no inline script, and output sanitised with DOMPurify. Mermaid uses `securityLevel: 'strict'`, and navigation is blocked. `.env` values are masked by default.
 3. **Imagery.** Text, code and diagrams only. The icon is a plain geometric tile. No faces, figures, animals, mascots or Delft figurative tiles. Arabic sample text is never Qur'an or hadith.
 4. **No music or audio** anywhere (apps, demos, site). Demo videos are silent, with captions.
