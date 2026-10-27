@@ -1,0 +1,95 @@
+# M00 stage 9: cubic round 1 (base 68f3bf5, HEAD c6c73d6)
+
+91 issues: 7 P1, 39 P2, 45 P3. Fixed by five per-plan fixers on 27 Oct; rejected with evidence: C7 (SwiftPM reads tools-version after a comment), C77 (pin rule already watched failing in plan 01). Skipped with reasons: C54 (part), C61 (accepted risk, master §6), C64, C69, and some P3s.
+
+- **C0** [P1] 2026-10-27-01-g0-renderer-quicklook.md:285: `envget` misreads the format `.env.example` actually uses
+- **C1** [P1] 2026-10-27-09-design-system-brand.md:584: `ink.css` and `studio.css` never reach the app bundle
+- **C2** [P1] 2026-10-27-07-post-launch-scale.md:138: The EUR→USD→EUR conversion for gate net revenue is inverted
+- **C3** [P1] 2026-10-27-06-app2-data-reader.md:369: The whole-file mask leaks `.git-credentials` passwords in Quick Look
+- **C4** [P1] 2026-10-27-03-licensing-updates-release.md:628: `deactivateOfflineKeepsLicence` depends on the real date
+- **C5** [P1] 2026-10-27-02-app1-reader-features.md:1128: Plan 09 Drop B never reaches the m02 branch
+- **C6** [P1] 2026-10-27-02-app1-reader-features.md:639: `testScrollToHeadingMovesViewport` can never pass
+- **C7** [P2] 2026-10-27-01-g0-renderer-quicklook.md:131: `swift-tools-version` isn't the first line of Package.swift
+- **C8** [P2] 2026-10-27-01-g0-renderer-quicklook.md:479: The Arabic-word half of the religious-text guard never matches
+- **C9** [P2] 2026-10-27-01-g0-renderer-quicklook.md:916: `fs.mkdtempSync(os.tmpdir())` creates a sibling of the temp folder
+- **C10** [P2] 2026-10-27-01-g0-renderer-quicklook.md:1130: DOMPurify's `SANITIZE_DOM` strips common heading ids
+- **C11** [P2] 2026-10-27-01-g0-renderer-quicklook.md:1396: The Quick Look log value shows as `<private>`
+- **C12** [P2] 2026-10-27-01-g0-renderer-quicklook.md:1757: Forced askpass hangs on a new server's host-key prompt
+- **C13** [P2] 2026-10-27-01-g0-renderer-quicklook.md:1607: G0 evidence can't show Mermaid failures
+- **C14** [P2] 2026-10-27-01-g0-renderer-quicklook.md:634: The `dir="auto"` change contradicts master §3.2 with no change request
+- **C15** [P2] 2026-10-27-02-app1-reader-features.md:594: Scroll tests race plan 09's smooth scrolling
+- **C16** [P2] 2026-10-27-02-app1-reader-features.md:863: The symlink case returns 404 for the wrong reason
+- **C17** [P2] 2026-10-27-02-app1-reader-features.md:345: `relativePath` resolves the item's own symlink
+- **C18** [P2] 2026-10-27-02-app1-reader-features.md:587: WebKit tests are placed outside `TegelKitTests/WebView/`
+- **C19** [P2] 2026-10-27-02-app1-reader-features.md:812: "Show Images…" accepts a folder that doesn't contain the document
+- **C20** [P2] 2026-10-27-03-licensing-updates-release.md:751: `.lapsed` has no recovery path when the activation is gone
+- **C21** [P2] 2026-10-27-05-release-readiness-launch.md:342: R10 never actually tests the b2 → rc1 update
+- **C22** [P2] 2026-10-27-08-growth-engine.md:509: The KV commands use a Pages-only token
+- **C23** [P2] 2026-10-27-08-growth-engine.md:516: `wrangler@4 kv key list` reads local storage
+- **C24** [P2] 2026-10-27-08-growth-engine.md:510: Preview and production checks hard-code `tegel.pages.dev`
+- **C25** [P2] 2026-10-27-04-site-seo.md:381: A test pins the live config's empty `downloadURL`
+- **C26** [P2] 2026-10-27-08-growth-engine.md:669: The tool's CTA links pages that don't exist yet
+- **C27** [P2] 2026-10-27-08-growth-engine.md:413: MailerLite's SPF record can add a second SPF record at the apex
+- **C28** [P2] 2026-10-27-06-app2-data-reader.md:532: Quick Look masks PEM bodies only on the `.text` path
+- **C29** [P2] 2026-10-27-06-app2-data-reader.md:649: Transcript masking skips `raw` and `bad` items
+- **C30** [P2] 2026-10-27-06-app2-data-reader.md:724: Session mode (Pro) is never gated
+- **C31** [P2] 2026-10-27-06-app2-data-reader.md:902: The `data)` release case aborts under plan 03's `release.sh`
+- **C32** [P2] 2026-10-27-06-app2-data-reader.md:185: The UTType remote matrix has no workflow that can produce it
+- **C33** [P2] 2026-10-27-06-app2-data-reader.md:982: The App 2 DMG smoke check can't fail on Data's Quick Look extension
+- **C34** [P2] 2026-10-27-07-post-launch-scale.md:326: The custom-CSS network watch-fail won't fail
+- **C35** [P2] 2026-10-27-07-post-launch-scale.md:415: The `readonly-gate` watch-fail can't see the new file
+- **C36** [P2] 2026-10-27-07-post-launch-scale.md:609: `mas.yml` never lands on `main`, so it can't be dispatched
+- **C37** [P2] 2026-10-27-07-post-launch-scale.md:448: The grep-based source split moves files that must stay shared
+- **C38** [P2] 2026-10-27-07-post-launch-scale.md:712: `release.sh markdown-setapp` runs steps that must fail for Setapp
+- **C39** [P2] 2026-10-27-07-post-launch-scale.md:995: F1's rename breaks every later release
+- **C40** [P2] 2026-10-27-07-post-launch-scale.md:177: The kill-path final build keeps polling Sparkle
+- **C41** [P2] 2026-10-27-09-design-system-brand.md:1140: Stage 2 `(cd site && bun test)` fails on `m09-design`
+- **C42** [P2] 2026-10-27-09-design-system-brand.md:885: `make run-app` doesn't exist on this branch
+- **C43** [P2] 2026-10-27-09-design-system-brand.md:1050: "Fix and amend until clean" splits `design-shots.yml` into two versions
+- **C44** [P2] 2026-10-27-09-design-system-brand.md:672: Increase Contrast overrides in `base.css` can't win
+- **C45** [P2] 2026-10-27-09-design-system-brand.md:964: The `?scheme=dark` hero renders come out light
+- **C46** [P3] 2026-10-27-04-site-seo.md:693: The stage-4 secret grep can never come back clean
+- **C47** [P3] 2026-10-27-05-release-readiness-launch.md:833: The m05 history scan always reports a hit
+- **C48** [P3] 2026-10-27-04-site-seo.md:494: The `/tools/*` CSP blocks the site favicon
+- **C49** [P3] 2026-10-27-01-g0-renderer-quicklook.md:1376: The window-path watch-fail probably won't fail
+- **C50** [P3] 2026-10-27-01-g0-renderer-quicklook.md:1358: `$APP` is undefined in these commands
+- **C51** [P3] 2026-10-27-01-g0-renderer-quicklook.md:1134: A document's `init` directive can turn HTML labels back on
+- **C52** [P3] 2026-10-27-01-g0-renderer-quicklook.md:1458: The position of `#include? "Local.xcconfig"` isn't specified
+- **C53** [P3] 2026-10-27-02-app1-reader-features.md:797: The image root ignores "no baseURL → nothing"
+- **C54** [P3] 2026-10-27-02-app1-reader-features.md:592: `data-line` and `SearchHit.line` can disagree
+- **C55** [P3] 2026-10-27-02-app1-reader-features.md:341: The `markdownFiles` signature differs from master §3.3 with no change request
+- **C56** [P3] 2026-10-27-02-app1-reader-features.md:1725: The Arabic-value test rejects placeholder-only keys
+- **C57** [P3] 2026-10-27-03-licensing-updates-release.md:888: "Private betas" is only enforced for `--sandbox`
+- **C58** [P3] 2026-10-27-03-licensing-updates-release.md:489: `KeychainStore.save` deletes before it adds
+- **C59** [P3] 2026-10-27-03-licensing-updates-release.md:289: Task 4 Step 3's expected failure can't appear
+- **C60** [P3] 2026-10-27-05-release-readiness-launch.md:848: The publish command lacks `--yes`
+- **C61** [P3] 2026-10-27-05-release-readiness-launch.md:198: The production Polar token is visible in `ps`
+- **C62** [P3] 2026-10-27-08-growth-engine.md:322: The KPI waitlist count calls a MailerLite endpoint that doesn't exist
+- **C63** [P3] 2026-10-27-08-growth-engine.md:449: The cooldown key is written before the MailerLite call
+- **C64** [P3] 2026-10-27-08-growth-engine.md:434: The single `day:` counter fails closed under concurrent sign-ups
+- **C65** [P3] 2026-10-27-08-growth-engine.md:925: Nothing checks that buyer upserts skip the account-wide double opt-in
+- **C66** [P3] 2026-10-27-08-growth-engine.md:1042: Waitlist deletion can't reach "0 members"
+- **C67** [P3] 2026-10-27-08-growth-engine.md:779: The `checkoutURL(ref:)` injection test can't fail
+- **C68** [P3] 2026-10-27-08-growth-engine.md:118: Qualified visits omit tool pages
+- **C69** [P3] 2026-10-27-08-growth-engine.md:522: Waitlist result pages are indexable and listed in the sitemap
+- **C70** [P3] 2026-10-27-08-growth-engine.md:510: `pages secret put` doesn't load the env helper
+- **C71** [P3] 2026-10-27-08-growth-engine.md:509: The preview alias stays a live sign-up endpoint without the WAF rate limit
+- **C72** [P3] 2026-10-27-06-app2-data-reader.md:537: `testHostileStringsNeverExecute` can't pass for `hostile.env`
+- **C73** [P3] 2026-10-27-06-app2-data-reader.md:426: `.env` comment lines reach Quick Look unmasked
+- **C74** [P3] 2026-10-27-06-app2-data-reader.md:798: `readonly-gate` misses common write APIs
+- **C75** [P3] 2026-10-27-06-app2-data-reader.md:519: `renderData` can't receive `reveal` or `showHidden`
+- **C76** [P3] 2026-10-27-07-post-launch-scale.md:182: G7's watch-fail predicts the wrong outcome, and the `isPro` guard is never watched
+- **C77** [P3] 2026-10-27-07-post-launch-scale.md:555: `workflow-gate`'s first expected FAIL won't occur
+- **C78** [P3] 2026-10-27-07-post-launch-scale.md:422: `gh run watch` / `gh run view` are used without a run id
+- **C79** [P3] 2026-10-27-07-post-launch-scale.md:780: App 3 has no `readonly-gate` allowlist step and no `select)` release case
+- **C80** [P3] 2026-10-27-09-design-system-brand.md:286: The lorem check contradicts §11
+- **C81** [P3] 2026-10-27-09-design-system-brand.md:759: The print watch-fail edit can't make the test fail
+- **C82** [P3] 2026-10-27-09-design-system-brand.md:1055: `gh run list` runs before the dispatched run exists
+- **C83** [P3] 2026-10-27-09-design-system-brand.md:914: The icon loop's glob and count are wrong
+- **C84** [P3] 2026-10-27-09-design-system-brand.md:903: The recommended Data icon breaks the plan's own glyph rule
+- **C85** [P3] 2026-10-27-09-design-system-brand.md:721: `FontCoverageTests` hard-codes the Damascus faces
+- **C86** [P3] 2026-10-27-09-design-system-brand.md:961: hero-b can't show the face it is testing
+- **C87** [P3] 2026-10-27-09-design-system-brand.md:301: The site's Increase Contrast rule has nowhere to go
+- **C88** [P3] 2026-10-27-09-design-system-brand.md:944: `TG_SNAPSHOT_DIR` likely isn't forwarded under `xcodebuild test`
+- **C89** [P3] 2026-10-27-09-design-system-brand.md:736: The studio measure test is looser than the rule
+- **C90** [P3] 2026-10-27-09-design-system-brand.md:298: The guard helper `files()` must tolerate missing folders, but the plan doesn't say so

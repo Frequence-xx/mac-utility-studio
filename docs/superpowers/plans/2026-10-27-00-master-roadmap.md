@@ -144,7 +144,7 @@ mac-utility-studio/
 ├─ scripts/entitlements/<target>.plist   # the allowed entitlements per signed bundle (K7)
 ├─ docs/{gates/,reviews/,ops/support-log.md,growth/,launch/}   # gate files end with a `Decision: …` line
 └─ .github/workflows/{ci.yml,smoke.yml}   # ci: js job on every push; macOS jobs on workflow_dispatch + tags v*
-                                          # K13: a dispatch-only workflow (smoke.yml, design-shots.yml, the UTType matrix)
+                                          # K13: a dispatch-only workflow (smoke.yml, design-shots.yml, types.yml for the UTType matrix, mas.yml)
                                           #   lands on `main` first in a small reviewed commit, then `gh workflow run … --ref <branch>`;
                                           #   actions pinned to SHAs; runners `xcode-select` the pinned Xcode 26.x
 ```
@@ -157,19 +157,21 @@ mac-utility-studio/
   - markdown-it settings: `html: true`, `linkify: true`, `typographer: false`.
   - Highlighting goes through markdown-it's `highlight` option.
   - YAML front matter is rendered as a collapsed `<details class="frontmatter">` code block.
-  - Block elements (`p, h1–h6, li, ul, ol, blockquote, table, th, td, dt, dd`) get `dir="auto"`. `pre` and `code` get `dir="ltr"`.
+  - Top-level blocks (`p, h1–h6, ul, ol, blockquote, table, dl`) get `dir="auto"`. Nested blocks (`li`, `th`, `td`, `dt`, `dd`, and a `p` inside a list or blockquote) get no `dir` and inherit their container's direction. Auto-direction skips descendants that carry their own `dir`, so a marked `li` or `td` would leave its list or table LTR (plan 01 CR-P1-2). `pre` and `code` get `dir="ltr"`.
   - Headings get stable ids: a slug that keeps Arabic and Hebrew letters, with `-2`, `-3` suffixes for duplicates.
   - A ```` ```mermaid ```` fence becomes `<pre class="mermaid-src" data-mermaid="N" dir="ltr">` (escaped source).
 - `window.tegel.render(markdown: string, opts: {mode, theme: 'paper'|'ink'|'studio', baseHref?: string}) -> Promise<RenderResult>`
   - DOM side.
   - Page: `<html data-theme data-mode>`, content in `<main id="doc">`.
-  - Steps: `renderToHTML`, then `DOMPurify.sanitize(html, {...SANITIZE_CONFIG, RETURN_DOM_FRAGMENT: true})` from `sanitize.js`
+  - Steps: `renderToHTML`, then `DOMPurify.sanitize(html, {...SANITIZE_CONFIG, SANITIZE_NAMED_PROPS: true, RETURN_DOM_FRAGMENT: true})` from `sanitize.js`
     (forbids the tags `script`, `style`, `iframe`, `object`, `embed`, `form`, `base`, `meta` via `FORBID_TAGS`, every `on*` attribute,
     `javascript:` and `file:` URLs, and `data:` URLs except `data:image/*`. `tegel-doc:` is kept **only on `img[src]`**, via the
     `fileImages` hook installed by page.js; `file:` is never kept), then `#doc.replaceChildren(fragment)`.
     Anything else that sanitises HTML (site tool, KaTeX) imports the same module.
+    `SANITIZE_NAMED_PROPS` prefixes every document `id`/`name` with `user-content-`, which keeps DOMPurify's clobbering protection, so `headings[].id` is the
+    prefixed DOM id. A click listener on `#doc` scrolls `#x` links to `user-content-x`, falling back to `x` (plan 01).
   - If `[data-mermaid]` exists, inject `mermaid.min.js` and run Mermaid with `securityLevel: 'strict'`, `startOnLoad: false`,
-    `suppressErrorRendering: true`, `htmlLabels: false`, `theme: 'base'`, `themeVariables` from the `--tg-*` tokens.
+    `suppressErrorRendering: true`, `htmlLabels: false`, `secure: ['secure', 'securityLevel', 'startOnLoad', 'maxTextSize', 'suppressErrorRendering', 'maxEdges', 'htmlLabels']` (Mermaid's defaults plus `htmlLabels`, so a document's `init` directive can't turn HTML labels back on), `theme: 'base'`, `themeVariables` from the `--tg-*` tokens.
     Each SVG passes through `DOMPurify.sanitize(svg, {USE_PROFILES: {svg: true, svgFilters: true}, RETURN_DOM_FRAGMENT: true})` before
     it is inserted (K6). No `html` profile, so no HTML gets back in; Mermaid's own `<style>` survives. Mermaid scopes that style under the SVG's id,
     and the hostile fixture's `themeCSS` break-out attempt must leave `#doc` visible (plan 01). Success → `div.mermaid` with the source in `dataset.src` (text); failure → `div.mermaid-error` (text only). Re-render on a `prefers-color-scheme` change unless `data-mode="print"`.
@@ -323,6 +325,7 @@ Credentials go to `.env` the moment an account exists; `.env.example` names ever
 
 **Secrets notes:**
 - `.env` is read only through `scripts/lib/env.sh` (`envget`/`envset`, K1). It is never `source`d.
+- Tokens may appear in `curl -H` arguments on the build Mac. It is single-user (the founder's own accounts), so `ps` exposure is an accepted risk. In CI they come from secrets as environment variables only, never on a command line.
 - Signing keys never stay on disk in plaintext. After the Keychain import, the Developer ID key, the Sparkle private key and the `.p8` live only in the Keychain and in encrypted offline storage (K3, H2-status).
 - Account passwords stay in `.env` (chmod 600) by default. Moving them to the Keychain is a USER question (S28).
 

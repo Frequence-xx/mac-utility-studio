@@ -111,7 +111,7 @@ Each line names an input class the spec implies, the expected behaviour, and the
 - Produces (addition; the synthesised memberwise init is internal): `public init(mode: RenderMode = .window, theme: RendererTheme = .paper, baseURL: URL? = nil)` on `RenderOptions`.
 - Produces: Make targets `check generate renderer test-js test-swift test-shell build fixtures clean` (master §3.1). `build` depends on `generate` (`xcodegen generate`), so a fresh clone builds; plan 02's `test-app` depends on it too (CR-P2-17). `test-js` runs `bun audit` (S27). `test-shell` runs the `.env` test and the guards.
 - Produces (K1), `scripts/lib/env.sh`, loaded with `. scripts/lib/env.sh` from the repo root; the file is `${ENV_FILE:-.env}`:
-  - `envget KEY` prints the value through a literal parse (first line starting `KEY=`; one pair of surrounding `'` removed and `'\''` turned back into `'`). It never sources the file and prints nothing for a missing key.
+  - `envget KEY` prints the value through a literal parse of the first line starting `KEY=`, in the forms `.env.example` uses. A `'…'` value (envset's form) has each `'\''` turned back into `'`; a `"…"` value is taken as written, with no escapes. Anything after the closing quote is ignored, and an unterminated quote reads as empty. An unquoted value ends where a `#` starts it or follows a blank, so `KEY=   # note` reads as empty, and surrounding blanks are trimmed. It never sources the file and prints nothing for a missing key.
   - `envset KEY VALUE` refuses a bad key name or a value with a newline (exit 1). Otherwise, under `umask 077`, it writes every other line plus `KEY='VALUE'` (each `'` escaped as `'\''`) to a `mktemp` file in the same folder, then `mv`s it over the original (atomic, mode 600).
   - `need KEY...` returns 1 with `missing .env key: KEY` for the first empty key. It never prints a value.
 - Produces (K1, K13): `scripts/check-guards.sh` exits 1 and lists the lines when `scripts`, `Makefile` or `site` contain `set -a` or a `bunx <pkg>` with no `@version`, or when a `uses:` line in `.github/workflows` isn't pinned to a 40-hex SHA.
@@ -261,7 +261,11 @@ envset PW2 x; envset PW2 y
 [ -z "$(envget NL)" ] || fail "a refused value was written"
 [ "$(. "$ENV_FILE" 2>/dev/null; printf '%s|%s' "${APPLE_DEVELOPER_ID_IDENTITY-}" "${PW-}")" = "$id|$meta" ] || fail "a shell reading the file sees other values"
 [ ! -e "$d/pwn" ] || fail "a stored value ran as code"
+printf '%s\n' 'C1=        # comment only, as in .env.example' 'C2="Developer ID Application: A (B)"  # note' 'C3=tegel-notary  # note' "C4='it'\\''s' # note" 'C5=a#b' >> "$ENV_FILE"
+[ -z "$(envget C1)" ] || fail ".env.example syntax: a comment-only value reads empty"
+[ "$(envget C2)|$(envget C3)|$(envget C4)|$(envget C5)" = "Developer ID Application: A (B)|tegel-notary|it's|a#b" ] || fail ".env.example syntax: double quotes and inline comments"
 need APPLE_DEVELOPER_ID_IDENTITY PW || fail "need on set keys"
+[ "$(need PW C1 2>&1)" = "missing .env key: C1" ] || fail "need names the first empty key, nothing else"
 [ "$(need PW MISSING 2>&1)" = "missing .env key: MISSING" ] || fail "need names the missing key, nothing else"
 echo "env_test: PASS"
 ```
@@ -277,8 +281,18 @@ Expected: `scripts/lib/env.sh: No such file or directory` and `exit=1`.
 envget() {  # envget KEY: print KEY's value, or nothing
   awk -v k="$1" 'BEGIN { q = sprintf("%c", 39) }
     index($0, k "=") == 1 {
-      v = substr($0, length(k) + 2); n = length(v)
-      if (n >= 2 && substr(v, 1, 1) == q && substr(v, n, 1) == q) { v = substr(v, 2, n - 2); gsub(q "\\\\" q q, q, v) }
+      v = substr($0, length(k) + 2); sub(/^[ \t]+/, "", v); c = substr(v, 1, 1)
+      if (c == q) {                   # envset form; each '\'' stands for one quote
+        s = substr(v, 2); v = ""
+        while ((i = index(s, q)) > 0) {
+          v = v substr(s, 1, i - 1); s = substr(s, i + 1)
+          if (substr(s, 1, 3) != "\\" q q) break
+          v = v q; s = substr(s, 4)
+        }
+        if (i == 0) v = ""            # unterminated: read as empty
+      } else if (c == "\"") {         # "…" as in .env.example, no escapes
+        v = substr(v, 2); i = index(v, "\""); v = i ? substr(v, 1, i - 1) : ""
+      } else { sub(/(^|[ \t])#.*/, "", v); sub(/[ \t\r]+$/, "", v) }   # a # at the start or after a blank opens a comment
       print v; exit
     }' "${ENV_FILE:-.env}" 2>/dev/null
 }
@@ -303,6 +317,9 @@ Expected: `env_test: PASS`, then `x (y)` (the session shell is zsh; scripts run 
 
 Then watch it fail on the writer plan 03 had: temporarily replace the `printf "%s='%s'\n" …` line with `printf '%s=%s\n' "$1" "$2"` and run `scripts/lib/env_test.sh; echo "exit=$?"`.
 Expected: `FAIL: a shell reading the file sees other values` and `exit=1`. Revert; `env_test: PASS` again.
+
+Then watch the `.env.example` cases fail on a reader that only unquotes: temporarily replace the unquoted branch `{ sub(/(^|[ \t])#.*/, "", v); sub(/[ \t\r]+$/, "", v) }` with `{ }` and run `scripts/lib/env_test.sh; echo "exit=$?"`.
+Expected: `FAIL: .env.example syntax: a comment-only value reads empty` and `exit=1`. The reader this replaces fails the same way, which is how the comment-only `POLAR_ACCESS_TOKEN` and `CLOUDFLARE_API_TOKEN` lines in today's `.env` passed `need`. Revert; `env_test: PASS` again.
 
 - [ ] **Step 8: Write the guard and watch it fail on planted lines**
 
@@ -347,7 +364,7 @@ Expected:
 **Interfaces:**
 - Produces: the fixture invariants later tests rely on.
   - `hostile.md` contains `SENTINEL-TOP` and `SENTINEL-BOTTOM`, and its network bait points only at `http://127.0.0.1:47123/`. Its `<style>` would hide `#doc` if it survived (S10), its second Mermaid diagram carries label HTML and an `init` directive that asks for HTML labels (S8), and its third tries to break `themeCSS` out of Mermaid's per-SVG scope to hide `#doc`. The SVG pass keeps Mermaid's own `<style>` (plan 09's fill test needs it), so `SENTINEL-TOP` staying visible is what proves that style can't leave the diagram.
-  - `mermaid-basic.md` starts with the heading `# mermaid` (its id `mermaid` would clobber `window.mermaid` through named access, S11) and has 2 valid diagrams.
+  - `mermaid-basic.md` starts with the heading `# mermaid` (without Task 5's `user-content-` prefix, its id `mermaid` would clobber `window.mermaid` through named access, S11) and has 2 valid diagrams.
   - `mermaid-broken.md` has 3 diagrams, the 2nd invalid, followed by `SENTINEL-AFTER-BROKEN`.
   - `g0-1mb.md` is 1,000,000–1,050,000 bytes, with exactly 5 ` ```mermaid ` fences, 60 other fences, 8 tables, and Arabic and Hebrew paragraphs.
   - `huge-50mb.md` is ≥ 50,000,000 bytes.
@@ -472,7 +489,11 @@ Expected:
 
 - [ ] **Step 5: Check the religious-text guard (product rule 3)**
 
-Run: `perl -CSD -ne 'print "$ARGV:$.: $_" if /[\x{FDFA}\x{FDFB}\x{06DD}\x{06DE}\x{06E9}\x{FD3E}\x{FD3F}]|بسم|قال رسول|سورة|آية/' Fixtures/markdown/*.md Fixtures/generate.js; echo "exit=$?"`
+Watch it catch a planted line first. `-Mutf8` makes Perl read the Arabic words in the pattern as characters; without it they stay UTF-8 bytes and never match the `-CSD`-decoded input, so only the `\x{…}` code points would be checked:
+`SCRATCH="$TMPDIR/tegel-m01"; mkdir -p "$SCRATCH"; printf 'clean\nسورة\n' > "$SCRATCH/plant.md"; perl -CSD -Mutf8 -ne 'print "$ARGV:$.: $_" if /[\x{FDFA}\x{FDFB}\x{06DD}\x{06DE}\x{06E9}\x{FD3E}\x{FD3F}]|بسم|قال رسول|سورة|آية/' "$SCRATCH/plant.md"`
+Expected: one line, `…/plant.md:2: سورة`. Run it again without `-Mutf8`: no line.
+
+Run: `perl -CSD -Mutf8 -ne 'print "$ARGV:$.: $_" if /[\x{FDFA}\x{FDFB}\x{06DD}\x{06DE}\x{06E9}\x{FD3E}\x{FD3F}]|بسم|قال رسول|سورة|آية/' Fixtures/markdown/*.md Fixtures/generate.js; echo "exit=$?"`
 Expected: no matched lines, then `exit=0`. Then read every Arabic, Persian and Urdu line by eye: only the sentences listed in Step 2 appear.
 
 - [ ] **Step 6: Commit** `Fixtures .gitattributes .gitignore`: "test: add shared Markdown fixtures and the g0/huge generator"
@@ -800,6 +821,7 @@ Expected: FAIL with `Exceeded timeout of 1 seconds` (the open blocks waiting for
   - `window.tegel.render(markdown: string, opts: { mode, theme: 'paper'|'ink'|'studio', baseHref?: string }): Promise<RenderResult>`.
   - It posts `webkit.messageHandlers.tegel.postMessage({ type: 'rendered', ms, headings: [{ level, text, id }], mermaidCount, errors })`.
   - `mermaidCount` is the number of `[data-mermaid]` blocks found. `errors` holds one message per diagram that failed.
+  - `headings[].id` is the heading's id in the DOM, `user-content-<slug>`: the main sanitiser pass sets `SANITIZE_NAMED_PROPS` (Step 7, CR 4). An in-page `#<slug>` link scrolls to that heading.
 - Produces (JS, `Renderer/src/sanitize.js`, contract §3.2):
   - `export const SANITIZE_CONFIG = { FORBID_TAGS: ['script','iframe','object','embed','form','base','meta','style'] }`, with no `RETURN_DOM_FRAGMENT`, so each caller picks its own return type. `style` is forbidden so a document can't restyle or hide the page (S10); app CSS and test styles are injected by the app, not the document.
   - `export function addHooks(purify, { fileImages = false } = {})` installs one `uponSanitizeAttribute` hook (K4):
@@ -909,7 +931,7 @@ Expected: `2 pass`.
 
 - **Bundle:** `Bun.build({ entrypoints: ['src/page.js'], outdir, target: 'browser', format: 'iife', minify: true })`. `format: "iife"` is documented, experimental: https://bun.com/docs/bundler.
 - **Copy:** `src/index.html` and `src/css/{base,paper,print}.css` (flat), plus `node_modules/mermaid/dist/mermaid.min.js` (3.57 MB per https://app.unpkg.com/mermaid@11.17.2/files/dist).
-- **`--check`:** build into `fs.mkdtempSync(os.tmpdir())`, compare file sets and bytes with the committed folder, print each differing name and `process.exit(1)` on any difference.
+- **`--check`:** build into `fs.mkdtempSync(path.join(os.tmpdir(), 'tegel-'))` (`mkdtemp` appends six characters to its prefix, so a bare `os.tmpdir()` would make a sibling such as `/tmpXXXXXX`, which Linux CI can't create), compare file sets and bytes with the committed folder, print each differing name and `process.exit(1)` on any difference.
 
 Package.swift: `.target(name: "TegelKit", resources: [.copy("Resources/Renderer")])`.
 
@@ -959,9 +981,9 @@ Run: `swift test --package-path Packages/TegelKit --filter testWebKitRunsInsideS
 @MainActor func testRenderPostsRenderedResultAndAppliesThemeAndMode() async throws {
     let r = RendererWebView()
     let res = try await r.render("# Hello\n\n## مرحبا\n\n# Hello\n", options: RenderOptions(mode: .quicklook))
-    XCTAssertEqual(res.headings, [Heading(level: 1, text: "Hello", id: "hello"),
-                                  Heading(level: 2, text: "مرحبا", id: "مرحبا"),
-                                  Heading(level: 1, text: "Hello", id: "hello-2")])
+    XCTAssertEqual(res.headings, [Heading(level: 1, text: "Hello", id: "user-content-hello"),      // DOM ids (CR 4)
+                                  Heading(level: 2, text: "مرحبا", id: "user-content-مرحبا"),
+                                  Heading(level: 1, text: "Hello", id: "user-content-hello-2")])
     XCTAssertEqual(res.mermaidCount, 0); XCTAssertEqual(res.errors, [])
     // An async call can't sit inside XCTAssert's autoclosure (CR-P1-1): bind each result first.
     let theme = try await js(r, "return document.documentElement.dataset.theme") as? String
@@ -1028,7 +1050,7 @@ Run: `swift test --package-path Packages/TegelKit --filter testWebKitRunsInsideS
     catch RendererError.timeout {}
     r.timeout = .seconds(10)
     let again = try await r.render("# Again", options: RenderOptions())
-    XCTAssertEqual(again.headings.map(\.id), ["again"])
+    XCTAssertEqual(again.headings.map(\.id), ["user-content-again"])
 }
 
 @MainActor func testSecondRenderSupersedesFirst() async throws {
@@ -1037,8 +1059,20 @@ Run: `swift test --package-path Packages/TegelKit --filter testWebKitRunsInsideS
     let first = Task { try await r.render(md, options: RenderOptions()) }
     await Task.yield()                                   // first is now pending (waiting for the page load)
     let s = try await r.render("# Second", options: RenderOptions())
-    XCTAssertEqual(s.headings.map(\.id), ["second"])
+    XCTAssertEqual(s.headings.map(\.id), ["user-content-second"])
     do { _ = try await first.value; XCTFail("expected cancellation") } catch is CancellationError {}
+}
+
+@MainActor func testHeadingNamedLikeADocumentPropertyKeepsItsIdAndLinksJumpToIt() async throws {
+    // C10: DOMPurify's SANITIZE_DOM alone drops id="title" ('title' in document); so do images, links, name, open, style.
+    let r = RendererWebView()
+    let filler = (1...150).map { "Filler \($0)" }.joined(separator: "\n\n")
+    let res = try await r.render("[to title](#title)\n\n\(filler)\n\n# Title\n\n\(filler)\n", options: RenderOptions())
+    XCTAssertEqual(res.headings.map(\.id), ["user-content-title"])
+    _ = try await js(r, "document.querySelector('#doc a[href=\"#title\"]').click(); return 0")
+    let top = try await js(r, "return document.getElementById('user-content-title').getBoundingClientRect().top") as? Double ?? -1
+    XCTAssertTrue((0...40).contains(top), "top=\(top)")
+    XCTAssertEqual(r.webView.url, r.indexURL)                   // scrolled in place, no navigation
 }
 ```
 
@@ -1121,13 +1155,14 @@ Watch the K15 rule fail: temporarily delete the no-`fileImages` `IMG` `src` rule
 
 **`page.js`** (bundled IIFE; imports `renderToHTML`, `dompurify` and `sanitize.js`):
 - At load, call `addHooks(DOMPurify, { fileImages: true })` once. Hooks are global DOMPurify state, so they're never installed per render (they also run on the Mermaid SVG pass).
+- At load, also add one `click` listener on `#doc` for `a[href^="#"]`. It calls `preventDefault()`, takes `frag = decodeURIComponent(href.slice(1))`, and runs `scrollIntoView()` on `document.getElementById('user-content-' + frag) ?? document.getElementById(frag)`. No navigation happens.
 - `render` runs these steps:
   1. Set `<html data-theme data-mode>`.
-  2. Sanitise with `DOMPurify.sanitize(renderToHTML(markdown, opts), { ...SANITIZE_CONFIG, RETURN_DOM_FRAGMENT: true })` and call `#doc.replaceChildren(fragment)`.
+  2. Sanitise with `DOMPurify.sanitize(renderToHTML(markdown, opts), { ...SANITIZE_CONFIG, SANITIZE_NAMED_PROPS: true, RETURN_DOM_FRAGMENT: true })` and call `#doc.replaceChildren(fragment)`. `SANITIZE_NAMED_PROPS` prefixes every `id` and `name` with `user-content-`. That keeps DOMPurify's clobbering protection, but a heading slugged `title`, `images`, `links`, `name`, `open` or `style` keeps its id: the default `SANITIZE_DOM` check alone deletes any id that exists on `document` or a form (C10, CR 4).
   3. `await new Promise(r => setTimeout(r, 0))`, so the text paints before Mermaid. Don't use `requestAnimationFrame`, which doesn't fire in windowless views.
   4. If `#doc pre[data-mermaid]` exists:
-     - load Mermaid once through a module-scoped promise: inject `<script src="mermaid.min.js">`, and in its `load` handler take `globalThis.mermaid` once (the bundle's last line assigns it, so it shadows any `id="mermaid"` element) and keep it in that module variable. Every later call uses the module variable. **Never** test `window.mermaid` (or any page global) to decide whether to load: `# mermaid` gives a heading `id="mermaid"`, and named access would make that test pass with the heading (S11). Heading ids stay unprefixed, so anchor links keep working;
-     - call `mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true, htmlLabels: false })`. In Mermaid 11.17 the root `htmlLabels` overrides the deprecated per-diagram ones, so labels are SVG `<text>`, not `foreignObject` HTML;
+     - load Mermaid once through a module-scoped promise: inject `<script src="mermaid.min.js">`, and in its `load` handler take `globalThis.mermaid` once (the bundle's last line assigns it, so it shadows any `id="mermaid"` element) and keep it in that module variable. Every later call uses the module variable. **Never** test `window.mermaid` (or any page global) to decide whether to load: `# mermaid` would give a heading `id="mermaid"`, and named access would make that test pass with the heading (S11). The `user-content-` prefix (step 2) already prevents that; this rule is the second layer;
+     - call `mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true, htmlLabels: false, secure: ['secure', 'securityLevel', 'startOnLoad', 'maxTextSize', 'suppressErrorRendering', 'maxEdges', 'htmlLabels'] })`. In Mermaid 11.17 the root `htmlLabels` overrides the deprecated per-diagram ones, so labels are SVG `<text>`, not `foreignObject` HTML. `secure` is Mermaid's six default keys plus `htmlLabels`, so a document's `%%{init: {"htmlLabels": true}}%%` can't turn HTML labels back on; the SVG pass would strip them and leave that diagram's labels blank;
      - for each block, `const { svg } = await mermaid.render('tegel-mermaid-' + n, pre.textContent)`. On success, replace the block with `div.mermaid` and fill it with `DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true }, RETURN_DOM_FRAGMENT: true })` (S8). The svg profile drops `foreignObject` and every HTML element but keeps Mermaid's own `<style>`, whose rules Mermaid scopes to `#tegel-mermaid-<n>`; so this pass doesn't reuse `SANITIZE_CONFIG`, which forbids `style`. On failure, use `div.mermaid-error`, set its text with `textContent`, and push the message to `errors`.
   5. Collect headings from `#doc h1…h6`.
   6. Post the `rendered` message and return the same object.
@@ -1160,7 +1195,7 @@ Then serve the renderer folder through a `WKURLSchemeHandler` registered for `te
 - [ ] **Step 8: Run the tests and watch them pass**
 
 Run: `make renderer && swift test --package-path Packages/TegelKit --filter 'RendererWebViewTests|HostileInputTests'`
-Expected: `Executed 12 tests, with 0 failures` (8 + 4).
+Expected: `Executed 13 tests, with 0 failures` (9 + 4).
 
 - [ ] **Step 9: Watch every guard fail, one at a time, then restore it**
 
@@ -1173,11 +1208,13 @@ For each row: make the temporary edit, run `make renderer` if the edit touches `
 | 3 | The navigation policy returns `.allow` for everything | `testClickingHostileLinksNeverNavigates` | `webView.url` changed or the beacon was hit |
 | 4 | In `page.js`, replace the main `DOMPurify.sanitize(…)` with `Object.assign(document.createElement('template'), { innerHTML: html }).content` (no sanitising, S9) | `testHostileFixtureRunsNoScriptAndMakesNoRequest` | `banned`, `handlers` or `badURLs` is non-zero |
 | 5 | Remove `'style'` from `FORBID_TAGS` (S10) | `testHostileFixtureRunsNoScriptAndMakesNoRequest` | `SENTINEL-TOP` is missing from `innerText`: the document's `<style>` hid `#doc` |
-| 6 | Insert Mermaid's SVG without the svg-profile pass **and** drop `htmlLabels: false` (S8) | `testHostileFixtureRunsNoScriptAndMakesNoRequest` | `htmlLabels` (the `foreignObject` count) ≥ 1. Then restore only the svg-profile pass: it passes, so the pass alone strips them |
-| 7 | In `page.js`, load Mermaid only `if (!window.mermaid)` (S11) | `testMermaidBasicRendersTwoDiagrams` | The `# mermaid` heading answers the test, Mermaid never loads: the render throws or `svgs` is 0 |
+| 6 | Insert Mermaid's SVG without the svg-profile pass **and** drop `htmlLabels: false` and `secure` (S8) | `testHostileFixtureRunsNoScriptAndMakesNoRequest` | `htmlLabels` (the `foreignObject` count) ≥ 1. Then restore only the svg-profile pass: it passes, so the pass alone strips them |
+| 7 | In `page.js`, load Mermaid only `if (!window.mermaid)` **and** drop `SANITIZE_NAMED_PROPS` (S11) | `testMermaidBasicRendersTwoDiagrams` | The `# mermaid` heading answers the test, Mermaid never loads: the render throws or `svgs` is 0 |
 | 8 | In `markdown.js`, also give `li`, `th`, `td` and nested `p` a `dir="auto"` (CR-P1-2) | `testMixedBidiDirections` | `ul`, `blockquote` and `table` read `ltr`, and `firstCellIsRight` is false |
+| 9 | Drop `SANITIZE_NAMED_PROPS: true` from the main pass (C10) | `testHeadingNamedLikeADocumentPropertyKeepsItsIdAndLinksJumpToIt` | The heading ids are `[""]`: `SANITIZE_DOM` deleted `id="title"` |
+| 10 | Remove the `#doc` `click` listener | `testHeadingNamedLikeADocumentPropertyKeepsItsIdAndLinksJumpToIt` | `top` is well over 40: the native jump looks for `id="title"`, which no longer exists |
 
-After the last row: `make renderer`, re-run Step 8 (`Executed 12 tests, with 0 failures`), and `git status --short Renderer/src Packages/TegelKit/Sources/TegelKit/Resources` prints only this task's intended files.
+After the last row: `make renderer`, re-run Step 8 (`Executed 13 tests, with 0 failures`), and `git status --short Renderer/src Packages/TegelKit/Sources/TegelKit/Resources` prints only this task's intended files.
 
 - [ ] **Step 10: Run the full JS suite**
 
@@ -1230,7 +1267,7 @@ Give it these sections:
 - **Rule:** BUSINESS-PLAN §12 G0, quoted.
 - **Fixture:** `shasum -a 256 Fixtures/markdown/g0-1mb.md` and `wc -c`.
 - **Method:** cold runs; the median of 5 for app and Quick Look; 3 for `swift test`.
-- **Results table**, columns: `Machine | macOS | Arch | Evidence (local / run URL / lease) | swift test ms | --benchmark median ms | Window median ms | Quick Look median ms | QL blank or failed (of 5) | mermaidCount | Pass?`.
+- **Results table**, columns: `Machine | macOS | Arch | Evidence (local / run URL / lease) | swift test ms | --benchmark median ms | Window median ms | Quick Look median ms | QL blank or failed (of 5) | mermaidCount / Mermaid errors | Pass?`.
 - **Quick Look variant**, filled by Task 9.
 - **Decision**, filled by Task 13.
 
@@ -1254,9 +1291,9 @@ Fill the first row's `swift test` cell from Step 2 (`iMac19,1 · 15.7.7 · x86_6
     - `static let readableContentTypes = [UTType(importedAs: "net.daringfireball.markdown")]`;
     - `init(configuration:)` stores only `let openedAt: ContinuousClock.Instant` and **never** touches `configuration.file.regularFileContents`, which would read the whole file however large (K11);
     - `fileWrapper` throws `CocoaError(.featureUnsupported)` (read-only, rule 1).
-  - `struct DocumentView: View`, which hosts `renderer.webView` through `NSViewRepresentable`. In `.task` it runs `try await Task.detached { try TextFileLoader.load(fileURL) }.value` (an `fstat` size check, then at most 5 MB read, off the main actor), renders `displayMarkdown`, and logs `window ms=<n> bytes=<byteCount> truncated=<0|1> mermaid=<n>` at `.notice` to `Logger(subsystem: Bundle.main.bundleIdentifier!, category: "g0")`. The time runs from `openedAt`. A load error shows its `localizedDescription` in place of the document.
+  - `struct DocumentView: View`, which hosts `renderer.webView` through `NSViewRepresentable`. In `.task` it runs `try await Task.detached { try TextFileLoader.load(fileURL) }.value` (an `fstat` size check, then at most 5 MB read, off the main actor), renders `displayMarkdown`, and logs `window ms=<n> bytes=<byteCount> truncated=<0|1> mermaid=<n> errors=<n>` (`errors.count`, since `mermaidCount` counts blocks found, not diagrams drawn) at `.notice` to `Logger(subsystem: Bundle.main.bundleIdentifier!, category: "g0")`. The time runs from `openedAt`. A load error shows its `localizedDescription` in place of the document.
   - `enum Benchmark { @MainActor static func run() async -> Int32 }`. CLI: `"Tegel Markdown" --benchmark < file.md`.
-    - It prints exactly one JSON line `{"ms":<number>,"mermaidCount":<int>}` to stdout.
+    - It prints exactly one JSON line `{"ms":<number>,"mermaidCount":<int>,"errors":<int>}` to stdout, where `errors` is `errors.count`. The line itself carries the Mermaid failures, because every pipe and loop below drops the exit code.
     - The time covers stdin decode, `RendererWebView()`, load and render.
     - Exit 0 on success; 2 if `errors` is non-empty; 1 on timeout. If stdin is a TTY it prints usage and exits 64.
     - stdin is used, not a path, because the sandboxed binary can't read an arbitrary path given on the command line.
@@ -1267,7 +1304,7 @@ Fill the first row's `swift test` cell from Step 2 (`iMac19,1 · 15.7.7 · x86_6
 Run:
 ```
 APP="build/Build/Products/Debug/Tegel Markdown.app"
-"$APP/Contents/MacOS/Tegel Markdown" --benchmark < Fixtures/markdown/g0-1mb.md | python3 -c 'import json,sys; d=json.loads(sys.stdin.readline()); assert set(d)=={"ms","mermaidCount"} and d["mermaidCount"]==5, d; print("ms", d["ms"])'
+"$APP/Contents/MacOS/Tegel Markdown" --benchmark < Fixtures/markdown/g0-1mb.md | python3 -c 'import json,sys; d=json.loads(sys.stdin.readline()); assert set(d)=={"ms","mermaidCount","errors"} and d["mermaidCount"]==5 and d["errors"]==0, d; print("ms", d["ms"])'
 ```
 Expected: FAIL with `no such file or directory`.
 
@@ -1349,13 +1386,16 @@ Expected:
 
 Expected: `ms <number>` and exit 0. Run it 5 times and put the median in the `--benchmark` cell of the iMac row in G0.md.
 
+Then watch a diagram failure show up in the line: `APP="build/Build/Products/Debug/Tegel Markdown.app"; "$APP/Contents/MacOS/Tegel Markdown" --benchmark < Fixtures/markdown/mermaid-broken.md; echo "exit=$?"`.
+Expected: `"mermaidCount":3,"errors":1` in the JSON line, then `exit=2`.
+
 - [ ] **Step 6: Check the window path by hand on the build Mac**
 
-Run: `SCRATCH="$TMPDIR/tegel-m01"; mkdir -p "$SCRATCH"; open -a "$PWD/$APP" Fixtures/markdown/mixed-bidi.md`, then screenshot with `screencapture -x "$SCRATCH/win-bidi.png"` and read the image.
+Run: `SCRATCH="$TMPDIR/tegel-m01"; mkdir -p "$SCRATCH"; APP="build/Build/Products/Debug/Tegel Markdown.app"; open -a "$PWD/$APP" Fixtures/markdown/mixed-bidi.md`, then screenshot with `screencapture -x "$SCRATCH/win-bidi.png"` and read the image.
 Expected: the Arabic blocks are right-aligned, the English paragraph after the Hebrew heading is left-aligned, and the code is LTR.
 
-Then, 5 times: `open -a "$PWD/$APP" Fixtures/markdown/g0-1mb.md`, then `osascript -e 'quit app "Tegel Markdown"'`. Read the timings with `log show --last 5m --style compact --predicate 'subsystem BEGINSWITH "com.tegelapps.markdown" AND category == "g0"' | grep 'window ms='`.
-Expected: 5 lines. Put the median in the Window cell of the iMac row.
+Then, 5 times: `APP="build/Build/Products/Debug/Tegel Markdown.app"; open -a "$PWD/$APP" Fixtures/markdown/g0-1mb.md`, then `osascript -e 'quit app "Tegel Markdown"'`. Read the timings with `/usr/bin/log show --last 5m --style compact --predicate 'subsystem BEGINSWITH "com.tegelapps.markdown" AND category == "g0"' | grep 'window ms='`. Always call `/usr/bin/log` by its path: in zsh, the session shell and the remote Mac's login shell, a bare `log` is a builtin that fails with `log: too many arguments`.
+Expected: 5 lines, each with `mermaid=5 errors=0`. Put the median in the Window cell of the iMac row.
 
 Then the 2 GB file (K11). Run:
 ```
@@ -1365,11 +1405,11 @@ python3 -c 'import os,sys; os.truncate(sys.argv[1], 2_000_000_000)' "$SCRATCH/hu
 open -a "$PWD/$APP" "$SCRATCH/huge-2gb.md"; sleep 5
 ps -o rss= -p "$(pgrep -x 'Tegel Markdown')"
 screencapture -x "$SCRATCH/win-2gb.png"; osascript -e 'quit app "Tegel Markdown"'
-log show --last 2m --style compact --predicate 'subsystem BEGINSWITH "com.tegelapps.markdown" AND category == "g0"' | grep 'window ms=' | tail -1
+/usr/bin/log show --last 2m --style compact --predicate 'subsystem BEGINSWITH "com.tegelapps.markdown" AND category == "g0"' | grep 'window ms=' | tail -1
 ```
 Expected: RSS below `400000` (KB), the screenshot shows the `Large file` banner, and the log line has `bytes=2000000000 truncated=1`.
 
-Watch it fail: temporarily add `_ = configuration.file.regularFileContents` to `MarkdownFile.init`, rebuild and repeat. Expected: RSS above `2000000`, or the app is killed. Revert. If RSS is high **without** that line, SwiftUI reads the whole file itself: record it in G0.md and switch the window to an `NSDocument` subclass whose `read(from url:ofType:)` calls `TextFileLoader.load(url)`, then repeat.
+Watch it fail: temporarily add `_ = String(decoding: configuration.file.regularFileContents ?? Data(), as: UTF8.self)` to `MarkdownFile.init`, rebuild and repeat. A bare `regularFileContents` isn't enough: `FileWrapper` memory-maps the file, and on the build Mac reading it from a 2 GB sparse file left RSS at about 4 MB, while decoding it took RSS to about 3.9 GB. Expected: RSS above `2000000`, or the app is killed. Revert. If RSS is high **without** that line, SwiftUI reads the whole file itself: record it in G0.md and switch the window to an `NSDocument` subclass whose `read(from url:ofType:)` calls `TextFileLoader.load(url)`, then repeat.
 
 - [ ] **Step 7: Commit** `project.yml Apps/Markdown/App/MarkdownApp.swift Apps/Markdown/App/DocumentView.swift docs/gates/G0.md`: "feat(app1): sandboxed DocumentGroup viewer with imported Markdown UTType, bounded file load and --benchmark"
 
@@ -1389,7 +1429,7 @@ Watch it fail: temporarily add `_ = configuration.file.regularFileContents` to `
   - Implement `func preparePreviewOfFile(at url: URL) async throws`, Swift's async import of the documented `preparePreviewOfFile(at:completionHandler:)` (https://developer.apple.com/documentation/quicklookui/qlpreviewingcontroller). If the compiler rejects the async form, implement the completion-handler form.
   - **One 1.8 s deadline covers the whole preview, load included (K11).** It starts on entry. The load runs in `Task.detached { try TextFileLoader.load(url) }` (5 MB cap, `fstat` first) and is raced against the deadline through a `withCheckedThrowingContinuation` that resumes once (an `OSAllocatedUnfairLock<Bool>` flag). A task group won't do, because it waits for a child stuck in `read`. If the deadline wins, it throws `CocoaError(.fileReadUnknown)` and leaves the detached task to finish on its own.
   - Then `renderer.timeout` is the remaining budget, and it renders with `mode: .quicklook` and `baseURL: nil`. On `RendererError.timeout` it still returns normally and shows whatever has rendered. Other errors propagate.
-  - An `OSSignposter` interval `"preview"` wraps the work. One `.notice` line goes out, via `Logger(subsystem: Bundle.main.bundleIdentifier!, category: "quicklook")`: `preview ms=<n> bytes=<byteCount> truncated=<0|1> mermaid=<n|-1> timedOut=<0|1>` on success, or `preview failed ms=<n> error=<String(describing: error)>` before an error propagates. `ms` runs from entry, so it includes the load.
+  - An `OSSignposter` interval `"preview"` wraps the work. One `.notice` line goes out, via `Logger(subsystem: Bundle.main.bundleIdentifier!, category: "quicklook")`: `preview ms=<n> bytes=<byteCount> truncated=<0|1> mermaid=<n|-1> errors=<n|-1> timedOut=<0|1>` on success, or `preview failed ms=<n> error=<String(describing: error)>` before an error propagates. `ms` runs from entry, so it includes the load. The `error` string is interpolated with `privacy: .public`: `os.Logger` shows an interpolated string as `<private>` by default (numbers are public), and Step 7 has to read it. Never log the file's URL.
 
 - [ ] **Step 1: Write the failing check**
 
@@ -1451,7 +1491,7 @@ Expected:
 - One pluginkit line with `+` (enabled) and the `~/Applications` path.
 - `net.daringfireball.markdown`.
 
-If the ad-hoc-signed extension is **not** listed, record the output. Then re-sign Debug with the local `Apple Development` identity: `CODE_SIGN_IDENTITY = Apple Development` and `DEVELOPMENT_TEAM = W3Q9G8NSHG` in a gitignored `Config/Local.xcconfig`, included from `Debug.xcconfig` by `#include? "Local.xcconfig"`. Then repeat this step.
+If the ad-hoc-signed extension is **not** listed, record the output. Then re-sign Debug with the local `Apple Development` identity: `CODE_SIGN_IDENTITY = Apple Development` and `DEVELOPMENT_TEAM = W3Q9G8NSHG` in a gitignored `Config/Local.xcconfig`, included by `#include? "Local.xcconfig"` as the **last** line of `Debug.xcconfig` (later lines win, so an include at the top would be overridden by `CODE_SIGN_IDENTITY = -`). Then repeat this step.
 
 - [ ] **Step 5: Run the manual previews and screenshots (build Mac, macOS 15.7.7, x86_64)**
 
@@ -1459,13 +1499,13 @@ For each of `mermaid-basic.md`, `mixed-bidi.md`, `hostile.md` and `rtl-arabic.md
 Expected:
 - Diagrams are drawn.
 - RTL is correct.
-- `hostile.md` shows both sentinels, with no alert and no blank page.
+- `hostile.md` shows both sentinels, with no alert and no blank page. Its second diagram (the `init` directive asking for HTML labels) still shows the word `label` (`secure`, Task 5 Step 7).
 
 - [ ] **Step 6: Time Quick Look for G0 (5 cold previews)**
 
 Repeat 5 times: `qlmanage -p Fixtures/markdown/g0-1mb.md` (background), wait 3 s, kill. Then:
-`log show --last 10m --style compact --predicate 'subsystem BEGINSWITH "com.tegelapps.markdown" AND category == "quicklook"' | grep 'preview ms='`
-Expected: 5 lines with `mermaid=5 timedOut=0`. Put the median and the blank/failed count in the iMac row of G0.md.
+`/usr/bin/log show --last 10m --style compact --predicate 'subsystem BEGINSWITH "com.tegelapps.markdown" AND category == "quicklook"' | grep 'preview ms='`
+Expected: 5 lines with `mermaid=5 errors=0 timedOut=0`. Put the median and the blank/failed count in the iMac row of G0.md.
 
 - [ ] **Step 7: Check the 2 s deadline, the 5 MB truncation and a FIFO (K11)**
 
@@ -1478,9 +1518,9 @@ Then a FIFO named like a document:
 ```
 SCRATCH="$TMPDIR/tegel-m01"; mkdir -p "$SCRATCH"; rm -f "$SCRATCH/trap.md"; mkfifo "$SCRATCH/trap.md"
 qlmanage -p "$SCRATCH/trap.md" >/dev/null 2>&1 & QL=$!; sleep 3; kill $QL
-log show --last 1m --style compact --predicate 'subsystem BEGINSWITH "com.tegelapps.markdown" AND category == "quicklook"' | grep 'preview failed'
+/usr/bin/log show --last 1m --style compact --predicate 'subsystem BEGINSWITH "com.tegelapps.markdown" AND category == "quicklook"' | grep 'preview failed'
 ```
-Expected: one line with `error=notRegularFile` and `ms` < 100.
+Expected: one line with `error=notRegularFile` and `ms` < 100. `error=<private>` means the `privacy: .public` is missing.
 
 Watch the deadline fire on the load: temporarily start the load with `try await Task.sleep(for: .seconds(5))` inside the detached task, rebuild, re-register, and preview `mermaid-basic.md`. Expected: `preview failed ms=18…` (about 1800) with `Code=256` (`fileReadUnknown`) in the error, and Quick Look falls back to its generic preview instead of hanging. Revert.
 
@@ -1644,7 +1684,7 @@ If `build.js --check` fails only on Linux, compare `bun build.js` output between
 - [ ] **Step 4: Dispatch the macOS matrix**
 
 Run: `gh workflow run ci.yml --ref m01-g0-renderer`, then `gh run watch $(gh run list --workflow ci.yml --branch m01-g0-renderer -L 1 --json databaseId -q '.[0].databaseId')`, then `gh run view <id> --log | grep -E 'Xcode 26|"mermaidCount"|G0 swift-test'`.
-Expected: both matrix legs succeed, each printing `Xcode 26.3` and 5 JSON lines. Add two G0.md rows: `GitHub macos-15 · arm64` and `GitHub macos-26 · arm64`, each with the run URL as evidence. These rows are supporting evidence; the G0 legs are the Intel 15 and Scaleway 27 rows.
+Expected: both matrix legs succeed, each printing `Xcode 26.3` and 5 JSON lines with `"mermaidCount":5,"errors":0`. Add two G0.md rows: `GitHub macos-15 · arm64` and `GitHub macos-26 · arm64`, each with the run URL as evidence. These rows are supporting evidence; the G0 legs are the Intel 15 and Scaleway 27 rows.
 
 - [ ] **Step 5: Commit** `docs/gates/G0.md`: "docs(g0): CI arm64 macOS 15/26 benchmark results"
 
@@ -1750,10 +1790,10 @@ Install a key without printing the password:
 <P>
 ssh-keygen -t ed25519 -N '' -f ~/.ssh/id_ed25519_scaleway
 printf '#!/bin/sh\nprintf "%%s\\n" "$REMOTE_MAC_PASSWORD"\n' > "$SCRATCH/askpass" && chmod 700 "$SCRATCH/askpass"
-REMOTE_MAC_PASSWORD="$(envget REMOTE_MAC_PASSWORD)" SSH_ASKPASS="$SCRATCH/askpass" SSH_ASKPASS_REQUIRE=force ssh-copy-id -i ~/.ssh/id_ed25519_scaleway.pub "$U"
+REMOTE_MAC_PASSWORD="$(envget REMOTE_MAC_PASSWORD)" SSH_ASKPASS="$SCRATCH/askpass" SSH_ASKPASS_REQUIRE=force ssh-copy-id -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_ed25519_scaleway.pub "$U"
 R 'sw_vers -productVersion; uname -m; who'
 ```
-The password reaches only `ssh-copy-id`'s environment, never argv or the shell. Expected: `27.x`, `arm64`, and a `console` line in `who`, meaning a GUI session exists. If `console` is missing, ask the user to log in once through `open "vnc://$U:$(envget REMOTE_MAC_VNC_PORT)"` (after P).
+The password reaches only `ssh-copy-id`'s environment, never argv or the shell. `accept-new` records the new server's host key on first contact, and every later `R` and `rsync` checks against it. Without it, forced askpass also answers ssh's `yes/no` host-key question with the password, and ssh asks again forever (seen on the build Mac against a host missing from `known_hosts`). Expected: `27.x`, `arm64`, and a `console` line in `who`, meaning a GUI session exists. If `console` is missing, ask the user to log in once through `open "vnc://$U:$(envget REMOTE_MAC_VNC_PORT)"` (after P).
 
 - [ ] **Step 5: Copy the app and register Quick Look**
 
@@ -1772,7 +1812,7 @@ Expected:
 
 Try plain SSH first (after P):
 `R 'for i in 1 2 3 4 5; do ~/Applications/"Tegel Markdown.app/Contents/MacOS/Tegel Markdown" --benchmark < ~/g0/g0-1mb.md; done'`
-- Expected: 5 JSON lines with `"mermaidCount":5`.
+- Expected: 5 JSON lines with `"mermaidCount":5,"errors":0`.
 - If it fails with a WindowServer or WebContent error, run it inside the GUI session, with the password on stdin and never in argv:
   `R 'sudo -S -p "" launchctl asuser "$(id -u)" sudo -u "$USER" /bin/sh -c "for i in 1 2 3 4 5; do \"$HOME/Applications/Tegel Markdown.app/Contents/MacOS/Tegel Markdown\" --benchmark < $HOME/g0/g0-1mb.md; done"' <<< "$(envget REMOTE_MAC_PASSWORD)"`
 - Last resort: the user runs the same loop in Terminal over VNC and pastes the output into `$SCRATCH/bench-27.jsonl`.
@@ -1787,11 +1827,11 @@ Inside the GUI session (the same `launchctl asuser` wrapper):
 - once each for `mermaid-basic.md`, `mixed-bidi.md`, `hostile.md` and `huge-50mb.md`, with `screencapture -x ~/g0/ql-<f>.png`.
 
 Then, after P:
-`R "log show --last 20m --style compact --predicate 'subsystem BEGINSWITH \"com.tegelapps.markdown\"' | grep -E 'window ms=|preview ms='"`
+`R "/usr/bin/log show --last 20m --style compact --predicate 'subsystem BEGINSWITH \"com.tegelapps.markdown\"' | grep -E 'window ms=|preview ms='"`
 and `rsync` `~/g0/*.png` back to `$SCRATCH/` and read them.
 
 Expected:
-- 5 `window ms=` lines and ≥ 9 `preview ms=` lines.
+- 5 `window ms=` lines and ≥ 9 `preview ms=` lines; the 10 `g0-1mb.md` lines (`bytes=10…`) show `mermaid=5 errors=0`.
 - The huge file shows `truncated=1` with `ms` < 2000.
 - The screenshots show rendered diagrams, correct RTL and both hostile sentinels.
 
@@ -1806,7 +1846,7 @@ The console won't allow deletion before 24 h have passed. Note the earliest dele
 - [ ] **Step 10: Delete the server (≥ 24 h after the order: Sat 31 Oct evening or Sun 1 Nov)**
 
 With Playwright: Bare Metal → Apple silicon → ⋯ → Delete → type `DELETE`. Check with `browser_snapshot` of the Apple silicon list.
-Expected: no servers listed. Add "deleted <date time>, billed <€ from the console>" to G0.md and remove `~/.ssh/id_ed25519_scaleway*` from the build Mac.
+Expected: no servers listed. Add "deleted <date time>, billed <€ from the console>" to G0.md and remove `~/.ssh/id_ed25519_scaleway*` and the host key that Step 4 accepted (`. scripts/lib/env.sh; ssh-keygen -R "$(envget REMOTE_MAC_HOST)"`) from the build Mac.
 
 The second lease (W5) is plan 05's.
 
@@ -1823,7 +1863,7 @@ The second lease (W5) is plan 05's.
 
 - [ ] **Step 1: Apply the rule**
 
-- **PASS:** on the **iMac 15.7.7** row and the **Scaleway 27** row, Window median < 1000 ms, Quick Look median < 1000 ms, 0 of 5 blank or failed, `mermaidCount` 5.
+- **PASS:** on the **iMac 15.7.7** row and the **Scaleway 27** row, Window median < 1000 ms, Quick Look median < 1000 ms, 0 of 5 blank or failed, `mermaidCount` 5 with 0 Mermaid errors in every run.
 - **FAIL-QL:** Quick Look is blank or failed in any run, or > 2 s, on either machine. BUSINESS-PLAN §12 then says "drop Quick Look from both apps and re-scope App 1 to window-only (or backlog #1)".
 - **FAIL-SPEED:** every run works but a median is ≥ 1000 ms.
 
@@ -1903,3 +1943,6 @@ Read each PNG, then run gstack `/design-review` on the six. Write `docs/reviews/
 ## Contract change requests
 
 CR 1–3 accepted and applied to master §3.1 and §3.2 (27 Oct); history in `docs/reviews/m00-consolidated.md`.
+
+- **CR-P1-2 (`dir="auto"` on top-level blocks only), applied to master §3.2 on 27 Oct (cubic C14).** Master §3.2 still put `dir="auto"` on `li`, `th`, `td`, `dt` and `dd`. On the build Mac (WebKit, macOS 15.7.7), with content inserted as a fragment the way `page.js` does it: an Arabic `ul dir=auto` whose `li`s also carry `dir=auto` resolves to `ltr`, and a `table dir=auto` with `td dir=auto` cells puts its first column on the left. Without the per-cell `dir`, the same list and table resolve to `rtl`, with the first column on the right. The cost is accepted: an English item in an Arabic list takes the list's RTL direction.
+- **CR 4 (§3.2 Steps; cubic C10 and C51): applied to master §3.2 (27 Oct).** The Mermaid options gain `secure`: Mermaid's six default keys plus `htmlLabels` (Task 5 Step 7). `page.js`'s main pass becomes `DOMPurify.sanitize(html, {...SANITIZE_CONFIG, SANITIZE_NAMED_PROPS: true, RETURN_DOM_FRAGMENT: true})`. Every `id` and `name` in `#doc` then carries `user-content-`, `RenderResult.headings[].id` is that DOM id, and `page.js` scrolls an in-page `#x` link to `user-content-x` (or `x`). `SANITIZE_CONFIG` itself is unchanged. Also affected: plan 07's footnote ids (`fn<N>` becomes `user-content-fn<N>` in the DOM) and its conditional `a[href^="#"]` handler, which this plan now owns.

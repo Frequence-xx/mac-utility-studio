@@ -320,7 +320,7 @@ Notes the doc must carry:
   - Expected: `smoke.txt` on each runner has 2 `PASS` lines and no `FAIL`.
   - Move each runner's files into `m14-arm/`, `m15-arm/` and `m26-arm/`.
   - If a Quick Look screenshot is black (headless session), mark R3 `—` for that runner with the reason.
-- [ ] **Step 4: Build Mac, R1–R11 manual pass** (`m15-intel`). Steps per row:
+- [ ] **Step 4: Build Mac, R1–R11 manual pass** (`m15-intel`). Run R10 first, so the update starts from a real b2 install; then R1 (which reinstalls rc1 from the quarantined DMG and runs the smoke script), R2–R9 and R11. Steps per row:
   - **R1:** download the DMG through Safari from the private release, so it gets the quarantine flag. Open it, drag to Applications, first launch. Expected: the standard "downloaded from the Internet" prompt naming Apple-checked software, and the app opens. Also run `bash scripts/smoke-dmg.sh <dmg> docs/gates/evidence/1.0/m15-intel/smoke`: 2 `PASS`.
   - **R2:** screenshot the System Settings path that enables the extension. This exact path becomes the FAQ text in Task 4. Also click the Welcome window's `Open System Settings` button (`QuickLookSetup.settingsURL`) and screenshot where it lands as `R2-deeplink.png`; plan 08 Task 11 Step 2 reads it for `m15-intel`, `m27-arm` and `m14-arm`.
   - **R3:** Space on each fixture in Finder. Expected:
@@ -338,7 +338,11 @@ Notes the doc must carry:
     1. Paste the `POLAR_QA_LICENSE_KEY` value with a trailing newline. Expected: Pro.
     2. Add `0.0.0.0 api.polar.sh` to `/etc/hosts`, run `sudo dscacheutil -flushcache`, then quit and relaunch. Expected: still Pro. Remove the line afterwards.
     3. Leave this Mac activated for the 403 test in Step 5.
-  - **R10 (K7, CX13):** `--no-upload` writes no appcast, so the production feed never offers an RC. Serve plan 03's local RC test feed listing the RC DMG, point the installed b2 at it with the Sparkle 2.10.1 feed override plan 03 verified, then Check for Updates. Expected: About shows `1.0.0-rc1`. Remove the override afterwards, as plan 03 describes, so Task 10 Step 7 tests the production feed.
+  - **R10 (K7, CX13), first:** `--no-upload` writes no appcast, so the production feed never offers an RC.
+    1. Install b2: mount `dist-release/markdown/beta-feed/TegelMarkdown-1.0.0-b2.dmg`, drag the app to Applications (replacing any copy) and launch it once. Watch the check fail first: `defaults read "/Applications/Tegel Markdown.app/Contents/Info" CFBundleShortVersionString` → `1.0.0-b2`.
+    2. Copy the RC DMG into that folder, re-run plan 03 Task 13 Step 6's `generate_appcast` and serve the folder as its Step 1 does (plan 03 Hand-off 3).
+    3. Quit, `open -a "Tegel Markdown" --args -SUFeedURL http://localhost:8765/appcast.xml` (the Sparkle 2.10.1 feed override plan 03 verified), then Check for Updates… → Install and Relaunch. Expected: the same `defaults read` → `1.0.0-rc1`, and About shows `1.0.0-rc1`.
+    4. Remove the override afterwards, as plan 03 describes, so Task 10 Step 7 tests the production feed.
   - **R11:** Copy Diagnostics, then `pbpaste > m15-intel/R11.txt`.
     - Expected: it contains the app version and `x86_64`.
     - `. scripts/lib/env.sh; grep -cF "$(envget POLAR_QA_LICENSE_KEY)" R11.txt` → `0`.
@@ -349,7 +353,7 @@ Notes the doc must carry:
   - **Operator:**
     - SSH parts: Claude via `REMOTE_MAC_*`;
     - GUI rows: the user over Screen Sharing, or Claude through the computer-use skill driving Screen Sharing on the build Mac.
-  - **Run:** `scp` the DMG, `Fixtures/` and plan 03's RC test feed files over, and serve the feed on that Mac for R10. Run `smoke-dmg.sh`, then R1–R11 as in Step 4.
+  - **Run:** `scp` the DMG, `Fixtures/` and plan 03's RC test feed folder (with Step 4's rc1 entry) over, and serve the feed on that Mac. Then, in Step 4's order: R10 first (b2 from the copied folder, then the update to rc1), then R1 with `smoke-dmg.sh`, R2–R9 and R11.
   - **R9 extra:** with both Macs activated, the call below (run on the build Mac) returns `403` [F3a]. Then deactivate on both Macs. Expected: the customer portal shows 0 activations (screenshot).
 
     ```bash
@@ -805,7 +809,7 @@ Expected: every line starts with `200`. During launch week it can run on `/loop 
   - **Release** (the 1.0.0 order: smoke the DMG, then publish that same file; K7):
     - `git tag -a v1.0.1 -m "1.0.1" && git push origin v1.0.1`; `scripts/release.sh markdown 1.0.1 --no-upload` → `$DMG`;
     - `gh release create v1.0.1 "$DMG" --title "1.0.1"` (private), read the CI minutes (Task 3 Step 3), then `gh workflow run smoke.yml --ref main -f tag=v1.0.1` → 3 × 2 `PASS`;
-    - 🔒 `scripts/release.sh markdown 1.0.1 --from-dmg "$DMG"` (no rebuild);
+    - 🔒 `scripts/release.sh markdown 1.0.1 --yes --from-dmg "$DMG"` (no rebuild; `--yes` only after the user's yes for 1.0.1);
     - site keys (plan 04 CR-5): on `content/release-1.0.1`, set `apps.markdown.version` → `"1.0.1"` and `downloadURL` → the printed `published …` URL, add the `/changelog/` entry, run review stages 2, 3 and 9, merge, and deploy with plan 04's production deploy command → `curl -s https://tegelapps.com/download/ | grep -cF "<downloadURL>"` ≥ 1;
     - Task 10 Step 7's `same-dmg` comparison with `v1.0.1` and the public 1.0.1 DMG URL → `same-dmg`;
     - `curl -s "<SUFeedURL>" | grep -c '<sparkle:shortVersionString>1.0.1<'` → `1`;
@@ -830,7 +834,7 @@ Expected: every line starts with `200`. During launch week it can run on `/loop 
     - the live Polar token scopes (`orders:read`, `products:read` only);
     - the checkout opt-in field (K9): unticked, not required, label exactly as in Task 2 Step 5.
 
-    Then a history scan: `git log -p $base..HEAD | grep -nE 'polar_[a-z]{2,4}_[A-Za-z0-9]{8,}|PRIVATE KEY|TEGEL-[A-Z0-9-]{8,}'`. Expected: no output.
+    Then a history scan: `git log -p $base..HEAD | grep -nE 'polar_(oat|pat)_[A-Za-z0-9]{8,}|PRIVATE KEY|TEGEL-[A-Z0-9-]{8,}'`. Expected: no output. It matches token prefixes only, because the checkout link's `polar_cl_…` id in `Release.xcconfig` is public (D16). Watch it first on canned lines: `printf 'polar_%s_abcdefgh12\n' oat cl | grep -cE 'polar_(oat|pat)_[A-Za-z0-9]{8,}'` → `1` (the token, not the link).
   - **Stage 5:** also Task 9's runbooks, asking "how does this launch or price change mislead a buyer or fail?"
   - **After stage 9's last round:** record `reviewed=$(git rev-parse HEAD)` in `m05.md`; Step 4 compares against it.
 - [ ] **Step 2: Design review** (DESIGN.md §12, gate m05; CLAUDE.md "Verification"). Run gstack `/design-review` on the 4 PH gallery PNGs, the OG image, 3 demo frames (`ffmpeg -ss <t> -i site/static/media/tegel-markdown-demo.mp4 -frames:v 1 <out>.png` at t = 3, 33, 45), the 8 `site/static/img/app1-*.png` (light and dark), the R8 Arabic UI shots, and the icon at 16/32/128/512 in Finder. Write `docs/reviews/design-m05.md` (Inputs, Findings P0/P1/P2, Guard output, Verdict). Expected: exact sizes; captions in the band, never over UI; no audio stream; every image a real capture; no P0/P1 open. Fix every P0/P1 in Task 5's files and re-run Task 5 Step 7.
@@ -845,7 +849,7 @@ Expected: every line starts with `200`. During launch week it can run on `/loop 
   - Commit and push.
 - [ ] **Step 5: Tag and build (Mon 7 Dec).** `git tag -a v1.0.0 -m "Tegel Markdown 1.0.0" && git push origin v1.0.0`, then `scripts/release.sh markdown 1.0.0 --no-upload` → `$DMG`.
 - [ ] **Step 6: Smoke the final build.** `gh release create v1.0.0 "$DMG" --title "1.0.0"` (private), read the CI minutes (Task 3 Step 3), then `gh workflow run smoke.yml --ref main -f tag=v1.0.0`. Expected: 3 runners × 2 `PASS`; `m15-intel` smoke on the same `$DMG` also 2 `PASS`.
-- [ ] **Step 7 🔒: Publish the smoked DMG (K7, CR-P2-2).** The user approves "publish Tegel Markdown 1.0.0 (the smoked DMG + appcast) to downloads.tegelapps.com". Then run `scripts/release.sh markdown 1.0.0 --from-dmg "$DMG"` (`$DMG` from Step 5, or `gh release download v1.0.0 --pattern '*.dmg'` into an empty folder): it signs the appcast and uploads that file, with no rebuild. Expected:
+- [ ] **Step 7 🔒: Publish the smoked DMG (K7, CR-P2-2).** The user approves "publish Tegel Markdown 1.0.0 (the smoked DMG + appcast) to downloads.tegelapps.com". Then run `scripts/release.sh markdown 1.0.0 --yes --from-dmg "$DMG"` (`--yes` only after that approval, plan 03; without a terminal the prompt aborts; `$DMG` from Step 5, or `gh release download v1.0.0 --pattern '*.dmg'` into an empty folder): it signs the appcast and uploads that file, with no rebuild. Expected:
   - the public DMG URL returns `200`;
   - customers get the bytes the runners smoked, i.e. the private release asset. Watch the comparison fail first, against the RC1 asset: `[ "$(gh release download v1.0.0-rc1 --pattern '*.dmg' --output - | shasum -a 256)" = "$(gh release download v1.0.0 --pattern '*.dmg' --output - | shasum -a 256)" ] || echo differs` → `differs`. Then `[ "$(curl -sL "<public DMG URL>" | shasum -a 256)" = "$(gh release download v1.0.0 --pattern '*.dmg' --output - | shasum -a 256)" ] && echo same-dmg` → `same-dmg`;
   - `curl -s "<SUFeedURL>" | grep -c '<sparkle:shortVersionString>1.0.0<'` → `1`;

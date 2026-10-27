@@ -12,7 +12,7 @@
   - the `.icon` app icon with its actool guard;
   - the screenshot, caption and gallery templates;
   - the design-review gate runbook.
-- **Tooling:** system fonts only, no bundled font files. HTML is rendered to PNG with gstack `browse`, WebKit renders through the existing `RendererWebView`, and icons compile with `xcrun actool`.
+- **Tooling:** system fonts only, no bundled font files. HTML templates are rendered to PNG with gstack `browse`; themes render through the existing `RendererWebView` and the hero prototypes through a plain `WKWebView`, so dark appearance and `ui-serif` behave as in Safari. Icons compile with `xcrun actool`.
 
 **Tech Stack:**
 - CSS custom properties and `@font-face local()` aliases, under the existing renderer CSP;
@@ -223,7 +223,7 @@ Master §2/§3 and CLAUDE.md apply (build Mac and evidence rules, product rules 
     - `font-variant-numeric: tabular-nums` in tables and prices (WDG 4.5);
     - `text-wrap: balance` on headings [V6];
     - `hanging-punctuation: first last` on prose [V6].
-- [ ] **Step 6: Write §7 Renderer themes.** It names `Renderer/src/css/{base,paper,ink,studio,print}.css` (Task 6) as the only home of every theme value, lists the required `--tg-*` token names and the three theme characters from Design direction, and states the rules the CSS follows: dark blocks are `screen and` + `:not([data-mode="print"])`, direction is read with `:dir()`, and Urdu needs `lang="ur"` for Nastaliq. It copies no table: plan 02 reads the CSS.
+- [ ] **Step 6: Write §7 Renderer themes.** It names `Renderer/src/css/{base,paper,ink,studio,print}.css` (Task 6) as the only home of every theme value, lists the required `--tg-*` token names and the three theme characters from Design direction, and states the rules the CSS follows: dark blocks are `screen and` + `:not([data-mode="print"])`, Increase Contrast blocks repeat the selector of the token block they override and come after it, direction is read with `:dir()`, and Urdu needs `lang="ur"` for Nastaliq. It copies no table: plan 02 reads the CSS.
 - [ ] **Step 7: Write §8 Motion** (hig-foundations motion "make motion optional"; apple-design animation-patterns review checklist).
   - **App:** system animations only. No custom animation longer than 0.25 s; none on document load. Outline jumps use `scroll-behavior: smooth` only under `prefers-reduced-motion: no-preference`.
   - **Site:** no motion that the user didn't trigger, and no scroll reveals. Hover/focus colour transitions are ≤ 150 ms and removed under reduced motion (WDG 6.1).
@@ -283,7 +283,7 @@ Master §2/§3 and CLAUDE.md apply (build Mac and evidence rules, product rules 
     - D-2: the Pro prompt is a `Window`, not a sheet;
     - D-3: plan 02's `68ch` becomes em measures [V5];
     - D-4: the ink Arabic face (open until Task 10).
-- [ ] **Step 13: Check, then commit.** Run `grep -n -i -E 'lorem|TBD|TODO' DESIGN.md docs/design/decisions.md`. Expected: no output. Commit `DESIGN.md docs/design/decisions.md`: "docs(design): DESIGN.md single source of truth and decisions log"
+- [ ] **Step 13: Check, then commit.** Run `grep -n -i -E 'lorem ipsum|TBD|TODO' DESIGN.md docs/design/decisions.md` (not bare `lorem`: §11 quotes CLAUDE.md's "placeholder lorem" ban). Expected: no output. Commit `DESIGN.md docs/design/decisions.md`: "docs(design): DESIGN.md single source of truth and decisions log"
 
 ### Task 2: Site tokens and the first design guards (TDD, Wed 28 Oct)
 
@@ -294,18 +294,18 @@ Master §2/§3 and CLAUDE.md apply (build Mac and evidence rules, product rules 
 **Interfaces:**
 - Produces:
   - `ratio(a: string, b: string) -> number`, the WCAG 2.x contrast ratio for two `#RRGGBB` values;
-  - `blocks(css: string) -> Array<{ media: string, selector: string, decls: Record<string,string> }>`, with brace-matching that handles one level of `@media` nesting and strips comments;
-  - `files(dir: string, exts: string[]) -> string[]`, a recursive listing that skips `node_modules`, `build` and dot-folders;
+  - `blocks(css: string) -> Array<{ media: string, selector: string, decls: Record<string,string> }>` in source order, with brace-matching that handles one level of `@media` nesting and strips comments;
+  - `files(dir: string, exts: string[]) -> string[]`, a recursive listing that skips `node_modules`, `build` and dot-folders, and returns `[]` for a folder that doesn't exist yet (on 28 Oct `Renderer/src/css`, `Apps` and `site/content` don't);
   - `read(path: string) -> string`, UTF-8 file contents.
 - All four live in `design.test.js`, which Tasks 6 and 11 extend. The test runs from `Renderer/`, but `read` and `files` take repo-relative paths (`site/…`, `Renderer/src/css`) and resolve them against `ROOT = join(import.meta.dir, '..', '..')`, the repo root. `files` returns repo-relative paths, so `read(f)` works on its output.
-- `tokens.css` holds exactly two blocks: `:root { … }` and `@media (prefers-color-scheme: dark) { :root { … } }`. It sets the colour tokens from Task 1 Step 4, plus `--space-1…8`, `--measure: 34rem`, `--wide: 68rem`, `--font: system-ui, -apple-system, sans-serif` and `--font-mono: ui-monospace, Menlo, monospace`.
+- `tokens.css` holds exactly four blocks, in this order: `:root { … }`, `@media (prefers-color-scheme: dark) { :root { … } }`, then DESIGN.md §5's Increase Contrast pair, `@media (prefers-contrast: more) { :root { --muted: <light --text>; --rule: #8E8E93 } }` and `@media (prefers-color-scheme: dark) and (prefers-contrast: more) { :root { --muted: <dark --text>; --rule: #6E6E73 } }` (last, so it wins in dark). It sets the colour tokens from Task 1 Step 4, plus `--space-1…8`, `--measure: 34rem`, `--wide: 68rem`, `--font: system-ui, -apple-system, sans-serif` and `--font-mono: ui-monospace, Menlo, monospace`.
 
 - [ ] **Step 1: Write the failing tests in `Renderer/test/design.test.js`.**
 
 ```js
 const SITE_TOKENS = 'site/static/css/tokens.css';
 const siteVars = dark => Object.assign({}, ...blocks(read(SITE_TOKENS))
-  .filter(b => b.selector === ':root' && (dark ? /prefers-color-scheme:\s*dark/.test(b.media) : b.media === ''))
+  .filter(b => b.selector === ':root' && !/prefers-contrast/.test(b.media) && (dark ? /prefers-color-scheme:\s*dark/.test(b.media) : b.media === ''))
   .map(b => b.decls));
 
 test('ratio matches WCAG reference values', () => {
@@ -340,9 +340,10 @@ test('UI strings and templates contain no emoji', () => {
 - [ ] **Step 4: Run.** Same command. Expected: PASS, 6 tests, 0 fail.
 - [ ] **Step 5: Watch each guard fail once, then restore** (CLAUDE.md coding rule 4: an unwatched guard isn't verified).
   - Temporarily set `--muted: #8E8E93` in light: the floor test fails (3.26).
+  - Temporarily set `--muted: #6E6E73` in the plain dark block: the dark floor test fails (≈ 3.3), which proves the Increase Contrast block after it doesn't mask the real dark value.
   - Temporarily add `letter-spacing: .02em` to `tokens.css`: the letter-spacing test fails.
   - Temporarily add `background: linear-gradient(red, blue)`: the banned-pattern test fails.
-  - Revert all three; PASS again. Note the three failure lines in the commit body.
+  - Revert all four; PASS again. Note the four failure lines in the commit body.
 - [ ] **Step 6: Commit** `Renderer/test/design.test.js site/static/css/tokens.css`: "test(design): contrast, letter-spacing, banned-pattern and emoji guards; site tokens"
 
 ### Task 3: App UI spec (Thu 29 – Fri 30 Oct)
@@ -581,7 +582,7 @@ Run **Procedure P (master §11)** stages 2, 3, 4 and 9 only: master §11 names t
 ### Task 6: Renderer themes (TDD, Tue 3 – Wed 4 Nov)
 
 **Files:**
-- Modify: `Renderer/src/css/base.css`, `paper.css`, `print.css`, `Renderer/src/index.html`
+- Modify: `Renderer/src/css/base.css`, `paper.css`, `print.css`, `Renderer/src/index.html`, `Renderer/build.js` (plan 01's CSS copy list)
 - Create: `Renderer/src/css/ink.css`, `studio.css`
 - Regenerate: `Packages/TegelKit/Sources/TegelKit/Resources/Renderer/`
 - Test: `Renderer/test/design.test.js` (extend); create `Packages/TegelKit/Tests/TegelKitTests/WebView/DesignRenderTests.swift` and `Packages/TegelKit/Tests/TegelKitTests/FontCoverageTests.swift`
@@ -594,6 +595,7 @@ Run **Procedure P (master §11)** stages 2, 3, 4 and 9 only: master §11 names t
 - **Produces** (this plan owns every theme value and token name; plan 02 Task 10 then only wires the picker and ThemeTests):
   - each theme sets tokens under `:root[data-theme="<name>"]`;
   - the dark values live under `@media screen and (prefers-color-scheme: dark) { :root[data-theme="<name>"]:not([data-mode="print"]) { … } }`, so print and PDF are always light (Review Focus 1);
+  - each theme file ends with its Increase Contrast pair (DESIGN.md §5), under the same selectors as the token blocks it overrides: `@media (prefers-contrast: more) { :root[data-theme="<name>"] { --tg-muted: <light --tg-fg>; --tg-rule: #8E8E93 } }`, then `@media screen and (prefers-color-scheme: dark) and (prefers-contrast: more) { :root[data-theme="<name>"]:not([data-mode="print"]) { --tg-muted: <dark --tg-fg>; --tg-rule: #6E6E73 } }`. Equal specificity plus a later position is what makes each one win; a `:root` override in `base.css` would lose to both token blocks;
   - required tokens: `--tg-bg --tg-fg --tg-muted --tg-link --tg-code-bg --tg-rule --tg-font --tg-head-font --tg-mono --tg-size --tg-code-size --tg-lh --tg-lh-rtl --tg-head-lh --tg-measure --tg-radius`;
   - `base.css` defines `--tg-syn-*` on `:root` (light) and in the same screen+dark block (dark).
 
@@ -669,7 +671,7 @@ At the top of `base.css` (the PostScript names come from [V4]; `R_AR` = `U+0600-
 | Mermaid | `div.mermaid { display: flex; justify-content: center; margin-block: 0 1lh } div.mermaid svg { max-inline-size: 100%; height: auto }` |
 | Mermaid error | `.mermaid-error`: `border-inline-start: 3px solid var(--tg-syn-del)`, padding 8px 12px, mono `--tg-code-size` |
 | Front matter | `details.frontmatter` summary in `--tg-muted`, body in mono |
-| Increase Contrast | the `prefers-contrast: more` overrides from DESIGN.md §5 |
+| Increase Contrast | `@media (prefers-contrast: more) { a { text-decoration-color: var(--tg-link) } }`, after the Links rule. The token overrides live in the theme files (Interfaces) |
 | Reduce Motion | `@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth } }` |
 
 **Quick Look:**
@@ -687,9 +689,9 @@ At the top of `base.css` (the PostScript names come from [V4]; `R_AR` = `U+0600-
 const THEMES = ['paper', 'ink', 'studio'];
 const REQUIRED = ['--tg-bg','--tg-fg','--tg-muted','--tg-link','--tg-code-bg','--tg-rule','--tg-font','--tg-head-font','--tg-mono','--tg-size','--tg-code-size','--tg-lh','--tg-lh-rtl','--tg-head-lh','--tg-measure','--tg-radius'];
 const COLOURS = ['--tg-bg','--tg-fg','--tg-muted','--tg-link','--tg-code-bg','--tg-rule'];
-const themeVars = (t, dark) => Object.assign({}, ...blocks(read(`Renderer/src/css/${t}.css`))
-  .filter(b => b.selector.startsWith(`:root[data-theme="${t}"]`) && (dark ? /screen and \(prefers-color-scheme:\s*dark\)/.test(b.media) : b.media === ''))
-  .map(b => b.decls));
+const isTokenBlock = (b, t, dark) => b.selector.startsWith(`:root[data-theme="${t}"]`) && !/prefers-contrast/.test(b.media)
+  && (dark ? /screen and \(prefers-color-scheme:\s*dark\)/.test(b.media) : b.media === '');
+const themeVars = (t, dark) => Object.assign({}, ...blocks(read(`Renderer/src/css/${t}.css`)).filter(b => isTokenBlock(b, t, dark)).map(b => b.decls));
 const synVars = dark => Object.assign({}, ...blocks(read('Renderer/src/css/base.css'))
   .filter(b => b.selector.startsWith(':root') && (dark ? /prefers-color-scheme:\s*dark/.test(b.media) : b.media === '')).map(b => b.decls));
 
@@ -706,7 +708,24 @@ for (const t of THEMES) for (const dark of [false, true]) test(`${t} ${dark ? 'd
 test('theme CSS reads direction with :dir(), never a [dir="rtl"|"ltr"] selector', () => {
   for (const f of files('Renderer/src/css', ['.css'])) expect([f, read(f)]).not.toEqual([f, expect.stringMatching(/\[dir\s*=\s*["']?(rtl|ltr)/i)]);
 });
+// Same selector = same specificity, so the later block is the one applied.
+for (const t of THEMES) for (const dark of [false, true]) test(`${t} ${dark ? 'dark' : 'light'}: Increase Contrast tokens win the cascade`, () => {
+  const bs = blocks(read(`Renderer/src/css/${t}.css`));
+  const tok = bs.findLastIndex(b => isTokenBlock(b, t, dark));
+  const hc = bs.findLastIndex(b => /prefers-contrast:\s*more/.test(b.media) && /prefers-color-scheme:\s*dark/.test(b.media) === dark);
+  expect([t, dark, hc > tok, bs[hc]?.selector]).toEqual([t, dark, true, bs[tok]?.selector]);
+  const v = themeVars(t, dark), up = s => s?.toUpperCase();
+  expect([up(bs[hc].decls['--tg-muted']), up(bs[hc].decls['--tg-rule'])]).toEqual([up(v['--tg-fg']), dark ? '#6E6E73' : '#8E8E93']);
+  expect(ratio(bs[hc].decls['--tg-rule'], v['--tg-bg'])).toBeGreaterThanOrEqual(3);
+});
+test('the renderer bundle ships every stylesheet index.html links', () => {
+  const linked = [...read('Renderer/src/index.html').matchAll(/<link[^>]+href="([^"]+\.css)"/g)].map(m => m[1]);
+  expect(linked).toEqual(expect.arrayContaining(['ink.css', 'studio.css']));
+  for (const f of linked) expect([f, existsSync(join(ROOT, 'Packages/TegelKit/Sources/TegelKit/Resources/Renderer', f))]).toEqual([f, true]);
+});
 ```
+
+  Add `existsSync` to the file's `node:fs` import.
 
 - [ ] **Step 2: Write the failing Swift tests.**
 
@@ -733,7 +752,7 @@ final class FontCoverageTests: XCTestCase {
 
 | Test | Setup | Assertion |
 |---|---|---|
-| `testProseMeasureIs60To75Characters` | 1400 px wide; a 400-word English paragraph; each theme | Characters on the first line: paper and ink 60…75, studio 60…80. Count with the range walk below |
+| `testProseMeasureIs60To75Characters` | 1400 px wide; a 400-word English paragraph; each theme | Characters on the first line: 60…75 in every theme (CLAUDE.md). Count with the range walk below |
 | `testRTLScriptInCodeIsNotStretched` | `"قيمة الإعداد الافتراضية"` and `"ערך ברירת המחדל"` as a paragraph and as inline code | Range width of code ÷ width of prose < 1.15 (Courier New is ≈ 1.42 [V2]). `document.fonts` has a `TG RTL Code` face with `status === "loaded"` |
 | `testPrintModeStaysLightInDarkAppearance` | `.darkAqua`, mode `.print`, each theme | html background is `rgb(255, 255, 255)` or studio's `rgb(247, 248, 250)`; `p` colour has relative luminance < 0.05 |
 | `testWindowModeFollowsDarkAppearance` | `.darkAqua`, mode `.window`, paper | html background is `rgb(30, 30, 30)` (capability present, not just bug absent) |
@@ -749,16 +768,18 @@ const y0 = top(0); for (let i = 1; i < t.length; i++) if (top(i) > y0 + 1) retur
 ```
 
 - [ ] **Step 3: Run.**
-  - `cd Renderer && ~/.local/bin/bun test test/design.test.js`. Expected: FAIL. ink/studio fail with `ENOENT`; paper fails on missing tokens (plan 01's paper.css has no colour tokens).
+  - `cd Renderer && ~/.local/bin/bun test test/design.test.js`. Expected: FAIL. ink/studio fail with `ENOENT`; paper fails on missing tokens (plan 01's paper.css has no colour tokens) and on its missing Increase Contrast pair; the bundle test fails because `index.html` doesn't link `ink.css` or `studio.css` yet.
   - `swift test --package-path Packages/TegelKit --filter 'FontCoverageTests|DesignRenderTests'`. Under plan 01 Branch B, use `xcodebuild test -project Tegel.xcodeproj -scheme TegelKitHostTests -derivedDataPath build -only-testing:TegelKitHostTests/DesignRenderTests` for the WebKit class. Expected: FAIL on the face set, measure (`68ch` gives ≈ 91), code stretch, Urdu and print-light.
 - [ ] **Step 4: Implement the CSS** per the tables.
   - Link `ink.css` and `studio.css` in `index.html` in this order: base, paper, ink, studio, print. Plan 02 Task 10 asks for the same order.
-  - Run `make renderer`.
+  - Run `make renderer && (cd Renderer && ~/.local/bin/bun test test/design.test.js -t 'bundle ships')`. Expected: FAIL `[ "ink.css", false ]`: plan 01's `build.js` copies a fixed list, `src/css/{base,paper,print}.css`.
+  - In `Renderer/build.js`, extend that list to `src/css/{base,paper,ink,studio,print}.css`. Run the same command. Expected: PASS.
 - [ ] **Step 5: Run both commands again.** Expected: PASS. Record the measured characters per line for each theme in the commit body.
 - [ ] **Step 6: Watch the guards fail.**
-  - Temporarily change ink's dark block to plain `@media (prefers-color-scheme: dark)`. `testPrintModeStaysLightInDarkAppearance` must fail for ink. Revert.
-  - Temporarily add `[dir="rtl"] p { line-height: 2 }` to `ink.css`. The `:dir()` guard must fail, naming `Renderer/src/css/ink.css`. Revert; both pass.
-- [ ] **Step 7: Commit** `Renderer/src Renderer/test/design.test.js Packages/TegelKit/Sources/TegelKit/Resources/Renderer Packages/TegelKit/Tests/TegelKitTests/FontCoverageTests.swift Packages/TegelKit/Tests/TegelKitTests/WebView/DesignRenderTests.swift`: "feat(renderer): paper, ink and studio themes per DESIGN.md: RTL code and ink aliases, em measures, print stays light"
+  - Temporarily drop `:not([data-mode="print"])` from ink's dark token selector (the test renders on screen, so `screen and` can't catch it), then `make renderer`. `testPrintModeStaysLightInDarkAppearance` must fail for ink. Revert.
+  - Temporarily add `[dir="rtl"] p { line-height: 2 }` to `ink.css`. The `:dir()` guard must fail, naming `Renderer/src/css/ink.css`. Revert.
+  - Temporarily move ink's dark Increase Contrast block into `base.css` as `@media (prefers-contrast: more) { :root { … } }`, the placement that loses the cascade. The "ink dark: Increase Contrast tokens win the cascade" guard must fail. Revert; all pass.
+- [ ] **Step 7: Commit** `Renderer/src Renderer/build.js Renderer/test/design.test.js Packages/TegelKit/Sources/TegelKit/Resources/Renderer Packages/TegelKit/Tests/TegelKitTests/FontCoverageTests.swift Packages/TegelKit/Tests/TegelKitTests/WebView/DesignRenderTests.swift`: "feat(renderer): paper, ink and studio themes per DESIGN.md: RTL code and ink aliases, em measures, print stays light"
 
 ### Task 7: Mermaid follows the theme (TDD, Wed 4 Nov)
 
@@ -783,7 +804,7 @@ const y0 = top(0); for (let i = 1; i < t.length; i++) if (top(i) > y0 + 1) retur
 | `fontFamily` | `--tg-font` |
 | `fontSize` | `parseFloat(--tg-size) * 0.875 + 'px'` |
 
-`mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true, htmlLabels: false, theme: 'base', themeVariables: mermaidVars() })`. The fill test below passes only because that svg-profile pass keeps Mermaid's own `<style>`.
+`mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true, htmlLabels: false, secure: ['secure', 'securityLevel', 'startOnLoad', 'maxTextSize', 'suppressErrorRendering', 'maxEdges', 'htmlLabels'], theme: 'base', themeVariables: mermaidVars() })`. Keep plan 01's `secure` list exactly. The fill test below passes only because that svg-profile pass keeps Mermaid's own `<style>`.
 
 - [ ] **Step 1: Write the failing test** `testMermaidFollowsAppearanceChange`.
   - Render `Fixtures/markdown/mermaid-basic.md`, paper, `.darkAqua`.
@@ -882,7 +903,7 @@ sync:
     - "عنصر عربي يحتوي على مصطلح إنجليزي: README.md"
     - "פריט בעברית עם מספר: 4,096 בתים"
 - [ ] **Step 4: Check that they render.**
-  - Run `make run-app FILES="docs/design/samples/ar-spec.md docs/design/samples/mixed.md"`. Expected: headings and paragraphs right-aligned, code blocks LTR, Mermaid flowing right to left, no Courier-looking Arabic in code.
+  - Run `make build && open -a "$PWD/build/Build/Products/Debug/Tegel Markdown.app" docs/design/samples/ar-spec.md docs/design/samples/mixed.md` (plan 01's target and app path; plan 02's `make run-app` isn't on this branch). Expected: headings and paragraphs right-aligned, code blocks LTR, Mermaid flowing right to left, no Courier-looking Arabic in code.
   - Run `grep -c -P '[\x{1F300}-\x{1FAFF}]' docs/design/samples/*.md`. Expected: 0 for every file.
 - [ ] **Step 5: Commit** `docs/design/samples`: "docs(design): EN, AR and mixed-direction sample documents"
 
@@ -900,7 +921,7 @@ sync:
 | M-A (recommended) | Markdown | cobalt `srgb:0.12157,0.30588,0.61176,1` | two horizontal bars 560×136, y 292 and 596, white, `opacity 0.7` | two vertical bars 136×560, x 292 and 596, white (the `#`; rendered in [V13]) |
 | M-B | Markdown | porcelain #F5F7FA | four corner quarter-circles, r 120, cobalt at 30 % (the Delft corner motif, geometric) | the `#` in cobalt |
 | M-C | Markdown | cobalt | a `#` | a heading bar 560×96 above the `#` (Markdown `#` + heading) |
-| D-A (recommended) | Data | manganese #5A3757 | 3×3 cells 168×136, gap 32, white `opacity 0.6` | the top row of cells solid white (the header row) |
+| D-A (recommended) | Data | manganese #5A3757 | 2×2 cells 196×136 at x 232/596, y 292/596 (gaps 168, the glyph rule), white `opacity 0.6` | the top row of cells solid white (the header row) |
 | D-B | Data | porcelain #F5F7FA | grid cells in manganese at 40 % | the header row in manganese |
 | D-C | Data | manganese | `{` `}` braces built from rounded rects | a centred 2×2 cell block |
 | S-A (recommended) | Studio mark (site, favicon, OG) | none (an SVG in a 24×24 viewBox) | 2×2 rounded squares in `currentColor` | top-trailing square in cobalt (plan 04 logo) |
@@ -911,14 +932,14 @@ sync:
 - [ ] **Step 2: Compile every app concept.**
 
 ```bash
-for d in docs/design/icons/concepts/[MD]-*; do id=$(basename $d); o=$(mktemp -d)
+for d in docs/design/icons/concepts/[MD]-[A-Z]; do id=$(basename $d); o=$(mktemp -d)
   cp -R $d $o/AppIcon.icon && xcrun actool --compile $o --platform macosx --minimum-deployment-target 14.0 --app-icon AppIcon \
     --output-partial-info-plist $o/p.plist --standalone-icon-behavior all $o/AppIcon.icon >/dev/null 2>&1
   iconutil -c iconset $o/AppIcon.icns -o docs/design/icons/concepts/$id.iconset; done
-ls docs/design/icons/concepts/*.iconset | wc -l
+ls -d docs/design/icons/concepts/*.iconset | wc -l; ls docs/design/icons/concepts/*.iconset/*.png | wc -l
 ```
 
-  Expected: 6 iconsets, each with 10 PNGs. The `.iconset` folders are scratch output: don't commit them; add `docs/design/icons/concepts/*.iconset/` to `.gitignore`.
+  Expected: `6`, then `60` (10 PNGs each). The `.iconset` folders are scratch output: don't commit them; add `docs/design/icons/concepts/*.iconset/` to `.gitignore`.
 - [ ] **Step 3: Build `legibility.html`.** It is a grid with one row per concept and columns 16, 32, 128, 512 and 1024 (the 1024 is `icon_512x512@2x`). Each image is drawn at 1× CSS size and again at 8× with `image-rendering: pixelated`, on a light row and a dark row. Render it with `$B viewport 1600x1400`, then `$B goto file://$PWD/docs/design/icons/legibility.html`, then `$B screenshot docs/design/proto/icons-legibility.png`.
 - [ ] **Step 4: Inspect.** Open the PNG with the Read tool. Pass criteria per concept, written into `decisions.md` D-5:
   - at 16 px, M-* shows two separate vertical strokes, and D-* shows the header row separate from the body;
@@ -939,9 +960,10 @@ ls docs/design/icons/concepts/*.iconset | wc -l
   - `testSnapshotThemes` runs only when `TG_SNAPSHOT_DIR` is set (`XCTSkipUnless`).
   - For each sample × theme × appearance at 900×1100, it writes `<dir>/theme-<theme>-<sample>-<light|dark>.png` via `webView.takeSnapshot(with:)` → `NSBitmapImageRep` → PNG.
   - Variants inject a test-only `<style>` through `js`; the inline `<style>` is allowed by `style-src 'unsafe-inline'`.
+  - `testSnapshotHeroes` (same opt-in) loads each `docs/design/proto/hero-*.html` (they link `site/static/css/tokens.css`) into a plain `WKWebView` with read access to the repo root (site prototypes, not renderer documents) at 1440×900 and 390×844, once with `appearance` `.aqua` and once with `.darkAqua`, and writes `<dir>/hero-<v>-<w>-<light|dark>.png` the same way. The web view's appearance is what makes `@media (prefers-color-scheme: dark)` match, as in `testWindowModeFollowsDarkAppearance`; the CSS `color-scheme` property doesn't. Before each shot it asserts that `--bg` on `:root` reads `#FFFFFF` (light) or `#1E1E1E` (dark), so a light "dark" shot fails. WebKit also resolves `ui-serif` to New York, which Chromium can't [V6], so hero-b shows the face D-1 is about.
 
 - [ ] **Step 1: Theme pairings** (apple-design ui-prototyping: go wide → remix → lived-in → tune; named variants).
-  - Run `TG_SNAPSHOT_DIR=$PWD/docs/design/proto swift test --package-path Packages/TegelKit --filter DesignRenderTests/testSnapshotThemes`, with these variants:
+  - Run `TG_SNAPSHOT_DIR=$PWD/docs/design/proto swift test --package-path Packages/TegelKit --filter DesignRenderTests/testSnapshotThemes`. Under plan 01 Branch B, run Task 6 Step 3's `xcodebuild` line with `-only-testing:TegelKitHostTests/DesignRenderTests/testSnapshotThemes` and the variable as `TEST_RUNNER_TG_SNAPSHOT_DIR=…`: xcodebuild passes only `TEST_RUNNER_`-prefixed variables to the test process, prefix stripped (`man xcodebuild`). The variants:
 
     | Variant | Ink Arabic face |
     |---|---|
@@ -961,7 +983,8 @@ ls docs/design/icons/concepts/*.iconset | wc -l
     | hero-b | no screenshot: the live typeset passage itself as the hero, with `ui-serif, Charter, Georgia, serif` headlines (this tests D-1) |
     | hero-c | Quick Look first: a Finder window with the Quick Look panel |
 
-  - Render each at 1440×900 and 390×844, light and dark, with `$B viewport …` and `$B screenshot docs/design/proto/hero-<v>-<w>-<scheme>.png` (set dark through the `?scheme=dark` query, which the template maps to `color-scheme`). Expected: 12 PNGs.
+  - Write the three files, then render them with Step 1's command, filtered to `DesignRenderTests/testSnapshotHeroes` (WebKit, not gstack browse). Expected: PASS and 12 `hero-*.png` files.
+  - Watch the `--bg` assertion fail once: temporarily give the dark pass `.aqua`; the test fails on `#FFFFFF`. Revert; PASS.
 - [ ] **Step 3: Write `decisions.md` rows D-1 and D-4…D-8,** each with its image paths and a one-paragraph rationale.
   - The brand colour row shows cobalt #1F4E9C (7.99:1 on white), ultramarine #1E3F8A (9.84) and porcelain blue #2C5AA0 (6.82). It recommends cobalt, because plan 04 already uses it.
 - [ ] **Step 4: USER CHECKPOINT (founder taste call).**
@@ -969,6 +992,7 @@ ls docs/design/icons/concepts/*.iconset | wc -l
   - Record the answers as `approved`, by "founder", with the date.
   - If there's no answer within 24 h, mark the recommendations `provisional` and continue. A later pick reruns Tasks 11–12 for that item only.
 - [ ] **Step 5: Apply decided changes.** If D-4 or D-8 differs from the current CSS, edit `ink.css`, `studio.css` or `base.css` and re-run Task 6's commands. Expected: PASS.
+  - A D-4 change also updates `FontCoverageTests`' expected face set to the new `local()` names in the same edit (SF Arabic: `GeezaPro`, `GeezaPro-Bold`). The letter list stays: an Al Nile pick fails it by design (no ک or ی [V4]), so report that to the founder instead of loosening the test.
 - [ ] **Step 6: Commit** `docs/design/proto docs/design/decisions.md Packages/TegelKit/Tests/TegelKitTests/WebView/DesignRenderTests.swift Renderer/src Packages/TegelKit/Sources/TegelKit/Resources/Renderer`: "design: prototypes and recorded decisions D-1, D-4..D-8"
 
 ### Task 11: App icon build, guard and runner evidence (TDD, Fri 6 – Sat 7 Nov)
@@ -1042,19 +1066,27 @@ ls /System/Library/Fonts /System/Library/Fonts/Supplemental | grep -E 'GeezaPro|
 - [ ] **Step 8: Commit** `Apps/Markdown/App/AppIcon.icon project.yml Renderer/test/design.test.js .github/workflows/design-shots.yml`: "feat(icon): Tegel Markdown AppIcon.icon with ten-size actool guard; design-shots workflow"
 - [ ] **Step 9: Land the workflow on `main`, then run it on the branch.** GitHub dispatches only workflows that exist on the default branch. This needs `gh auth login` by the user (CLAUDE.md Tools); if that hasn't happened, ask, and record the step as blocked.
 
+  First, still on `m09-design`, a cold code-review subagent reviews `.github/workflows/design-shots.yml` for: SHAs equal to the table, `permissions: contents: read`, `workflow_dispatch` only, no secrets, the checksum before `unzip`, `xcode-select` before `make build`, and no build step in `shots`. Expected: no P0/P1. Fixes are new commits on `m09-design`, never edits on `main`, so the branch is the only place the file changes. Then copy it:
+
 ```bash
-git switch main && git pull --ff-only && git checkout m09-design -- .github/workflows/design-shots.yml
+git switch main && git pull --ff-only
+git diff --quiet main m09-design -- .github/workflows/design-shots.yml; echo "differs=$?"   # differs=1: main has no copy yet
+git checkout m09-design -- .github/workflows/design-shots.yml
 git commit -m "ci: design-shots workflow, dispatch only" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git diff --quiet main m09-design -- .github/workflows/design-shots.yml; echo "differs=$?"   # differs=0: the copies are identical
 ```
 
-  Before pushing, a cold code-review subagent reviews `git show HEAD` for: SHAs equal to the table, `permissions: contents: read`, `workflow_dispatch` only, no secrets, the checksum before `unzip`, `xcode-select` before `make build`, and no build step in `shots`. Expected: no P0/P1; fix and amend until clean. The branch doesn't merge `main` back: it already holds the identical file, so the final merge adds it cleanly and `$DA` stays valid.
+  The branch doesn't merge `main` back: it already holds the identical file, so the final merge adds it cleanly and `$DA` stays valid. If the file has to change again before that merge, change it on `m09-design` and repeat this block.
 
 ```bash
 git push origin main && git switch m09-design && git push origin m09-design
+OLD=$(gh run list --workflow design-shots.yml --branch m09-design -L1 --json databaseId -q '.[0].databaseId')
 gh workflow run design-shots.yml --ref m09-design -f run_app_shots=false
-ID=$(gh run list --workflow design-shots.yml --branch m09-design -L1 --json databaseId -q '.[0].databaseId')
-gh run watch "$ID" && gh run download "$ID" -n design-shots-macos-14 -n design-shots-macos-26 -D docs/design/proto/runner
+for i in $(seq 30); do ID=$(gh run list --workflow design-shots.yml --branch m09-design -L1 --json databaseId -q '.[0].databaseId'); [ -n "$ID" ] && [ "$ID" != "$OLD" ] && break; sleep 2; done
+[ "$ID" != "$OLD" ] && gh run watch "$ID" && gh run download "$ID" -n design-shots-macos-14 -n design-shots-macos-26 -D docs/design/proto/runner
 ```
+
+  `gh workflow run` creates the run asynchronously, so the loop waits up to 60 s for a run ID that differs from the one before the dispatch.
 
   Expected:
   - the `build` job prints `Xcode 26.3`, and both `shots` legs start from its artefact;
@@ -1074,7 +1106,7 @@ gh run watch "$ID" && gh run download "$ID" -n design-shots-macos-14 -n design-s
   - finds the frontmost layer-0 window whose `kCGWindowOwnerName` equals `<owner-name>`, using `swift -e` with `CGWindowListCopyWindowInfo`;
   - runs `screencapture -x [-o] -l <id> <out.png>`; the native window shadow is kept unless `noshadow` is passed;
   - exits 2 with "no window for <owner-name>" when nothing matches.
-- `gallery.html?img=<path>&caption=<text>&scheme=light|dark&dir=ltr|rtl` renders at 1270×760:
+- `gallery.html?img=<path>&caption=<text>&scheme=light|dark&dir=ltr|rtl` renders at 1270×760. A script sets `data-scheme` from the query, and the inlined light and dark values sit under `[data-scheme="light"]` and `[data-scheme="dark"]`. The page has no `prefers-color-scheme` query, because the renderer's appearance doesn't follow the URL:
   - background `--surface`;
   - the caption top-start at 64 px from the left and 56 px from the top, 34 px weight 600 `--text`, one line of at most 48 characters;
   - the window shot scaled to height 560 and centred horizontally at y 152.
@@ -1085,7 +1117,14 @@ gh run watch "$ID" && gh run download "$ID" -n design-shots-macos-14 -n design-s
 - **Demo frame:** the 1536×960 recording, centred on a 1920×1080 #F5F5F7 canvas, sits above a 120 px caption band. Captions are PNG bands overlaid at y 960, because the build Mac's ffmpeg has no `drawtext` [V18]. This is the chosen caption path (decided 27 Oct): plan 05 Task 5 uses these bands and drops `drawtext`, Arial and the `ffmpeg-full` install.
 - **One-time human step:** grant the terminal app Screen Recording and Accessibility in System Settings › Privacy & Security on the build Mac. `screencapture -l` needs both, and so does any window resizing through System Events.
 
-- [ ] **Step 1: Write the script.** Check it with `make run-app FILES="docs/design/samples/en-spec.md" & sleep 3; scripts/window-shot.sh "Tegel Markdown" /tmp/w.png && sips -g pixelWidth /tmp/w.png`. Expected: a width > 0. Run `scripts/window-shot.sh Nope /tmp/x.png; echo $?` → `2`.
+- [ ] **Step 1: Write the script.** Check it against plan 01's build (plan 02's `make run-app` isn't on this branch), polling for the window for up to 30 s instead of guessing a delay:
+
+```bash
+rm -f /tmp/w.png && make build && open -a "$PWD/build/Build/Products/Debug/Tegel Markdown.app" docs/design/samples/en-spec.md
+for i in $(seq 30); do scripts/window-shot.sh "Tegel Markdown" /tmp/w.png && break; sleep 1; done; sips -g pixelWidth /tmp/w.png
+```
+
+  Expected: a width > 0. Run `scripts/window-shot.sh Nope /tmp/x.png; echo $?` → `2`.
 - [ ] **Step 2: Write both templates.** They use system fonts, `tokens.css` values inlined (the templates aren't served), and no external requests.
 - [ ] **Step 3: Render the samples.**
 
@@ -1137,7 +1176,7 @@ ffmpeg -hide_banner -y -loop 1 -t 3 -i docs/design/proto/win-en-light.png -loop 
 
 Run **Procedure P (master §11)** with id `m09`, branch `m09-design` and `BASE=$DA` from m09.md (Task 5), not a fresh merge-base: Drop A is already on `main`, and `$DA` keeps plan 01's diff out while covering Drop A again. The diff touches renderer HTML/JS (`page.js`, `index.html`), so stage 4 runs. Deltas:
 
-- [ ] **Step 1: Stage 2** runs `make check && (cd site && ~/.local/bin/bun test) && (cd Renderer && ~/.local/bin/bun test test/design.test.js)`.
+- [ ] **Step 1: Stage 2** runs `make check && (cd Renderer && ~/.local/bin/bun test test/design.test.js)`. There's no site suite to run: `site/test` comes with plan 04's branch, which merges after this one (its first deploy waits for Drop B), and `bun test` with no test files exits 1.
 - [ ] **Step 2: Stage 4, `/cso` scope:** `page.js` (the Mermaid re-render and its sanitised insertion), the `@font-face local()` aliases under the CSP, `design-shots.yml` (`workflow_dispatch` only, SHA pins, no secrets, the xcodegen checksum, the artefact hand-off) and `window-shot.sh`.
 - [ ] **Step 3: Stage 5 questions for `/codex`:** can a document still print dark? Can a missing local face break Arabic joining? Can a Mermaid re-render inject markup?
 - [ ] **Step 4: Stage 10 is Task 13**, the m09 design review. Its P0/P1 findings join stage 6.

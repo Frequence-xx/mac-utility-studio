@@ -36,7 +36,7 @@ Master §2/§3 and `CLAUDE.md` apply (platform and universal binary, build Mac a
 
 1. **Hostile TeX and plain dollar signs** (`Intro $14 until 14 Dec, then $19.`, `\href{javascript:…}`, `\includegraphics{https://…}`, `\htmlData`, `</span><script>`, a `\def` bomb). Expected: prices stay text; no element or attribute that can run script or fetch; the bomb renders an error in < 500 ms. *(Task A1.)*
 2. **Hostile or broken custom CSS** (`@import`, remote `url()` backgrounds/fonts, `</style><script>`, a 300 KB file, a stylesheet deleted after it was picked). Expected: zero network connections, no script, the size cap enforced, theme fallback with a notice. *(Task A3.)*
-3. **Mixed bidi in the new blocks:** Arabic footnotes, inline math in an Arabic paragraph, an Arabic title in the PDF header. Expected: footnote `<li dir="auto">`, math stays LTR, the header stamps without changing the page count. *(Tasks A1, A2, A4.)*
+3. **Mixed bidi in the new blocks:** Arabic footnotes, inline math in an Arabic paragraph, an Arabic title in the PDF header. Expected: the footnotes `<section>` takes `dir="auto"` like every top-level block (plan 01; never per item), math stays LTR, the header stamps without changing the page count. *(Tasks A1, A2, A4.)*
 4. **Keys and builds crossing channels:** an App 2 key pasted into App 1; a v1 key in v2; MAS and DMG copies on one Mac; leftover Sparkle/Polar code in a store build. Expected: "this key is for another Tegel app"; v1 features kept forever; `verify-store-build.sh` fails on any leftover. *(Tasks A0, B1, B5, C3, F1.)*
 5. **App 3 privacy edges:** a password field; an app that exposes no AX selection; permission revoked mid-session; permission after a Sparkle update. Expected: secure fields never read; a clear message; onboarding returns; the permission survives the update. *(Tasks D4, D6.)*
 
@@ -134,7 +134,7 @@ def test_summary_cli_maps_names_and_needs_no_markdown_id(self):
 - [ ] **Step 1: Polar, all products.** The gate sales command with `--from 2027-03-31 --to 2027-04-30` (no `--products`). Record `count` and `gross`/`net` per currency.
 - [ ] **Step 2: Payout ratio `r` from actual payout data.** Polar dashboard → Finance → Payouts: the USD withdrawn in the last 3 payouts; the user reads the EUR credited for each on the bank statement. `r = Σ EUR credited ÷ Σ USD withdrawn`. With fewer than 3 payouts: `r = 0.995 ÷ ECB USD-per-EUR` (§9's "about 0.5% payout/FX").
 - [ ] **Step 3: Other channels.** MAS: App Store Connect → Sales and Trends → Proceeds for the window, converted at the ECB rate. Setapp: the developer-account statistics, if live.
-- [ ] **Step 4: Compute.** Decision value **net = net.usd × r + net.eur × r_eur + MAS + Setapp**, where `r_eur` = 0.995 if Polar pays EUR orders out in EUR (§9's payout/FX), or `r` ÷ the ECB USD-per-EUR rate if it converts them into the USD balance (G0 Step 4 records which). Plan cross-check **net_§9 = (gross.usd + gross.eur × ECB USD-per-EUR) × 0.744** (§9: "€0.744 per $1 gross"). If the two Polar figures differ by > 15%, record the Polar country split (the §9 test) and propose updating the factor.
+- [ ] **Step 4: Compute.** Decision value **net = net.usd × r + net.eur × r_eur + MAS + Setapp**, where `r_eur` = 0.995 if Polar pays EUR orders out in EUR (§9's payout/FX), or `r` × the ECB USD-per-EUR rate if it converts them into the USD balance (G0 Step 4 records which): €1 becomes ECB dollars, and each dollar pays out `r` euros. Sanity check: with Step 2's fallback `r` (0.995 ÷ ECB), `r_eur` is 0.995 at any rate; at ECB 1.08 and `r` = 0.921, `r_eur` ≈ 0.995, never ≈ 0.85. Plan cross-check **net_§9 = (gross.usd + gross.eur × ECB USD-per-EUR) × 0.744** (§9: "€0.744 per $1 gross"). If the two Polar figures differ by > 15%, record the Polar country split (the §9 test) and propose updating the factor.
 - [ ] **Step 5: Write `docs/gates/G3.md`:** thresholds, window, all inputs, stretch ≥ €760, `Decision: APP3 | NO-NEW-APP | STOP`, the cancellation list, sign-off.
 - [ ] **Step 6: Apply.** **STOP cancels** C, D, F and Homebrew. The apps stay on sale (BUSINESS-PLAN §12), with "Maintenance only: no new features." on each product page (plan 04's deploy). Task G7 runs when maintenance ends, or now if the user chooses to stop sales at sign-off (open question 6). **NO-NEW-APP cancels** D (≤ 10 h/week). **APP3** starts D.
 - [ ] **Step 7: Commit to `main` and push.**
@@ -143,7 +143,7 @@ def test_summary_cli_maps_names_and_needs_no_markdown_id(self):
 
 **Thresholds (verbatim):** continue if "≥ **€1,000/month** net → bundle, Setapp, app 4". Kill / change if "Otherwise wind down to maintenance". **Window:** `2027-09-29T00:00:00+02:00` → `2027-10-29T00:00:00+02:00`.
 
-- [ ] **Step 0: Renewals (about Wed 20 Oct 2027, before G4).** The Apple Developer membership (paid 27 Oct 2026) and the domain (bought about 30 Oct 2026) renew around the gate. Ask the user (U-49): renew each, or turn auto-renew off first. A renewal is a purchase, so it needs the user's approval. Record the answers in `docs/gates/G4.md`.
+- [ ] **Step 0: Renewals (about Wed 20 Oct 2027, before G4).** The Apple Developer membership (paid 27 Oct 2026) and the domain (bought about 30 Oct 2026) renew around the gate. Ask the user (U-49): renew each, or turn auto-renew off first. A renewal is a purchase, so it needs the user's approval. Also list the Developer ID Application certificate: it expires Fri 26 Nov 2027, and its renewal is plan 03 Task 3 Step 6, due by Fri 12 Nov 2027 (run that step; without it no new build can be signed, Procedure S's final builds included). Record the answers in `docs/gates/G4.md`.
 - [ ] **Step 1: Measure.** Repeat G3 Steps 1–4 for this window, including App 3 (`select` in `products.json`), MAS proceeds and Setapp payouts.
 - [ ] **Step 2: Write `docs/gates/G4.md`:** stretch ≥ €1,450, `Decision: CONTINUE | WIND-DOWN`, the cancellation list, sign-off.
 - [ ] **Step 3: Apply.** **WIND-DOWN cancels** F, app 4 and any pending Homebrew work; macOS maintenance and support continue, and Task G7 runs before maintenance ends (K14). **CONTINUE** makes F eligible; app 4 gets its own plan via `superpowers:brainstorming`.
@@ -167,17 +167,22 @@ def test_summary_cli_maps_names_and_needs_no_markdown_id(self):
 **Runs when:** G0 Step 1 (plan 06's G1b stop: "stop the studio"); or, under STOP (G3), FREEZE (G2) or WIND-DOWN (G4), before maintenance ends; or whenever the user decides to stop sales. The order is fixed: **new sales stop first, then the final builds ship.** Branch `m07-stop`.
 
 **Files:**
-- Modify: TegelStore's `PolarConfig` and `LicenseManager` (plan 03's files); `Packages/TegelKit/Tests/TegelStoreTests/FinalBuildTests.swift`; `project.yml` (Info.plist `TGFinalBuild = $(TG_FINAL_BUILD)` on every direct app target); `Config/Release.xcconfig` (`TG_FINAL_BUILD = YES`; empty elsewhere); `site/config.json` and the product pages; `docs/gates/STOP.md`.
+- Modify: TegelStore's `PolarConfig` and `LicenseManager` (plan 03's files); `Packages/TegelKit/Tests/TegelStoreTests/FinalBuildTests.swift`; `project.yml` (on every direct app target, Info.plist `TGFinalBuild = $(TG_FINAL_BUILD)`, and plan 03's `SUEnableAutomaticChecks = YES` becomes `$(TG_SU_AUTOMATIC_CHECKS)`); `Config/Release.xcconfig` (`TG_FINAL_BUILD = YES` and `TG_SU_AUTOMATIC_CHECKS = NO`; elsewhere `TG_FINAL_BUILD` empty and `TG_SU_AUTOMATIC_CHECKS = YES`); each direct app's entry file (`MarkdownApp.swift`, `DataApp.swift`, App 3's if shipped); `site/config.json` and the product pages; `docs/gates/STOP.md`.
 
 **Interfaces:**
 - `PolarConfig.finalBuild: Bool` (Info.plist `TGFinalBuild` == `YES`). When true, `LicenseManager.refresh()` returns before any network call, and `isPro` is true for any stored licence, whatever its last validation date. Activating a new Mac still calls Polar while the organisation exists.
+- **No update checks in a final build** (it must not keep contacting `downloads.tegelapps.com` after the studio stops, or after the domain lapses and someone else holds it): Info.plist `SUEnableAutomaticChecks` is `NO`; the app creates `SPUStandardUpdaterController(startingUpdater: !finalBuild, …)`, so Sparkle never schedules a check, even when a stored user default turned automatic checks on; "Check for Updates…" and the Updates tab are hidden.
 
 - [ ] **Step 1 🔒 Stop new sales** (**user approval**: live Polar products). Archive every live product (Markdown, Data, Bundle, App 3 if live). Check each: `curl … /v1/products/<id>` (G0 Step 2 headers) → `"is_archived": true`; each `POLAR_CHECKOUT_URL_*` no longer completes a purchase (screenshot to `docs/gates/stop/`). Set every `checkoutURL` in `site/config.json` to `""`, put "No longer sold. Existing licences keep working." on each product page, and deploy (plan 04's command). Check: `. scripts/lib/env.sh; curl -s https://tegelapps.com/markdown/ | grep -cF "$(envget POLAR_CHECKOUT_URL_MARKDOWN)"` → `0`, and the same for Data and the bundle. MAS and Setapp editions: remove from sale in their consoles (approval each); they never check a licence.
-- [ ] **Step 2: Write the failing test.** `testFinalBuildKeepsStoredLicenceWithoutNetwork`: `PolarConfig` with `finalBuild: true`; a stored licence last validated 400 days ago; plan 03's URLProtocol stub recording every request. `await m.refresh()` → `isPro == true` and the stub saw 0 requests. Run `swift test --package-path Packages/TegelKit --filter FinalBuildTests` → FAIL to compile (`finalBuild` missing).
-- [ ] **Step 3: Implement** one guard at the top of `refresh()` and one in `isPro`.
-- [ ] **Step 4: Watch it pass, then watch the guard fail.** Re-run → PASS. Comment out the `refresh()` guard → FAIL (1 request, `isPro == false`); restore → PASS. `swift test --package-path Packages/TegelKit` → all pass, plan 03's grace tests included.
-- [ ] **Step 5: Final builds** (**user approval** per release). For each direct app: `scripts/release.sh <app> <v> --no-upload`; `PlistBuddy -c 'Print TGFinalBuild'` → `YES`; install it over an activated copy, turn Wi-Fi off, relaunch → Pro. Then `scripts/release.sh <app> <v> --from-dmg <path>`, so every install's Sparkle check offers the final build.
-- [ ] **Step 6: Record.** `docs/gates/STOP.md`: the trigger, the date, what stopped, the final versions, "existing licences keep working; support by email until <date the user sets>". Commit: `docs/gates/STOP.md docs/gates/stop Packages/TegelKit project.yml Config site`, `chore(stop): Procedure S, sales stopped, final builds` + trailer; merge and push.
+- [ ] **Step 2: Write the failing test.** `testFinalBuildKeepsStoredLicenceWithoutNetwork`: `PolarConfig` with `finalBuild: true`; a stored licence last validated at `t0`; plan 03's URLProtocol stub recording every request; the manager built through plan 03's designated `LicenseManager(client:keychain:now:)` (its `makeManager` helper) with `now: t0 + 400 * 86_400`, so the test never reads the real clock. `await m.refresh(now: t0 + 400 * 86_400)` → `isPro == true` and the stub saw 0 requests. Run `swift test --package-path Packages/TegelKit --filter FinalBuildTests` → FAIL to compile (`finalBuild` missing).
+- [ ] **Step 3: Implement** one guard at the top of `refresh()` and one in `isPro`; then the updater lines above in each app entry file and the two `project.yml`/xcconfig settings.
+- [ ] **Step 4: Watch it pass, then watch each guard fail.** Re-run → PASS. Comment out the `refresh()` guard → FAIL (the stub records 1 request; `isPro` still holds through its own guard); restore. Comment out the `isPro` guard → FAIL (`isPro == false`: 400 days is past plan 03's grace); restore → PASS. `swift test --package-path Packages/TegelKit` → all pass, plan 03's grace tests included.
+- [ ] **Step 5: Final builds** (**user approval** per release). For each direct app:
+  - `scripts/release.sh <app> <v> --no-upload`; `PlistBuddy -c 'Print TGFinalBuild'` → `YES` and `-c 'Print SUEnableAutomaticChecks'` → `false`.
+  - **Watch the update guard fail on the shipped build.** On the build Mac's activated copy, with `D=~/Library/Containers/<bundle id>/Data/Library/Preferences/<bundle id>` (App 3, unsandboxed: `~/Library/Preferences/<bundle id>`): `defaults write "$D" SUEnableAutomaticChecks -bool YES; defaults write "$D" SULastCheckTime -date "2000-01-01 00:00:00 +0000"` (a user who turned checks on, with a check long overdue). Launch, wait 60 s, quit. `defaults read "$D" SULastCheckTime` → today's date: it checked.
+  - Install the final build over that copy and repeat the two writes, the launch and the read → still `2000-01-01 …`, and the app menu has no "Check for Updates…". Turn Wi-Fi off, relaunch → Pro.
+  - Then `scripts/release.sh <app> <v> --from-dmg <path>`, so every install's Sparkle check offers the final build, its last one.
+- [ ] **Step 6: Record.** `docs/gates/STOP.md`: the trigger, the date, what stopped, the final versions, "existing licences keep working; support by email until <date the user sets>". Commit: `docs/gates/STOP.md docs/gates/stop Packages/TegelKit Apps project.yml Config site`, `chore(stop): Procedure S, sales stopped, final builds` + trailer; merge and push.
 
 ---
 
@@ -189,7 +194,7 @@ def test_summary_cli_maps_names_and_needs_no_markdown_id(self):
 
 - [ ] **Step 1: Gate and branch.** `grep '^Decision:' docs/gates/G2.md` shows PASS or MIDDLE, and the last `docs/gates/support.md` row isn't RED. `git checkout -b m07a-v1.1 main`.
 - [ ] **Step 2: Swift API diff.** Run `grep -rhn "public " Packages/TegelKit/Sources --include=*.swift | grep -E "func |init\(|struct |enum |class |case |var |let "` and write `Assumed (master §3.3) | Shipped | Action` rows for `RenderOptions`, `RendererWebView.render`, `PDFExporter.makePDFData`, `BookmarkStore`, `LicenseManager` and `ProGate`.
-- [ ] **Step 3: Renderer facts:** the markdown-it major in `Renderer/bun.lock` (texmath has no peer dependency, so 14 and 15 both work); `SANITIZE_CONFIG` and `addHooks` in `Renderer/src/sanitize.js` (plan 01); how `page.js` injects `mermaid.min.js`, including the Quick Look path (KaTeX copies it); whether same-document `#fragment` clicks scroll or are blocked; whether a failed `<img>` already becomes a placeholder.
+- [ ] **Step 3: Renderer facts:** the markdown-it major in `Renderer/bun.lock` (texmath has no peer dependency, so 14 and 15 both work); `SANITIZE_CONFIG` and `addHooks` in `Renderer/src/sanitize.js` (plan 01); how `page.js` injects `mermaid.min.js`, including the Quick Look path (KaTeX copies it); plan 01's `#doc` click listener that scrolls `#x` links to `user-content-x` (A2 relies on it); whether a failed `<img>` already becomes a placeholder.
 - [ ] **Step 4: App facts:** the direct target names (assumed plan 01's `markdown`, `markdown.quicklook`, and plan 02's test target `MarkdownAppTests` in `Apps/Markdown/AppTests/`); the PDF export call site (`grep -rn "PDFExporter.makePDFData" Apps/`; plan 02 puts it in `ReaderController.swift`, followed by its one `data.write(to:)`); the folder-window opener; the settings view; whether `makePDFData` needs a visible window; `scripts/release.sh` usage (assumed `<app> <version> [--sandbox] [--yes] [--no-upload]`, versions `X.Y.Z[-bN|-rcN]`, plan 03); the appcast and DMG URL paths; `print.css` page margins (need ≥ 36 pt for the header/footer).
 - [ ] **Step 5: Cross-app key regression check (Review Focus 4).** Plan 03 ships the benefit binding in 1.0.0 (D1). Paste an App 2 **sandbox** key into a Debug App 1. Expected: rejected with plan 03's `wrongProduct` message, and the sandbox portal shows no activation left on that key. If it unlocks Pro, that's a **P0** regression of plan 03's binding: stop Section A, root-cause it with `superpowers:systematic-debugging`, and ship a v1.0.x fix (approval) before A1.
 - [ ] **Step 6: Library versions.** `npm view markdown-it-texmath version time license` (1.0.0, MIT); `npm view markdown-it-footnote version license` (4.0.0, MIT); `npm view katex dist-tags time license` → the newest version ≥ 14 days old.
@@ -272,12 +277,12 @@ test('expansion bomb fails fast', () => {
 
 **Files:**
 - Create: `Renderer/test/footnote.test.js`
-- Modify: `Renderer/src/markdown.js`, `Renderer/src/page.js` (only if A0 found fragment clicks blocked), `Renderer/package.json`, `Renderer/bun.lock`, the notices file, `Fixtures/markdown/hostile.md`
+- Modify: `Renderer/src/markdown.js`, `Renderer/package.json`, `Renderer/bun.lock`, the notices file, `Fixtures/markdown/hostile.md`
 - Test: `RendererMathTests.swift` (adds `testFootnoteLinkScrollsWithinDocument`)
 
 **Interfaces:**
 - Consumes: `renderToHTML` (§3.2).
-- Produces: `markdown-it-footnote@4.0.0` markup (ids `fn<N>` and `fnref<N>`), with `dir="auto"` on every `footnote-item` `<li>`.
+- Produces: `markdown-it-footnote@4.0.0` markup: ids `fn<N>` and `fnref<N>` from `renderToHTML`, which plan 01's `SANITIZE_NAMED_PROPS` pass turns into `user-content-fn<N>` and `user-content-fnref<N>` in the DOM. `dir="auto"` goes on the footnotes `<section>` only, as on every top-level block (plan 01, master §3.2); a per-item `dir="auto"` on `li` breaks RTL lists in WebKit.
 
 - [ ] **Step 1: Write the failing tests.**
 ```js
@@ -287,19 +292,20 @@ test('footnotes link both ways', () => {
   const html = renderToHTML('Claim[^1].\n\n[^1]: Source.', { mode: 'window' });
   for (const s of ['href="#fn1"', 'id="fn1"', 'href="#fnref1"', 'id="fnref1"']) expect(html).toContain(s);
 });
-test('footnote items take the direction of their own text', () => {
-  const li = renderToHTML('نص[^1].\n\n[^1]: مصدر عربي.', { mode: 'window' }).match(/<li[^>]*id="fn1"[^>]*>/)[0];
-  expect(li).toContain('dir="auto"');
+test('footnotes take their direction at the section, never per item', () => {
+  const html = renderToHTML('نص[^1].\n\n[^1]: مصدر عربي.', { mode: 'window' });
+  expect(html.match(/<section[^>]*class="footnotes"[^>]*>/)[0]).toContain('dir="auto"');
+  expect(html.match(/<li[^>]*id="fn1"[^>]*>/)[0]).not.toContain('dir=');
 });
 ```
 - [ ] **Step 2: Run and watch it fail.** `cd Renderer && bun add -E markdown-it-footnote@4.0.0 && bun test test/footnote.test.js` → FAIL (`href="#fn1"` not found).
 - [ ] **Step 3: Implement.**
-  - `md.use(footnote)`, and wrap `md.renderer.rules.footnote_open` so its `<li ` output gains `dir="auto" `.
-  - If A0 found fragment clicks blocked, `page.js` handles `a[href^="#"]` with `preventDefault()` + `document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView()`. No navigation.
+  - `md.use(footnote)`, and wrap `md.renderer.rules.footnote_block_open` so its `<section class="footnotes"` gains ` dir="auto"`. Item `<li>`s stay as the plugin writes them.
+  - No new click handler: plan 01's `#doc` listener already scrolls `#fn1` to `user-content-fn1` without navigating.
   - Append to `hostile.md` a footnote whose body is `<img src=x onerror=alert(1)>`.
 - [ ] **Step 4: Run and watch it pass.** `bun test test/footnote.test.js` → 2 pass.
-- [ ] **Step 5: Swift scroll test.** `testFootnoteLinkScrollsWithinDocument`: render 200 paragraphs plus a footnote; `document.querySelector('a[href="#fn1"]').click()` → `document.getElementById('fn1').getBoundingClientRect().top < 50`, and the URL is unchanged apart from the hash. `make renderer && swift test --package-path Packages/TegelKit --filter "RendererMathTests|Hostile"` → PASS.
-- [ ] **Step 6: Commit:** `Renderer Packages/TegelKit Fixtures/markdown/hostile.md <notices file>`, `feat(renderer): footnotes with per-item direction` + trailer.
+- [ ] **Step 5: Swift scroll test.** `testFootnoteLinkScrollsWithinDocument`: render 200 paragraphs plus a footnote; `document.querySelector('a[href="#fn1"]').click()` → `document.getElementById('user-content-fn1').getBoundingClientRect().top < 50` (the DOM id after plan 01's `SANITIZE_NAMED_PROPS`), and `webView.url` is unchanged apart from the hash. `make renderer && swift test --package-path Packages/TegelKit --filter "RendererMathTests|Hostile"` → PASS.
+- [ ] **Step 6: Commit:** `Renderer Packages/TegelKit Fixtures/markdown/hostile.md <notices file>`, `feat(renderer): footnotes, direction set on the section` + trailer.
 
 ### Task A3: Custom CSS (Pro), a read-only bookmarked file injected after the theme
 
@@ -319,8 +325,8 @@ test('footnote items take the direction of their own text', () => {
   - `testUserCSSCannotInjectMarkup`: `userCSS = "</style><script>window.__pwned=1</script><style>"` → `typeof window.__pwned == "undefined"` and `document.querySelectorAll('script:not([src])').length == 0`.
 - [ ] **Step 2: Run and watch it fail.** `swift test --package-path Packages/TegelKit --filter UserCSSTests` → FAIL to compile: `extra argument 'userCSS'`.
 - [ ] **Step 3: Implement.** Add `userCSS` to `RenderOptions` and the JSON options. `page.js` `applyUserCSS(css)`: get or create `#tegel-user-css`, append it as `document.head`'s last child, set `textContent = css || ''` (never `innerHTML`). The CSP is unchanged.
-- [ ] **Step 4: Watch the network guard fail when broken.** Temporarily delete the CSP `<meta>` in the built `Resources/Renderer/index.html` and run `--filter testUserCSSCannotReachNetwork` → FAIL (connections ≥ 1). Restore with `git checkout -- Packages/TegelKit/Sources/TegelKit/Resources/Renderer/index.html`.
-- [ ] **Step 5: Run and watch it pass.** `make renderer && swift test --package-path Packages/TegelKit --filter UserCSSTests` → 3 pass.
+- [ ] **Step 4: Run and watch it pass.** `make renderer && swift test --package-path Packages/TegelKit --filter UserCSSTests` → 3 pass.
+- [ ] **Step 5: Watch the network guard fail when broken.** Two layers block the network, so remove both (plan 01 Task 5 Step 9, row 2): `sed -i '' '/Content-Security-Policy/d' Packages/TegelKit/Sources/TegelKit/Resources/Renderer/index.html`, and comment out the rule-list `add` in `RendererWebView`. Run `--filter testUserCSSCannotReachNetwork` → FAIL (connections ≥ 1). With the CSP gone but the rule list in place it would still pass: the `^https?:` rule blocks `http://127.0.0.1`. Restore: un-comment the `add` line and run `make renderer`, which rewrites `index.html` from `Renderer/src` (Step 3's edits aren't committed yet, so no `git checkout`). Re-run Step 4's command → 3 pass.
 - [ ] **Step 6: Write the failing app tests** (`CustomStylesheetTests`):
   - `testRoundTrip`: temp `a.css` = `p{}`, `save`, `load() == "p{}"`.
   - `testOversizedFileIsRejected`: 300,000 bytes → `load() == nil`.
@@ -408,14 +414,14 @@ func testRejectsNonPDF() { XCTAssertThrowsError(try PDFStamper.stamp(Data("no".u
   - `exportPDF`: write `markdown` to a temp `.md` → `TextFileLoader.load` → render in `.print` mode with the saved theme and `userCSS` → `makePDFData` → stamp if `pageNumbers` → write the data to a temp `.pdf` → return the URL.
   - `perform` calls `exportPDF(…, isPro: ProGate.isProNow())` and returns `IntentFile(fileURL:filename:type: .pdf)`. Shortcuts decides where to save, so the app writes only to its container (rule 1).
   - `OpenFolderIntent.perform` requires Pro and opens `folder.fileURL` through the folder opener. If the URL is missing or unreadable in the sandbox, it shows an `NSOpenPanel` with `directoryURL` set to it, so one click grants access.
-- [ ] **Step 4: Run and watch it pass, then clear the gate.** Re-run Step 2's command → 2 pass. `make readonly-gate` → FAIL naming `ExportPDFIntent.swift` (watched); add its allowlist entry → exit 0.
+- [ ] **Step 4: Run and watch it pass, then clear the gate.** Re-run Step 2's command → 2 pass. The gate uses `git grep`, which skips untracked files, so stage the new files first: `git add Apps/Markdown/App/Intents && make readonly-gate` → FAIL naming `ExportPDFIntent.swift` (watched); add its allowlist entry → exit 0.
 - [ ] **Step 5: Discoverability.** `make build && test -d "$(find build -name 'Tegel Markdown.app' -maxdepth 6 | head -1)/Contents/Resources/Metadata.appintents" && echo OK` → `OK`. Manual: Shortcuts.app lists both actions, and "Open Folder in Tegel Markdown" with a Folder action opens the sidebar; screenshot to `docs/qa/v1.1/shortcuts.png`.
 - [ ] **Step 6: Commit:** `Apps/Markdown docs/qa/v1.1`, `feat(app): Shortcuts actions for PDF export and Open Folder` + trailer.
 
 ### Task A6: v1.1 QA matrix → `docs/qa/v1.1-matrix.md`
 
 - [ ] **Step 1: Local (macOS 15, Intel, the build Mac).** `make check`, then the plan 05 matrix rows plus the new rows: math (inline, block, Arabic); footnotes (scroll, RTL); custom CSS (apply, delete the file, oversize); PDF header and numbers (A4, Letter, RTL document); both Shortcuts. Record pass/fail per row and the machine.
-- [ ] **Step 2: macOS 26 arm64.** `gh workflow run ci.yml --ref m07a-v1.1 && gh run watch --exit-status` → the macOS jobs are green; link the run URL. (Needs the user's `gh auth login`.)
+- [ ] **Step 2: macOS 26 arm64.** `gh workflow run ci.yml --ref m07a-v1.1`, then `gh run watch --exit-status "$(gh run list --workflow ci.yml --branch m07a-v1.1 -L1 --json databaseId -q '.[0].databaseId')"` (a non-interactive `gh` needs the run id) → the macOS jobs are green; link the run URL. (Needs the user's `gh auth login`.)
 - [ ] **Step 3: macOS 27 arm64 on Scaleway** (M1, ≈ €2.64 for 24 h [F9]; purchase approval first). Install a notarised release candidate from `scripts/release.sh markdown 1.1.0-rc1 --no-upload`. Run the new rows plus the G0 timing for `g0-1mb.md` and a math-heavy file (< 1 s).
 - [ ] **Step 4: Commit** the matrix.
 
@@ -441,7 +447,10 @@ func testRejectsNonPDF() { XCTAssertThrowsError(try PDFStamper.stamp(Data("no".u
 - [ ] **Step 1: Gate and branch.** G2 ≠ FREEZE and `m07a` is merged. `git checkout -b m07b-mas main`.
 - [ ] **Step 2: SDK rule.** Record the newest "built with Xcode N" rule and its date from developer.apple.com/news/upcoming-requirements/ (today: "Xcode 26 or later", since 28 Apr 2026). If submission day needs an Xcode newer than 26.3, CI is mandatory [F2]; otherwise the build Mac may build too.
 - [ ] **Step 3: Runner image.** `curl -s https://raw.githubusercontent.com/actions/runner-images/main/images/macos/macos-26-arm64-Readme.md | grep -A12 '### Xcode'`. On 27 Oct 2026 the default was 26.6 (17F113), with 26.3, 26.4.1 and 26.5 installed; `xcode-27` was a preview image [F7]. Choose the newest GA Xcode that meets Step 2. Record the full commit SHA of the release of every action `mas.yml` uses (`actions/checkout`) and the XcodeGen release version plus the sha256 of its `xcodegen.zip`; B3 pins `mas.yml` to them (S25).
-- [ ] **Step 4: Source split.** `grep -rlE "import (Sparkle|TegelStore)|TGPolar|SUFeedURL|checkoutURL|portalURL" Apps/Markdown/App` lists the files that move to `Apps/Markdown/App/Direct/` in B1.
+- [ ] **Step 4: Source split, by an explicit file list.** A grep can't decide it: `MarkdownApp.swift` imports Sparkle and is the `@main` entry the store targets need, and plan 06 Task 8 compiles `ProGate.swift`, `LicenceSettingsView.swift` and `UpdatesSettingsView.swift` into `data` by path. Run `grep -rlE "import (Sparkle|TegelStore)|TGPolar|SUFeedURL|checkoutURL|portalURL" Apps/Markdown/App` as input only, then write three named lists into the revalidation doc, every hit in exactly one:
+  - **Move to `Direct/`** (B1): files only the direct app uses and no other target names by path: `ProUpsellView.swift`, plus any hit that meets both conditions. Check: `grep -n 'Apps/Markdown/App/' project.yml` names none of them.
+  - **Stay, excluded by name from the store targets:** `LicenceSettingsView.swift` and `UpdatesSettingsView.swift` (App 2 compiles them from these paths).
+  - **Stay, gated with `#if !UNLOCKED`** (B1 Step 5): `MarkdownApp.swift`, `ProGate.swift`, the Settings tab view, and every other hit.
 - [ ] **Step 5: Human checkpoint H-M1 (Account Holder).** Create the **Apple Distribution** and **Mac Installer Distribution** certificates; register the explicit App IDs `com.tegelapps.markdown` and `com.tegelapps.markdown.quicklook`; create a Team API key "tegel-ci-mas" with role **App Manager** → `.env` keys `ASC_CI_API_KEY_ID`, `ASC_CI_API_ISSUER_ID`, `ASC_CI_API_KEY_PATH`. Check: `security find-identity -v -p codesigning | grep -c "Apple Distribution"` ≥ 1.
 - [ ] **Step 6: Commit** the revalidation doc.
 
@@ -449,7 +458,7 @@ func testRejectsNonPDF() { XCTAssertThrowsError(try PDFStamper.stamp(Data("no".u
 
 **Files:**
 - Create: `scripts/verify-store-build.sh`, `Apps/Markdown/App/DistributionChannel.swift`, `Apps/Markdown/MAS/{Markdown.entitlements,QuickLook.entitlements}`, `Apps/Markdown/MASTests/ChannelTests.swift`
-- Move (`git mv`): the B0 Step 4 files → `Apps/Markdown/App/Direct/`
+- Move (`git mv`): the B0 Step 4 "Move" list, and nothing else → `Apps/Markdown/App/Direct/`
 - Modify: `project.yml`, `Apps/Markdown/App/ProGate.swift`, the app entry/menu file (`#if !UNLOCKED` around the updater and licence items), Copy Diagnostics (adds the channel)
 
 **Interfaces:**
@@ -485,7 +494,7 @@ func testRejectsNonPDF() { XCTAssertThrowsError(try PDFStamper.stamp(Data("no".u
   MarkdownMAS:
     type: application
     platform: macOS
-    sources: [{ path: Apps/Markdown/App, excludes: ["Direct/**"] }]
+    sources: [{ path: Apps/Markdown/App, excludes: ["Direct/**", "LicenceSettingsView.swift", "UpdatesSettingsView.swift"] }]   # B0 Step 4's lists
     dependencies: [{ package: TegelKit, product: TegelKit }, { target: MarkdownMASQuickLook }]
     info: { path: Apps/Markdown/MAS/Info.plist, properties: { LSApplicationCategoryType: public.app-category.developer-tools, ITSAppUsesNonExemptEncryption: false } }  # plus the direct target's document types and UTI imports; no SU*/TG* keys
     settings:
@@ -505,7 +514,7 @@ func testRejectsNonPDF() { XCTAssertThrowsError(try PDFStamper.stamp(Data("no".u
   xcodebuild build -scheme MarkdownMAS -configuration Debug -destination 'platform=macOS'
   scripts/verify-store-build.sh <MarkdownMAS Debug .app path> mas
   ```
-  Expected: the test passes; `** BUILD SUCCEEDED **`; `verify-store-build: PASS`. The direct scheme still passes `make check`.
+  Expected: the test passes; `** BUILD SUCCEEDED **`; `verify-store-build: PASS`. The direct scheme still passes `make check`, whose `build` also builds `data`: that proves plan 06's by-path sources (`ProGate.swift`, `LicenceSettingsView.swift`, `UpdatesSettingsView.swift`) still resolve.
 - [ ] **Step 7: Commit:** `project.yml Apps/Markdown scripts/verify-store-build.sh`, `feat(mas): MarkdownMAS targets, UNLOCKED split, store-build guard` + trailer.
 
 ### Task B2: Quick Look image placeholder (only if A0 found none)
@@ -602,8 +611,24 @@ jobs:
 ```
   Then `make test-shell` → exit 0 (the `VERSION: ${{ inputs.version }}` lines are the allowed form).
 - [ ] **Step 6: Secrets (human checkpoint H-M2).** The user exports both identities from Keychain Access as `.p12` files outside the repo and runs `gh auth login`. Then `gh secret set <NAME> < <file>` for `APPLE_TEAM_ID`, `MAS_DIST_CERT_P12_BASE64`, `MAS_INSTALLER_CERT_P12_BASE64`, `MAS_P12_PASSWORD`, `KEYCHAIN_PASSWORD`, `ASC_CI_API_KEY_ID`, `ASC_CI_API_ISSUER_ID`, `ASC_CI_KEY_P8_BASE64`. Check: `gh secret list` shows all 8 names.
-- [ ] **Step 7: CI dry run.** `gh workflow run mas.yml --ref m07b-mas -f version=1.1.0 -f build=110 -f xcode=<B0> -f upload=false && gh run watch --exit-status` → success; `gh run view --log | grep -c "verify-store-build: PASS"` → 1. (About 20 macOS minutes [F7].)
-- [ ] **Step 8: Commit:** `scripts/mas.sh scripts/ExportOptions-MAS.plist scripts/check-guards.sh .github/workflows .env.example`, `build(mas): archive/export script, macos-26 CI with a temporary keychain, pinned actions` + trailer.
+- [ ] **Step 7: Commit:** `scripts/mas.sh scripts/ExportOptions-MAS.plist scripts/check-guards.sh .github/workflows .env.example`, `build(mas): archive/export script, macos-26 CI with a temporary keychain, pinned actions` + trailer.
+- [ ] **Step 8: Land `mas.yml` on `main` (K13), then the CI dry run.** GitHub dispatches only workflows that exist on the default branch. As plan 09 Task 11 Step 9 lands `design-shots.yml`:
+
+```bash
+git switch main && git pull --ff-only && git checkout m07b-mas -- .github/workflows/mas.yml
+git commit -m "ci: MAS archive workflow, dispatch only" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+  Before pushing, a cold code-review subagent reviews `git show HEAD` against B6's `mas.yml` `/cso` items (inputs only through `env:` and checked, `permissions: contents: read`, `-T` not `-A`, keychain cleanup, pinned SHAs and XcodeGen checksum). Fix and amend until it finds no P0/P1. On `main` the file is inert until dispatched, and it runs the `scripts/mas.sh` of the ref it's given.
+
+```bash
+git push origin main && git switch m07b-mas && git push -u origin m07b-mas
+gh workflow run mas.yml --ref m07b-mas -f version=1.1.0 -f build=110 -f xcode=<B0> -f upload=false
+ID=$(gh run list --workflow mas.yml --branch m07b-mas -L1 --json databaseId -q '.[0].databaseId')
+gh run watch --exit-status "$ID" && gh run view "$ID" --log | grep -c "verify-store-build: PASS"
+```
+
+  Expected: success, then `1`. (About 20 macOS minutes [F7].)
 
 ### Task B4: App Store Connect record and listing
 
@@ -624,7 +649,7 @@ jobs:
 
 ### Task B5: TestFlight QA and the guidelines checklist → `docs/mas/review-checklist.md`
 
-- [ ] **Step 1: Upload a build** (approval). `gh workflow run mas.yml -f version=1.1.0 -f build=111 -f xcode=<B0> -f upload=true`; wait for "Ready to Test" in TestFlight.
+- [ ] **Step 1: Upload a build** (approval). `gh workflow run mas.yml --ref m07b-mas -f version=1.1.0 -f build=111 -f xcode=<B0> -f upload=true` (only the branch has `MarkdownMAS` until B6 merges); wait for "Ready to Test" in TestFlight.
 - [ ] **Step 2: Install on the build Mac** (H-M3: the user signs in to TestFlight). Check:
   - it launches; folder mode and PDF export work with no licence UI; there's no "Check for Updates…" or licence menu item; a save-panel export writes the file;
   - Quick Look shows a placeholder for a local image; both Shortcuts appear;
@@ -643,7 +668,7 @@ jobs:
 - [ ] **Step 1: Run Procedure P (master §11) for `m07b`.** `/cso` scope: MAS and Quick Look entitlements; the `UNLOCKED` split (no licence bypass reaches the direct build); `mas.yml` (inputs only through `env:` and checked, `permissions: contents: read`, `-T` not `-A`, keychain cleanup, pinned SHAs and XcodeGen checksum; `check-guards.sh` green in `make check`); `mas.sh` argument checks. Design review: screenshots and the menu without licence items.
 - [ ] **Step 2: Merge and push.**
 - [ ] **Step 3: Submit for Review** (approval of this submission). Log rejections in `docs/mas/review-log.md`; fix → P stages 2–4 → resubmit, with approval each time.
-- [ ] **Step 4: On approval.** Release manually (approval). Add "Also on the Mac App Store" and a FAQ entry ("same features; licences don't transfer between the direct and App Store editions") to the site. `curl -s https://tegelapps.com/markdown | grep -c "apps.apple.com"` ≥ 1. Later MAS updates run `mas.yml upload=true`, each with approval.
+- [ ] **Step 4: On approval.** Release manually (approval). Add "Also on the Mac App Store" and a FAQ entry ("same features; licences don't transfer between the direct and App Store editions") to the site. `curl -s https://tegelapps.com/markdown | grep -c "apps.apple.com"` ≥ 1. Later MAS updates run `gh workflow run mas.yml --ref main … -f upload=true`, each with approval.
 
 ---
 
@@ -692,7 +717,7 @@ Plan 06 creates the $29 bundle (Polar product, BNPL check, site copy at `site/co
 
 - [ ] **Step 1: Watch the guard fail.** On the MarkdownMAS Debug build from B1: `scripts/verify-store-build.sh <path> setapp` → exit 1 with `FAIL: bundle id lacks -setapp`, `FAIL: no NSUpdateSecurityPolicy`, `FAIL: no setappPublicKey.pem`.
 - [ ] **Step 2: Add the targets.**
-  - `packages.Setapp: { url: https://github.com/MacPaw/Setapp-framework.git, exactVersion: <C0> }`; sources exclude `Direct/**`; `SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) SETAPP UNLOCKED"`; Developer ID signing and Hardened Runtime.
+  - `packages.Setapp: { url: https://github.com/MacPaw/Setapp-framework.git, exactVersion: <C0> }`; sources exclude the same three patterns as `MarkdownMAS`; `SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) SETAPP UNLOCKED"`; Developer ID signing and Hardened Runtime.
   - Info.plist adds `NSUpdateSecurityPolicy = { AllowProcesses = { MEHY5QF425 = [com.setapp.DesktopClient.SetappAgent] } }`.
   - App entitlements: the B1 MAS set plus `com.apple.security.temporary-exception.mach-lookup.global-name = [com.setapp.ProvisioningService]` (framework README). Quick Look reuses the **direct** Quick Look entitlements, since the Setapp edition is Developer ID [F5].
 - [ ] **Step 3: Implement `SetappStart.run()`.** `SetappManager.shared.start(with: .default)` if C0 confirms macOS still needs it (the README's "Start" section shows it for iOS), then `SetappManager.shared.showReleaseNotesWindowIfNeeded()`. No "Rate on App Store" or store links (Review Guidelines §5.5).
@@ -702,13 +727,30 @@ Plan 06 creates the $29 bundle (Polar product, BNPL check, site copy at `site/co
 
 ### Task C4: Setapp packaging and upload
 
-**Files:** Modify `scripts/release.sh` (adds app `markdown-setapp`)
+**Files:** Modify `scripts/release.sh` and `scripts/release_test.sh` (plan 03's; adds app `markdown-setapp`). Create `scripts/entitlements/markdown-setapp.plist` and `scripts/entitlements/markdown-setapp.quicklook.plist` (the allowlist `check_ents` reads, by bundle id minus `com.tegelapps.`).
 
-- [ ] **Step 1: Watch it fail.** `scripts/release.sh markdown-setapp 1.1.1 --no-upload` → exit 1, "unknown app".
-- [ ] **Step 2: Add the `markdown-setapp` path.** Archive `MarkdownSetapp`, export `developer-id`, notarise and staple (existing functions). Then `ditto -c -k --keepParent "Tegel Markdown.app" dist-release/TegelMarkdown-setapp-<v>.zip`, with the icon PNG beside it as Setapp requires (docs.setapp.com/docs/submitting-apps-for-review). Skip the DMG, appcast and R2 steps.
-- [ ] **Step 3: Watch it pass.** Re-run Step 1's command → exit 0. `unzip -l dist-release/TegelMarkdown-setapp-1.1.1.zip | grep -c "Tegel Markdown.app/Contents/Info.plist"` → 1. `plutil -extract CFBundleIdentifier raw` on the extracted app → `com.tegelapps.markdown-setapp`.
+**Delta on plan 03's `release.sh`** (its Task 12 Step 3 `main` items). The Setapp edition has no `TGPolar*` keys, no Sparkle and no DMG, so the `case` row selects a channel and every other app keeps plan 03's path unchanged:
+- Before the `case`: `CHANNEL=direct`. New row: `markdown-setapp) SLUG=markdown-setapp SCHEME=MarkdownSetapp NAME=TegelMarkdown-setapp VOL="Tegel Markdown" CHANNEL=setapp;;`.
+- Item 1: with `CHANNEL=setapp`, `--from-dmg` is a usage error: `markdown-setapp has no DMG`, exit 2.
+- Item 7: with `CHANNEL=setapp`, the two Polar checks (`TGPolarAPIBase`, `TGPolarBenefitID`) give way to `scripts/verify-store-build.sh "$APP" setapp` (B1), which fails on any `TGPolar*`, `SUFeedURL` or `SUPublicEDKey` key, any Sparkle code and any temporary exception but Setapp's. The version, `lipo`, `check_ents`, `codesign` and `syspolicy_check` checks run unchanged.
+- Items 9–11: the app is notarised and stapled as before. With `CHANNEL=setapp`, `ditto -c -k --keepParent "$APP" "$OUT/$NAME-$V.zip"` replaces the DMG, with the icon PNG beside it (docs.setapp.com/docs/submitting-apps-for-review); `spctl -a -vvv -t exec "$APP"` must pass; the zip's absolute path is printed last; exit 0. Items 12–15 (appcast, confirm, R2) never run for it: Step 4 uploads by hand.
+
+- [ ] **Step 1: Watch it fail.** Add two cases to `release_test.sh`, right after `check print-config` in its first `fresh` block:
+  ```bash
+         check setapp-args     1 "Config/Release.xcconfig still has REPLACE_IN_PLAN_05" markdown-setapp 1.1.1 --no-upload
+         check setapp-from-dmg 2 "markdown-setapp has no DMG"   markdown-setapp 1.1.1 --from-dmg x.dmg
+  ```
+  `bash scripts/release_test.sh` → both `FAIL … (exit 2): … unknown app: markdown-setapp`, every earlier case still passing.
+- [ ] **Step 2: Implement the delta and the allowlist.** The entitlements follow C3: the app gets the B1 MAS set plus Setapp's mach-lookup name; Quick Look reuses the direct set.
+  ```bash
+  P=/usr/libexec/PlistBuddy; A=scripts/entitlements/markdown-setapp.plist; G=com.apple.security.temporary-exception.mach-lookup.global-name
+  for k in app-sandbox files.user-selected.read-write files.bookmarks.app-scope network.client; do $P -c "Add :com.apple.security.$k bool true" "$A"; done
+  $P -c "Add :$G array" -c "Add :$G: string com.setapp.ProvisioningService" "$A"
+  cp scripts/entitlements/markdown.quicklook.plist scripts/entitlements/markdown-setapp.quicklook.plist
+  ```
+  `bash scripts/release_test.sh` → `0 failed`. Commit: `scripts/release.sh scripts/release_test.sh scripts/entitlements`, `build(setapp): release.sh markdown-setapp channel, zip, no Polar or Sparkle checks` + trailer (`release.sh` needs a clean tree).
+- [ ] **Step 3: Watch it pass.** `scripts/release.sh markdown-setapp 1.1.1 --no-upload` → `verify-store-build: PASS`, exit 0, the zip path last. `unzip -l dist-release/markdown-setapp/1.1.1/TegelMarkdown-setapp-1.1.1.zip | grep -c "Tegel Markdown.app/Contents/Info.plist"` → 1. `plutil -extract CFBundleIdentifier raw` on the extracted app → `com.tegelapps.markdown-setapp`.
 - [ ] **Step 4: Upload** (approval). Setapp developer account → Apps → Add First Version → build validation shows no blocking finding. Record the review outcome in `docs/setapp/application.md`.
-- [ ] **Step 5: Commit** `scripts/release.sh`.
 
 ### Task C5: Homebrew go/no-go (Mon 2 Aug 2027) → `docs/gates/homebrew.md`
 
@@ -898,8 +940,8 @@ func testDismissMonitorWatchesNoKeys() { XCTAssertTrue(ActionPanel.dismissMask.i
   - `KeyboardShortcuts.onKeyUp(for: .showActionBar)` → `SelectionReader.readFocused()` → `panel.present(_:near: NSEvent.mouseLocation)`, or a small "Nothing selected / this app doesn't share its selection" status.
   - Buttons call `Actions.perform(…, isPro: licence.isPro)`; actions outside `freeActions` throw `.needsPro` when not Pro.
   - `Esc` and an outside click dismiss. Layout from `DESIGN.md`.
-- [ ] **Step 5: Watch it pass.** Re-run Step 3's command → 3 pass. `make build` (Select included), then `scripts/verify-no-keylogging.sh <Select.app>` → `PASS`.
-- [ ] **Step 6: Commit** `Apps/Select` and `scripts/verify-no-keylogging.sh`.
+- [ ] **Step 5: Watch it pass.** Re-run Step 3's command → 3 pass. `make build` (Select included), then `scripts/verify-no-keylogging.sh <Select.app>` → `PASS`. Then the read-only gate (Global Constraints): `git add Apps/Select && make readonly-gate` → FAIL naming the "Open in Tegel Markdown" temp-file write and its cleanup in `Actions.swift` (watched); add `^Apps/Select/App/Actions\.swift:` to its allowlist in the `Makefile` → exit 0.
+- [ ] **Step 6: Commit** `Apps/Select`, `scripts/verify-no-keylogging.sh` and the `Makefile` allowlist line.
 
 ### Task D6: Onboarding, settings, licence, updates, localisation
 
@@ -919,7 +961,7 @@ func testDismissMonitorWatchesNoKeys() { XCTAssertTrue(ActionPanel.dismissMask.i
   - **BNPL check** (rule 7): run plan 05 Task 2 Step 11's procedure, unchanged, on the live App 3 checkout link before it goes public; screenshots to `docs/reviews/m07d-polar/checkout-{safari,chrome}-{nl,us}.png`. Its stop rule applies (B17).
   - The product carries plan 05's opt-in field (`marketing_opt_in`, unticked) and a EUR price set by the user (K10).
 - [ ] **Step 2: Site.** `site/content/<slug from D1>.md`: a permission explanation, a privacy statement (what is read, and when), a silent captioned demo (rules 2 and 4). Deploy; URL → 200.
-- [ ] **Step 3: Release.** `scripts/release.sh select 1.0.0 --no-upload`, QA on that DMG, then `--from-dmg <path>` (approval) → `spctl -a -vv` shows `accepted`.
+- [ ] **Step 3: Release.** First add App 3 to `release.sh` as plan 06 Task 14 Step 1 adds `data`: a `release_test.sh` `print-config` case for `select`, watched failing (`unknown app: select`); the row `select) SLUG=select SCHEME=Select NAME=TegelSelect VOL="Tegel Select";;`; `scripts/entitlements/select.plist` holding the Release build's signed set as D2 reviewed it; `release_test.sh` → `0 failed`; commit the three files (`release.sh` needs a clean tree). Then `scripts/release.sh select 1.0.0 --no-upload`, QA on that DMG, then `--from-dmg <path>` (approval) → `spctl -a -vv` shows `accepted`.
 - [ ] **Step 4: Launch Tue 20 Jul** with plan 08's playbook: PH, r/macapps (≥ 30 days after our last post), Show HN, IH, and a cross-sell email to App 1/2 buyers who ticked the checkout opt-in (`marketing_opt_in`, K9), sent by plan 08 (it owns MailerLite) under the segment rule from plan 06 Task 15. Each post and email is approved first.
 
 ### Task D8: Pipeline P for `m07d`
@@ -988,7 +1030,7 @@ func testDismissMonitorWatchesNoKeys() { XCTAssertTrue(ActionPanel.dismissMask.i
 Plan 03 already binds each key to one benefit (D1): `PolarConfig.benefitID: String` (Info.plist `TGPolarBenefitID`, build setting `TG_POLAR_BENEFIT_ID_<APP>`), `benefit_id` on validate, an activate check against `license_key.benefit_id` that deactivates a mismatch, and `PolarError.wrongProduct` with its copy. F1 only widens that single id to sets, so one app can accept its v1 and v2 benefits.
 
 **Files:**
-- Modify: `Packages/TegelKit/Sources/TegelStore/*` (`PolarClient`, `LicenseManager`, `PolarConfig`, `StoredLicense`; file names from F0); `Config/{Debug,Release}.xcconfig` and the sandbox xcconfig: rename `TG_POLAR_BENEFIT_ID_<APP>` → `TG_POLAR_BENEFIT_IDS_<APP>` for every app target, and add `TG_POLAR_V2_BENEFIT_IDS_MARKDOWN` (space-separated, X29); `project.yml` (Info.plist `TGPolarBenefitID` → `TGPolarBenefitIDs = $(TG_POLAR_BENEFIT_IDS_<APP>)` on every app target, plus `TGPolarV2BenefitIDs = $(TG_POLAR_V2_BENEFIT_IDS_MARKDOWN)` on `markdown`)
+- Modify: `Packages/TegelKit/Sources/TegelStore/*` (`PolarClient`, `LicenseManager`, `PolarConfig`, `StoredLicense`; file names from F0); `Config/{Debug,Release}.xcconfig` and the sandbox xcconfig: rename `TG_POLAR_BENEFIT_ID_<APP>` → `TG_POLAR_BENEFIT_IDS_<APP>` for every app target, and add `TG_POLAR_V2_BENEFIT_IDS_MARKDOWN` (space-separated, X29); `project.yml` (Info.plist `TGPolarBenefitID` → `TGPolarBenefitIDs = $(TG_POLAR_BENEFIT_IDS_<APP>)` on every app target, plus `TGPolarV2BenefitIDs = $(TG_POLAR_V2_BENEFIT_IDS_MARKDOWN)` on `markdown`); `scripts/release.sh` (plan 03's; item 7's "`TGPolarBenefitID` non-empty" pre-notary check reads `TGPolarBenefitIDs`, Step 6)
 - Test: `Packages/TegelKit/Tests/TegelStoreTests/BenefitTests.swift`
 
 **Interfaces (contract changes, listed at the end):**
@@ -998,14 +1040,14 @@ Plan 03 already binds each key to one benefit (D1): `PolarConfig.benefitID: Stri
 - `StoredLicense` gains `public var benefitID: String?` (decoded with `decodeIfPresent`, so v1.x Keychain items read as nil and fill on the next 200).
 - `PolarConfig.benefitID: String` becomes `public let benefitIDs: Set<String>`, plus `public let v2BenefitIDs: Set<String>`. `LicenseManager` gains `public var hasV2: Bool`. `PolarError.wrongProduct` and its copy are plan 03's, unchanged.
 
-- [ ] **Step 1: Write the failing tests** (reusing plan 03's URLProtocol stub):
+- [ ] **Step 1: Write the failing tests** (reusing plan 03's URLProtocol stub and its `makeManager(…, now:)` helper over the designated `LicenseManager(client:keychain:now:)`; every stamped date is relative to plan 03's `t0`, and every `refresh` passes `now:`, so no test reads the real clock):
   - `testValidateReturnsBenefitID`: a stubbed 200 `{"benefit_id":"b-v2","expires_at":null,…}` → `ValidatedLicense(expiresAt: nil, benefitID: "b-v2")`.
   - `testActivateAcceptsAnyBenefitInTheSets`: activate → `{"id":"act1","license_key":{"benefit_id":"b-v2"}}` with `"b-v2"` ∈ `v2BenefitIDs` → returns `Activation(id: "act1", benefitID: "b-v2")`, no deactivate.
   - `testActivateStoresBenefitIDAtOnce` (CX16): after that activate, `keychain.load()?.benefitID == "b-v2"` and `hasV2 == true` with no validate call; the next `refresh()` sends `benefit_id == "b-v2"`, never the v1 id.
   - `testActivateRejectsBenefitOutsideBothSets`: `{"id":"act1","license_key":{"benefit_id":"b-data"}}` → throws `.wrongProduct`; the stub recorded `deactivate` with `activation_id == "act1"`; `keychain.load() == nil` (plan 03's behaviour, now against the sets).
   - `testV1KeyIsProNotV2`: benefit `"b-v1"` ∈ `benefitIDs` → `isPro`, `!hasV2`.
   - `testV2KeyIsProAndV2`: benefit `"b-v2"` ∈ `v2BenefitIDs` → both true.
-  - `testLapsedV2KeyHasNoV2`: `lastValidatedAt` 31 days ago, network down → `hasV2 == false`.
+  - `testLapsedV2KeyHasNoV2`: `lastValidatedAt = t0`, the manager at `now: t0 + 31 * 86_400`, network down, `refresh(now: t0 + 31 * 86_400)` → `hasV2 == false`.
   - `testLegacyStoredLicenseDecodes`: JSON without `benefitID` decodes with `benefitID == nil`; `isPro` unchanged within grace.
   - `test404StillFallsIntoGrace`: the [F3d] invariant is unchanged.
 - [ ] **Step 2: Watch it fail.** `swift test --package-path Packages/TegelKit --filter BenefitTests` → FAIL to compile (`ValidatedLicense` undefined).
@@ -1015,6 +1057,7 @@ Plan 03 already binds each key to one benefit (D1): `PolarConfig.benefitID: Stri
   - `refresh` stores `benefitID` on each 200. `hasV2`: `state` is `.pro(l)` with `l.benefitID ∈ v2BenefitIDs`. `PolarConfig.fromInfoPlist` splits `TGPolarBenefitIDs` and `TGPolarV2BenefitIDs` on spaces.
 - [ ] **Step 4: Watch it pass.** `swift test --package-path Packages/TegelKit` → all pass, including plan 03's binding and grace tests. Watch the CX16 guard fail: make `LicenseManager.activate` store `benefitID: nil` → `testActivateStoresBenefitIDAtOnce` fails; restore. `xcodegen generate && make build`, then `/usr/libexec/PlistBuddy -c 'Print TGPolarBenefitIDs'` on each built app → its own benefit id(s), never empty.
 - [ ] **Step 5: Commit:** `Packages/TegelKit Config project.yml`, `feat(store): benefit-id sets for v2 entitlement` + trailer.
+- [ ] **Step 6: Move `release.sh`'s benefit check to the new key, watched failing first.** With Step 5 committed and `release.sh` unchanged: `scripts/release.sh markdown <next v1.x>-rc1 --sandbox --no-upload` → exit 1 at item 7's `TGPolarBenefitID` check (the key no longer exists), which is what would stop F2's release. Change that check to `TGPolarBenefitIDs` non-empty; commit `scripts/release.sh`, `build(release): pre-notary check reads TGPolarBenefitIDs` + trailer (it needs a clean tree); re-run → past the pre-notary checks, notarised, the DMG path printed last. `bash scripts/release_test.sh` → `0 failed`.
 
 ### Task F2: The `hasV2` seam and a v1.x that accepts v2 keys
 
@@ -1053,7 +1096,7 @@ Row 14 accepted and applied to plan 08 Task 4 Step 8 and Task G1 (27 Oct); histo
 
 | # | Change | Reason | Section |
 |---|---|---|---|
-| 1 | §3.2: `renderToHTML` also emits math placeholders (`.math-src`, `data-math`, `dir="ltr"`) and footnotes (`fn<N>`/`fnref<N>`, `<li dir="auto">`). `window.tegel.render` lazy-loads `katex/katex.min.js` like Mermaid and sanitises KaTeX output with `SANITIZE_CONFIG` from `Renderer/src/sanitize.js` (plan 01), inserted with `replaceChildren` | v1.1 math and footnotes (BUSINESS-PLAN §6.1) | A1, A2 |
+| 1 | §3.2: `renderToHTML` also emits math placeholders (`.math-src`, `data-math`, `dir="ltr"`) and footnotes (`fn<N>`/`fnref<N>`, `user-content-` prefixed in the DOM; `dir="auto"` on the footnotes `<section>` only, never per item). `window.tegel.render` lazy-loads `katex/katex.min.js` like Mermaid and sanitises KaTeX output with `SANITIZE_CONFIG` from `Renderer/src/sanitize.js` (plan 01), inserted with `replaceChildren` | v1.1 math and footnotes (BUSINESS-PLAN §6.1) | A1, A2 |
 | 2 | §3.2/§3.3: `RenderOptions.userCSS: String?` and JS `opts.userCSS`, injected as the last `<style id="tegel-user-css">` under the unchanged CSP | Custom CSS | A3 |
 | 3 | App seam: `ProGate.isProNow()` (static, `@MainActor`) beside `EnvironmentValues.isPro`, plus `EnvironmentValues.hasV2` | App Intents run outside the SwiftUI environment; v2 gating | A5, F2 |
 | 4 | §3.1 layout: `Apps/Markdown/App/Direct/`, `Apps/Markdown/{MAS,MASTests,Setapp}/`, `Apps/Select/`, `scripts/gates/products.json`, `scripts/v2/`, `scripts/{mas.sh,verify-store-build.sh,verify-no-keylogging.sh}`, `.github/workflows/mas.yml`. Gate counting extends plan 05's `polar_sales.py` (no second counter, no Makefile change; X22) | Store editions, App 3, gate tooling | G0, G1, B1, B3, C3, D3 |

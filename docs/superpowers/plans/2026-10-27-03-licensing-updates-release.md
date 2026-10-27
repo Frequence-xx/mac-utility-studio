@@ -10,7 +10,7 @@
 
 **Spec:** `BUSINESS-PLAN.md` (§5 rules 3 and 5, §6.4, §7.3, §7.4, §13 risk 7); `docs/superpowers/plans/2026-10-27-00-master-roadmap.md` (Global constraints, Review focus 5, D5, D12, D14–D16, §3.3, §5 H2/H4/H5, §6); facts `docs/research/2026-10-27-technical-facts.md` [F#]; rules `CLAUDE.md`.
 
-**When / where:** **W4, Tue 17 – Mon 23 Nov 2026**, on branch `m03-commerce-release` (created in Task 4). Earlier: Task 1 (W1; it owns the Polar sandbox, master H5), Task 2 (W3) and the user half of Task 3 (H2).
+**When / where:** **W4, Tue 17 – Mon 23 Nov 2026**, on branch `m03-commerce-release` (created in Task 4). Earlier: Task 1 (W1; it owns the Polar sandbox, master H5), Task 2 (W3) and Task 3 Steps 1–4 (H2, done Tue 27 Oct).
 **Assumed done:** plans 01–02, merged into `main`. They provide `project.yml` (App 1 + Quick Look extension), the `TegelKit` library, the `isPro` seam with a Debug override in `Apps/Markdown/App/ProGate.swift`, `Config/{Debug,Release}.xcconfig` and `ci.yml`. Plan 04 provides the Cloudflare account and the `tegelapps.com` zone.
 
 ## Global Constraints
@@ -41,18 +41,19 @@ Master Review focus 5 belongs to this plan. Most likely first:
 Also pinned:
 - A 200 counts only with `status == "granted"` and the stored activation id; a block page, a stub or a drifted body is a failure that goes through grace (`validate200WithoutGrantedMatchingActivationIsFailure`).
 - A deactivate racing a refresh can't resurrect a licence (`refreshDoesNotResurrectLicenceDeletedMidFlight`).
+- A lapsed licence whose activation is gone can be removed from the Licence tab, so the key can be entered again (`lapsedLicenceCanBeRemoved`).
 - One activate/deactivate at a time (`concurrentActivateSendsOneRequest`), and a Keychain save failure releases the new activation (`activateKeychainSaveFailureRollsBack`).
 - A key for another Tegel app is rejected, its activation released and nothing stored (`activateWrongBenefitDeactivatesAndThrows`, `activateWrongProductThrowsAndStaysFree`; Task 13 step 13).
 - The release guards (dirty tree, missing key, placeholder values, bad args, private betas, `--print-config` paths, `--from-dmg` checks, the entitlement allowlist) are covered by `scripts/release_test.sh`.
 
 ## H2 dependency (Developer ID)
 
-Everything runs before H2 lands except these, which stay **BLOCKED until Task 3 is done**:
+**H2 is done (Tue 27 Oct 2026):** the Developer ID certificate and the `tegel-notary` profile exist (Task 3 Steps 1–4, now verify-only). These steps needed it and are no longer blocked:
 - Task 11 step 5 (signed archive check);
 - Task 12 step 7 (first real `release.sh` run);
 - all of Task 13 (the private b1/b2 builds, Gatekeeper, the Sparkle update, and the purchase on a notarised build).
 
-The licence flow is still exercised before H2 on a Debug build against the sandbox (Task 9). If H2 isn't done by Mon 16 Nov, the launch slips week for week (master P5).
+Task 3 Step 5 (keys at rest, K3) still runs before them.
 
 ## Conventions used in every task
 
@@ -162,67 +163,71 @@ No commit; Task 4 adds `CLOUDFLARE_R2_API_TOKEN`, `R2_BUCKET` and `R2_PUBLIC_BAS
 
 ### Task 3: Developer ID certificate and notarytool profile (H2)
 
-**Schedule:** the user enrols by **Fri 6 Nov**; certificate and API key by **Mon 16 Nov**; Claude's steps on Tue 17 Nov.
+**Status:** Steps 1–4 were **done on Tue 27 Oct 2026** (H2 landed early): the Developer ID Application certificate (G2 Sub-CA, expires **Fri 26 Nov 2027**), the `tegel-notary` profile and the `.env` keys. Each step below now only verifies. Step 5 (K3) is still to run, on Tue 17 Nov with the other Claude steps; Step 6 is the 2027 renewal.
 
 **Files:** none in the repo; writes `.env` keys, the Keychain and the user's encrypted offline key store (K3).
 
 **Interfaces:**
-- Produces these `.env` names, used by Tasks 11–13: `APPLE_DEVELOPER_ID_IDENTITY`, `APPLE_TEAM_ID`, `ASC_API_KEY_ID`, `ASC_API_ISSUER_ID` (Team keys only), `NOTARY_KEYCHAIN_PROFILE`. No key path: the `.p8` doesn't stay on disk.
+- Produces these `.env` names, used by Tasks 11–13: `APPLE_DEVELOPER_ID_IDENTITY`, `APPLE_TEAM_ID`, `ASC_API_KEY_ID`, `ASC_API_ISSUER_ID` (Team keys only), `NOTARY_KEYCHAIN_PROFILE`. No key path: `ASC_API_KEY_PATH` is set on 27 Oct and Step 5 empties it, because the `.p8` doesn't stay on disk.
 - Keychain: the Developer ID identity and the `tegel-notary` profile.
 - The offline key store, `TegelKeys` (default: an encrypted APFS image the user keeps on external media). Task 10 adds the Sparkle key to it.
 
-- [ ] **Step 1: the certificate, check first, then create.** H2 may already be done when this plan runs.
-  - Check: `security find-identity -v -p codesigning | grep -c '"Developer ID Application:'`. `1` → done; go to step 2.
-  - `0` → the **user** (Account Holder) uploads the existing CSR `~/.tegel-signing/devid-application.csr` at developer.apple.com → Certificates, IDs & Profiles → Certificates → **+** → **Developer ID Application**, profile type **G2 Sub-CA**, and downloads the `.cer`. Don't use Xcode ▸ Manage Certificates: it makes a new key and orphans the one in `~/.tegel-signing/`.
-  - Claude moves the `.cer` into `~/.tegel-signing/` and imports the key and the certificate into the login Keychain:
-    ```bash
-    security import ~/.tegel-signing/devid-application.key -k ~/Library/Keychains/login.keychain-db -t priv -f openssl -T /usr/bin/codesign
-    security import ~/.tegel-signing/*.cer -k ~/Library/Keychains/login.keychain-db
-    ```
-  - Check again → `1`.
+- [ ] **Step 1: The certificate (done 27 Oct; verify).**
+  - Run: `security find-identity -v -p codesigning | grep -c '"Developer ID Application:'; security find-certificate -c "Developer ID Application" -p | openssl x509 -noout -enddate`
+  - Expected: `1`, then `notAfter=Nov 26 11:25:05 2027 GMT`. If the count is `0`, the identity is gone: re-import `~/.tegel-signing/devid-application.key` (`security import … -t priv -f openssl -T /usr/bin/codesign`) and the `.cer` beside it into the login Keychain, or after Step 5 the key from `TegelKeys`.
   - **First use (CR-P2-27):** the first `codesign` with this key (Task 11 step 5) raises a Keychain prompt, "codesign wants to sign using key …". The **user** types the login password and clicks **Always Allow**, once. Record the date in `docs/gates/m03-acceptance.md` (Task 13 step 16). Until then a non-interactive `release.sh` would stall on that prompt.
-- [ ] **Step 2: Save the identity and team id without printing them.**
+- [ ] **Step 2: The identity and team id in `.env` (done 27 Oct; verify without printing them).**
   ```bash
   . scripts/lib/env.sh
-  ID=$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application: [^"]*\)"/\1/p' | head -1)
-  envset APPLE_DEVELOPER_ID_IDENTITY "$ID"; T=${ID##*(}; envset APPLE_TEAM_ID "${T%)}"; unset ID T
   need APPLE_DEVELOPER_ID_IDENTITY APPLE_TEAM_ID && echo saved
+  ID=$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application: [^"]*\)"/\1/p' | head -1)
+  [ "$(envget APPLE_DEVELOPER_ID_IDENTITY)" = "$ID" ] && [ "$(envget APPLE_TEAM_ID)" = "$(printf '%s' "$ID" | sed -n 's/.*(\([A-Z0-9]*\))$/\1/p')" ] && echo match; unset ID
   ```
-  Expected: `saved`. The identity contains spaces and parentheses, which `envset`'s quoting handles (K1).
-- [ ] **Step 3 (user + Claude): the App Store Connect API key.**
-  - User: App Store Connect → Users and Access → Integrations → **Team Keys** (role Developer), or an Individual key. Download the `.p8` once.
-  - Claude: `mkdir -p ~/.tegel-secrets && chmod 700 ~/.tegel-secrets`, move the file to `~/.tegel-secrets/AuthKey_<KEYID>.p8` and `chmod 600` it. Then `. scripts/lib/env.sh; envset ASC_API_KEY_ID '<KEYID>'` and, **Team keys only**, `envset ASC_API_ISSUER_ID '<issuer>'`.
-- [ ] **Step 4: Store the notary credentials.** `--issuer` is "Required for Team API Keys. Do not provide for Individual API Keys" (`xcrun notarytool store-credentials --help` on Xcode 26.3).
-  ```bash
-  . scripts/lib/env.sh
-  KID=$(envget ASC_API_KEY_ID); ISS=$(envget ASC_API_ISSUER_ID)
-  xcrun notarytool store-credentials tegel-notary --key ~/.tegel-secrets/"AuthKey_$KID.p8" --key-id "$KID" ${ISS:+--issuer "$ISS"}
-  envset NOTARY_KEYCHAIN_PROFILE tegel-notary
-  xcrun notarytool history --keychain-profile tegel-notary >/dev/null && echo notary-ok
-  ```
-  Expected: the credentials validate and are saved to the Keychain, then `notary-ok`.
-  - **Fallback:** if the account can't create API keys, run `. scripts/lib/env.sh; xcrun notarytool store-credentials tegel-notary --apple-id <id> --team-id "$(envget APPLE_TEAM_ID)"`; the user types an app-specific password at the secure prompt.
-- [ ] **Step 5: Keys at rest (K3).** The Keychain now holds both keys, so the plaintext files leave `$HOME`.
-  1. **Watch the check fail first:**
+  Expected: `saved`, then `match`. On a mismatch, `envset APPLE_DEVELOPER_ID_IDENTITY "$ID"` and `envset APPLE_TEAM_ID` with the id in its trailing parentheses (K1 quoting handles the spaces and parentheses).
+- [ ] **Step 3: The App Store Connect API key (done 27 Oct; verify).** The `.p8` is in `~/.appstoreconnect/private_keys/AuthKey_<KEYID>.p8`, not in `~/.tegel-secrets/`; Step 5 moves it.
+  - Run: `. scripts/lib/env.sh; need ASC_API_KEY_ID ASC_API_ISSUER_ID && test -f ~/.appstoreconnect/private_keys/"AuthKey_$(envget ASC_API_KEY_ID).p8" && echo ok`
+  - Expected: `ok`.
+- [ ] **Step 4: The notary credentials (done 27 Oct; verify).**
+  - Run: `. scripts/lib/env.sh; [ "$(envget NOTARY_KEYCHAIN_PROFILE)" = tegel-notary ] && xcrun notarytool history --keychain-profile tegel-notary >/dev/null && echo notary-ok`
+  - Expected: `notary-ok`.
+  - The profile holds the key's contents, not its path: with the `.p8` moved aside, `notarytool history --keychain-profile tegel-notary` still succeeded (build Mac, 27 Oct). So Step 5 can take the plaintext off disk without breaking notarisation.
+  - If the profile is ever lost: `xcrun notarytool store-credentials tegel-notary --key <the .p8 from TegelKeys> --key-id "$KID" ${ISS:+--issuer "$ISS"}` (`--issuer` is "Required for Team API Keys. Do not provide for Individual API Keys", `xcrun notarytool store-credentials --help` on Xcode 26.3).
+- [ ] **Step 5: Keys at rest (K3).** The Keychain holds both keys, so the plaintext files leave `$HOME`.
+  1. **Gather the `.p8`, then watch the check fail first:**
      ```bash
+     . scripts/lib/env.sh
+     mkdir -p ~/.tegel-secrets && chmod 700 ~/.tegel-secrets
+     mv ~/.appstoreconnect/private_keys/"AuthKey_$(envget ASC_API_KEY_ID).p8" ~/.tegel-secrets/ && chmod 600 ~/.tegel-secrets/*.p8
      find ~/.tegel-signing ~/.tegel-secrets -type f \( -name '*.key' -o -name '*.p8' -o -name '*.p12' \) 2>/dev/null
      ```
-     Expected: two paths, `devid-application.key` and `AuthKey_<KEYID>.p8`.
+     Expected: two paths, `devid-application.key` and `AuthKey_<KEYID>.p8`. Only this app's key moves; any other `.p8` in `~/.appstoreconnect/private_keys/` isn't Tegel's and stays.
   2. **Ask the user where the encrypted store lives** (USER item K3). Default: an AES-256 encrypted APFS image on external media, with its passphrase in the user's password manager. For the default, the **user** runs this in Terminal, because both commands prompt for the passphrase:
      `hdiutil create -size 20m -fs APFS -encryption AES-256 -volname TegelKeys ~/TegelKeys.dmg && hdiutil attach ~/TegelKeys.dmg`
-  3. Claude copies each file, checks the copy, deletes the original, and confirms nothing broke:
+  3. Claude copies each file, checks the copy, deletes the original, empties the key path in `.env`, and confirms nothing broke:
      ```bash
+     . scripts/lib/env.sh
      for f in $(find ~/.tegel-signing ~/.tegel-secrets -type f \( -name '*.key' -o -name '*.p8' -o -name '*.p12' \)); do
        cp -p "$f" /Volumes/TegelKeys/ && cmp -s "$f" "/Volumes/TegelKeys/${f##*/}" && rm "$f"
      done
      ls /Volumes/TegelKeys; hdiutil detach /Volumes/TegelKeys
+     envset ASC_API_KEY_PATH ''
      find ~/.tegel-signing ~/.tegel-secrets -type f \( -name '*.key' -o -name '*.p8' -o -name '*.p12' \) 2>/dev/null | wc -l
+     [ -z "$(envget ASC_API_KEY_PATH)" ] && echo no-path
      security find-identity -v -p codesigning | grep -c '"Developer ID Application:'
      xcrun notarytool history --keychain-profile tegel-notary >/dev/null && echo notary-ok
      ```
-     Expected: the two file names, then `0`, `1`, `notary-ok`.
-     - If `notary-ok` fails, the profile stored only the `.p8` path. Copy the file back, record it, and ask the user before going on.
+     Expected: the two file names, then `0`, `no-path`, `1`, `notary-ok`. Step 4 already showed the profile works without the `.p8` on disk; a `notary-ok` failure here is something else, so record the error and ask the user.
   4. The **user** moves `~/TegelKeys.dmg` to the external media and deletes the local copy.
+- [ ] **Step 6: Renew the certificate by Fri 12 Nov 2027** (it expires Fri 26 Nov 2027, 11:25 UTC). Apps already signed and notarised keep opening after it expires, because their signatures are timestamped, but no new build can be signed, so a missed renewal blocks every update and release.
+  - Make a new key and CSR without printing values:
+    ```bash
+    . scripts/lib/env.sh
+    (umask 077; openssl req -new -newkey rsa:2048 -nodes -keyout ~/.tegel-signing/devid-application-2027.key -out ~/.tegel-signing/devid-application-2027.csr \
+      -subj "/CN=$(envget APPLE_DEVELOPER_LEGAL_NAME)/emailAddress=$(envget APPLE_ACCOUNT_EMAIL)")
+    ```
+  - The **user** uploads the CSR as a new **Developer ID Application** certificate (G2 Sub-CA); Claude imports the key and the `.cer` as in Step 1.
+  - Delete the old certificate in Keychain Access (sort by expiry date): two identities with one name make the name in `APPLE_DEVELOPER_ID_IDENTITY` ambiguous to `codesign`. Then Step 1's check prints `1` and the new `notAfter`, and Step 2 prints `match`.
+  - Run Task 11 step 5's signed archive check. Then the **user** attaches `TegelKeys` (`hdiutil attach <path>/TegelKeys.dmg`) and Claude runs Step 5 item 3, which moves `devid-application-2027.key` into the store; the expected counts are the same.
 
 No commit.
 
@@ -283,9 +288,10 @@ No commit.
       }
   }
   ```
+  - Declare the folder in `Package.swift` as `.testTarget(name: "TegelStoreTests")`, with no dependencies yet: SwiftPM skips an undeclared test folder, and `--filter` then passes with 0 tests (checked on the build Mac).
 - [ ] **Step 3: Run it to verify it fails.** `swift test --package-path Packages/TegelKit --filter LicensePolicyTests`. Expected: FAIL, `error: no such module 'TegelStore'`.
 - [ ] **Step 4: Implement.**
-  - `Package.swift`: add `.library(name: "TegelStore", targets: ["TegelStore"])`, `.target(name: "TegelStore")` and `.testTarget(name: "TegelStoreTests", dependencies: ["TegelStore"])`.
+  - `Package.swift`: add `.library(name: "TegelStore", targets: ["TegelStore"])` and `.target(name: "TegelStore")`, and give the test target `dependencies: ["TegelStore"]`.
   - `License.swift`: the four types above, plus the internal `skew`.
   - `state`:
     - `nil` → `.free`;
@@ -483,7 +489,7 @@ No commit.
 - [ ] **Step 3: Implement `KeychainStore`.**
   - Item: `kSecClassGenericPassword`, `kSecAttrService` = service, `kSecAttrAccount` = `"licence"`, value = the JSON-encoded `StoredLicense`.
   - Use the file-based login keychain: the data-protection keychain needs a provisioning profile.
-  - `save` = `SecItemDelete`, then `SecItemAdd`.
+  - `save` = `SecItemAdd`; on `errSecDuplicateItem`, `SecItemUpdate` with the new value. Never delete first: a failed write must leave the stored licence in place (`refresh` saves with `try?`).
   - `load` = `SecItemCopyMatching` + decode. Any failure → `nil`.
   - `delete` treats `errSecItemNotFound` as success.
   - `failSaves` as in Interfaces.
@@ -511,9 +517,10 @@ No commit.
 - New, internal:
   - `static func normalisedKey(_ raw: String) -> String`. It removes **all** whitespace and newlines, not just the ends: Polar keys contain none, so this also fixes a key wrapped across lines in an email.
   - `static var computerName: String { (SCDynamicStoreCopyComputerName(nil, nil) as String?) ?? "Mac" }`, the activation label (`import SystemConfiguration`). Not `Host.current()`, which does a blocking DNS lookup that can stall offline (CR-P2-26).
+  - `init(client: PolarClient, keychain: KeychainStore, now: Date)`, the designated init: it applies the policy at `now`. The §3.3 public init is a `convenience init` that passes `.now`, so the contract is unchanged. Tests pass a clock relative to `t0` (15 Jan 2027), so no test depends on today's date.
 - Test helpers, in this test file:
   - `let granted = respond(200, #"{"status":"granted","activation":{"id":"act_1"}}"#)`, a validate 200 for `lic`.
-  - `@MainActor func makeManager(stored: StoredLicense?, _ handler: @escaping StubHandler = respond(200, #"{"id":"act_1","license_key":{"benefit_id":"ben-1"}}"#), failSaves: Bool = false) throws -> (LicenseManager, KeychainStore, String)`. It uses a `uniqueService()` store with `failSaves` set, pre-saves `stored` (before setting the flag), and builds the client with `stubbedClient`.
+  - `@MainActor func makeManager(stored: StoredLicense?, _ handler: @escaping StubHandler = respond(200, #"{"id":"act_1","license_key":{"benefit_id":"ben-1"}}"#), failSaves: Bool = false, now: Date = t0) throws -> (LicenseManager, KeychainStore, String)`. It uses a `uniqueService()` store with `failSaves` set, pre-saves `stored` (before setting the flag), builds the client with `stubbedClient`, and the manager with `LicenseManager(client:keychain:now:)`.
 
 - [ ] **Step 1: Write the failing test.** Each test also deletes its Keychain store at the end (`defer { try? store.delete() }`, omitted below).
   ```swift
@@ -523,12 +530,13 @@ No commit.
   @testable import TegelStore
 
   @MainActor @Suite struct LicenseManagerTests {
-      @Test func initAppliesPolicyToStoredLicence() throws {
-          let fresh = StoredLicense(key: "K-1", activationID: "act_1", lastValidatedAt: .now - 86_400)
-          let (m, _, _) = try makeManager(stored: fresh)
-          #expect(m.state == .pro(fresh)); #expect(m.isPro)
-          let (m2, _, _) = try makeManager(stored: nil)
-          #expect(m2.state == .free); #expect(!m2.isPro)
+      @Test func initAppliesPolicyToStoredLicence() throws {               // .pro and .lapsed can't both hold at one real date
+          let (m, _, _) = try makeManager(stored: lic, now: t0 + 86_400)
+          #expect(m.state == .pro(lic)); #expect(m.isPro)
+          let (m2, _, _) = try makeManager(stored: lic, now: t0 + LicensePolicy.grace + 1)
+          #expect(m2.state == .lapsed(lic)); #expect(!m2.isPro)
+          let (m3, _, _) = try makeManager(stored: nil)
+          #expect(m3.state == .free); #expect(!m3.isPro)
       }
       @Test func normalisedKeyStripsAllWhitespace() {
           #expect(LicenseManager.normalisedKey("  ABCD-1234 \n") == "ABCD-1234")
@@ -624,11 +632,17 @@ No commit.
           await #expect(throws: PolarError.network) { try await m.deactivate() }
           #expect(store.load() == lic); #expect(m.isPro)
       }
+      @Test func lapsedLicenceCanBeRemoved() async throws {               // activation removed in the portal: validate and deactivate both 404
+          let (m, store, _) = try makeManager(stored: lic, respond(404), now: t0 + LicensePolicy.grace + 1)
+          #expect(m.state == .lapsed(lic))
+          try await m.deactivate()                                         // the Licence tab's "Remove Licence…" (Task 9)
+          #expect(m.state == .free); #expect(store.load() == nil)
+      }
       @Test func refreshDoesNotResurrectLicenceDeletedMidFlight() async throws {
           let service = uniqueService(), store = KeychainStore(service: service)
           try store.save(lic)
           let (client, _) = stubbedClient { _, _ in try? KeychainStore(service: service).delete(); return (200, Data(#"{"status":"granted","activation":{"id":"act_1"}}"#.utf8)) }
-          let m = LicenseManager(client: client, keychain: store)
+          let m = LicenseManager(client: client, keychain: store, now: t0)
           await m.refresh(now: t0 + 86_400)
           #expect(store.load() == nil); #expect(m.state == .free)
       }
@@ -636,7 +650,7 @@ No commit.
   ```
 - [ ] **Step 2: Run it to verify it fails.** `swift test --package-path Packages/TegelKit --filter LicenseManagerTests`. Expected: FAIL, `error: cannot find 'LicenseManager' in scope`.
 - [ ] **Step 3: Implement `LicenseManager`.**
-  - **`init`:** `state = LicensePolicy.state(stored: keychain.load(), now: .now)`. This is synchronous, so Pro is on at launch before any network call.
+  - **`init(client:keychain:now:)`:** `state = LicensePolicy.state(stored: keychain.load(), now: now)`. This is synchronous, so Pro is on at launch before any network call. The public init is `convenience init(client:keychain:)`, calling it with `now: .now`.
   - **Serialising (K5):** `private var mutating = false`. `activate` and `deactivate` start with `guard !mutating else { throw CancellationError() }; mutating = true; defer { mutating = false }`. Both run on the main actor, so the flag is set before the first `await`.
   - **`activate`:**
     1. Normalise the key.
@@ -654,12 +668,14 @@ No commit.
     - `refresh` takes no part in the `mutating` flag; step 3 already handles a mutation that lands mid-flight.
   - **`deactivate`:** call `client.deactivate`. Then `.notFound` and success both `keychain.delete()` and set `state = .free`. Every other error is rethrown, and the licence is kept.
 - [ ] **Step 4: Run it to verify it passes.**
-  - `swift test --package-path Packages/TegelKit --filter LicenseManagerTests`. Expected: `✔ Test run with 18 tests … passed`.
-  - Then `swift test --package-path Packages/TegelKit --filter TegelStoreTests`. Expected: `40 tests … passed` (8 + 12 + 2 + 18).
-- [ ] **Step 5: Watch both K5 guards fail.** One at a time, re-running `--filter LicenseManagerTests` after each, then restoring:
+  - `swift test --package-path Packages/TegelKit --filter LicenseManagerTests`. Expected: `✔ Test run with 19 tests … passed`.
+  - Then `swift test --package-path Packages/TegelKit --filter TegelStoreTests`. Expected: `41 tests … passed` (8 + 12 + 2 + 19).
+- [ ] **Step 5: Watch the K5 guards, the injected clock and the lapsed removal fail.** One at a time, re-running `--filter LicenseManagerTests` after each, then restoring:
   - delete the `guard !mutating` line → `concurrentActivateSendsOneRequest` fails (2 requests, 0 cancelled);
-  - delete the rollback `deactivate` → `activateKeychainSaveFailureRollsBack` fails (requests `["activate"]`).
-  - Restored: 18 passed.
+  - delete the rollback `deactivate` → `activateKeychainSaveFailureRollsBack` fails (requests `["activate"]`);
+  - make the designated `init` use `.now` instead of `now` → `initAppliesPolicyToStoredLicence` fails whatever today's date is (its `.pro` and `.lapsed` expectations need different real dates);
+  - add `guard isPro else { return }` at the top of `deactivate` → `lapsedLicenceCanBeRemoved` fails (state stays `.lapsed`, the key stays stored).
+  - Restored: 19 passed.
 - [ ] **Step 6: Commit:** `Packages/TegelKit/Sources/TegelStore/LicenseManager.swift Packages/TegelKit/Tests/TegelStoreTests/LicenseManagerTests.swift`, "feat(store): add LicenseManager; grace on every failure, serialised mutations, save rollback".
 
 ### Task 8: Polar values from xcconfig into Info.plist; link TegelStore (Thu 19 Nov)
@@ -745,7 +761,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   |---|---|
   | `.free` | Text "Pro adds folder mode with search and live reload, paginated PDF export and three themes. One-time purchase for up to 2 Macs, with a 14-day refund." · Button **"Buy Pro…"** → `openURL(config.checkoutURL)` · TextField "Licence key" + Button **"Activate"** (disabled while empty or busy) |
   | `.pro` | Text "Pro is active on this Mac." · Button **"Deactivate this Mac"** · Button **"Manage activations…"** → `openURL(config.portalURL)` |
-  | `.lapsed` | Text "Tegel couldn't confirm your licence for more than 30 days. Connect to the internet, then click Check Again." · Button **"Check Again"** → `refresh()` · **"Manage activations…"** |
+  | `.lapsed` | Text "Tegel couldn't confirm your licence for more than 30 days. Connect to the internet, then click Check Again." · Button **"Check Again"** → `refresh()` · **"Manage activations…"** · Button **"Remove Licence…"** → a confirmation dialog "Remove the licence from this Mac?" with **"Remove Licence"** (destructive) and "Cancel" → `deactivate()`. A 404 (activation already removed in the portal) counts as done, so the `.free` row comes back and the key can be entered again; other errors show their copy below |
   | error `.limitReached` | "This key is already active on 2 Macs, or it is no longer valid. Free up a Mac in Manage activations, then try again." |
   | error `.notFound` | "That licence key wasn't found. Copy it again from your receipt or the customer portal." |
   | error `.network` | "Couldn't reach the licence server. Check your connection and try again." |
@@ -764,7 +780,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   5. Deactivate this Mac. Expected: the free copy shows, and the dashboard shows 0 activations.
   6. Type the key `TEGEL-0000` and Activate. Expected: the `.notFound` copy.
   7. `make test-app ONLY=LocalizationTests`. Expected: `Executed 3 tests, with 0 failures` (every new string has NL/FR/AR). Then relaunch with `-AppleLanguages '(nl)'`, then `(fr)`, then `(ar)`. Expected: the Licence tab shows no English, and the AR layout is right-to-left.
-- [ ] **Step 4: Run `make check`.** Expected: baseline + 40 TegelStore tests, all passing.
+- [ ] **Step 4: Run `make check`.** Expected: baseline + 41 TegelStore tests, all passing.
 - [ ] **Step 5: Commit:** `Apps/Markdown/App/LicenceSettingsView.swift Apps/Markdown/App/MarkdownApp.swift Apps/Markdown/App/Localizable.xcstrings <settings-tabview-file>`, "feat(app): Licence settings tab; LicenseManager feeds isPro; 24 h refresh".
 
 ### Task 10: Sparkle 2.10.1 and EdDSA keys (Fri 20 Nov)
@@ -808,7 +824,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
     need SPARKLE_PUBLIC_ED_KEY && echo saved
     ```
     Expected: `saved`.
-  - **Back up the private key straight into the offline store (K3)**; it never lands in `$HOME`. Losing it means no more updates for every installed copy. The **user** connects the media and runs `hdiutil attach <path>/TegelKeys.dmg` (passphrase prompt). If H2 still blocks Task 3, the store doesn't exist yet: the user first creates it with Task 3 step 5 item 2's command, and Task 3 later adds its two files to it. Then:
+  - **Back up the private key straight into the offline store (K3)**; it never lands in `$HOME`. Losing it means no more updates for every installed copy. The **user** connects the media and runs `hdiutil attach <path>/TegelKeys.dmg` (passphrase prompt). If Task 3 step 5 hasn't run yet, the store doesn't exist yet: the user first creates it with Task 3 step 5 item 2's command, and Task 3 later adds its two files to it. Then:
     ```bash
     build/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys --account tegelapps -x /Volumes/TegelKeys/sparkle-ed25519-tegelapps.key
     ls /Volumes/TegelKeys; hdiutil detach /Volumes/TegelKeys
@@ -844,7 +860,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   - `ENABLE_HARDENED_RUNTIME = YES`;
   - `OTHER_CODE_SIGN_FLAGS = $(inherited) --timestamp`.
 
-- [ ] **Step 1: Write the failing check.** This runs before H2: it reads settings only. It names the two signed targets, because `-alltargets` would also count `MarkdownAppTests` (CR-P2-20).
+- [ ] **Step 1: Write the failing check.** It reads settings only, so it needs no certificate. It names the two signed targets, because `-alltargets` would also count `MarkdownAppTests` (CR-P2-20).
   ```bash
   xcodegen generate >/dev/null
   for t in markdown markdown.quicklook; do xcodebuild -project Tegel.xcodeproj -target "$t" -configuration Release -showBuildSettings 2>/dev/null; done \
@@ -853,7 +869,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
 - [ ] **Step 2: Run it to verify it fails.** Expected: FAIL, a count below `8`: `6` if plan 01's Release.xcconfig still sets three of the four, since `OTHER_CODE_SIGN_FLAGS` is missing on both targets.
 - [ ] **Step 3: Implement** the four lines in `Config/Release.xcconfig`.
 - [ ] **Step 4: Run it to verify it passes.** Expected: `8` (4 settings × 2 targets). Then `make check` passes: its builds use `CODE_SIGNING_ALLOWED=NO`, so they don't need the certificate.
-- [ ] **Step 5: Signed archive check (BLOCKED until Task 3).** The first `codesign` with the Developer ID key raises the Keychain prompt from Task 3 step 1: the **user** clicks **Always Allow** once (CR-P2-27). Note the date for `docs/gates/m03-acceptance.md`.
+- [ ] **Step 5: Signed archive check (needs Task 3, done 27 Oct).** The first `codesign` with the Developer ID key raises the Keychain prompt from Task 3 step 1: the **user** clicks **Always Allow** once (CR-P2-27). Note the date for `docs/gates/m03-acceptance.md`.
   ```bash
   . scripts/lib/env.sh
   xcodebuild archive -scheme markdown -configuration Release -destination 'generic/platform=macOS' -archivePath build/sig.xcarchive -quiet \
@@ -881,7 +897,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
 - Produces:
   - **`scripts/release.sh <app> <version> [--sandbox] [--yes] [--no-upload] [--print-config] [--from-dmg <path>]`**:
     - `<app>` ∈ `markdown`. The `case` sets `SLUG`, `SCHEME`, `NAME` and `VOL`; **after the `case`, every path derives from `$SLUG`** and no line names an app (CR-P0-1). Plan 06 adds `data`; plan 07 adds `select` and `markdown-setapp`;
-    - `<version>` matches `^[0-9]+\.[0-9]+\.[0-9]+(-(b|rc)[0-9]+)?$`, so `1.0.0`, `1.0.0-b1` and `1.0.0-rc1` (plans 05–07) all pass;
+    - `<version>` matches `^[0-9]+\.[0-9]+\.[0-9]+(-(b|rc)[0-9]+)?$`, so `1.0.0`, `1.0.0-b1` and `1.0.0-rc1` (plans 05–07) all pass. A `-bN`/`-rcN` version requires `--no-upload`: no beta or RC reaches the public feed (K7);
     - `--sandbox` builds Release with the sandbox Polar values. It requires `--no-upload`: betas are private (K7);
     - `--yes` skips the publish prompt. **Claude passes `--yes` only after the user approved that exact version in chat**;
     - `--no-upload` stops after the notarised, stapled DMG passes Gatekeeper, and prints the DMG's absolute path as the last stdout line: no appcast, no R2, no prompt. Plans 05, 06 and 07 use it for RCs and pre-publish smoke tests;
@@ -929,6 +945,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
          check bad-version      2 "bad version: 1.0"       markdown 1.0
          check bad-flag         2 "$U"                     markdown 1.0.0 --bogus   # so no-upload below proves the flag is parsed
          check sandbox-public   2 "--sandbox builds are private: add --no-upload"  markdown 1.0.0-b1 --sandbox
+         check rc-public        2 "pre-release builds are private: add --no-upload" markdown 1.0.0-rc1 --yes
          check from-dmg-no-path 2 "$U"                     markdown 1.0.0 --from-dmg
          check from-dmg-local   2 "--from-dmg publishes: drop --no-upload"         markdown 1.0.0 --from-dmg x.dmg --no-upload
          check print-config     0 "$PC"                    markdown 1.0.0 --print-config
@@ -937,7 +954,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   fresh; touch "$D/stray.txt"
          check dirty-tree       1 "working tree is dirty"  markdown 1.0.0
   fresh; check placeholder      1 "Config/Release.xcconfig still has REPLACE_IN_PLAN_05" markdown 1.0.0
-         check rc-version       1 "Config/Release.xcconfig still has REPLACE_IN_PLAN_05" markdown 1.0.0-rc1   # passes the version regex
+         check rc-version       1 "Config/Release.xcconfig still has REPLACE_IN_PLAN_05" markdown 1.0.0-rc1 --no-upload   # passes the version regex
          check no-upload        1 "Config/Release.xcconfig still has REPLACE_IN_PLAN_05" markdown 1.0.0 --no-upload
   fresh; sed -i '' 's/REPLACE_IN_PLAN_05/x/g' "$D/Config/Release.xcconfig"; commit; touch "$X/Other.dmg" "$X/TegelMarkdown-1.0.0.dmg"
          check from-dmg-missing 1 "no such DMG: $X/none/TegelMarkdown-1.0.0.dmg" markdown 1.0.0 --from-dmg "$X/none/TegelMarkdown-1.0.0.dmg"
@@ -952,7 +969,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   ents ents-extra 1 "$X/extra"
   echo "release_test: $pass passed, $fail failed"; [[ $fail == 0 ]]
   ```
-- [ ] **Step 2: Run it to verify it fails.** `bash scripts/release_test.sh`. Expected: FAIL, `cp: …/scripts/release.sh: No such file or directory`, … `release_test: 0 passed, 18 failed`.
+- [ ] **Step 2: Run it to verify it fails.** `bash scripts/release_test.sh`. Expected: FAIL, `cp: …/scripts/release.sh: No such file or directory`, … `release_test: 0 passed, 19 failed`.
 - [ ] **Step 3: Implement.**
   - **`scripts/entitlements/`** (the allowlist; any change to it is a reviewed commit, never generated from `project.yml`):
     ```bash
@@ -975,7 +992,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
        - Parse. No args, an unknown flag or `--from-dmg` without a path → the usage line, exit 2.
        - `case $app in markdown) SLUG=markdown SCHEME=markdown NAME=TegelMarkdown VOL="Tegel Markdown";; *) die 2 "unknown app: $app";; esac`.
        - Version regex → `bad version: $V`, exit 2.
-       - `--sandbox` without `--no-upload` → `--sandbox builds are private: add --no-upload`, exit 2. `--from-dmg` with `--no-upload` → `--from-dmg publishes: drop --no-upload`, exit 2.
+       - `--sandbox` without `--no-upload` → `--sandbox builds are private: add --no-upload`, exit 2. Then a `-bN`/`-rcN` version without `--no-upload` → `pre-release builds are private: add --no-upload`, exit 2 (this also stops `--from-dmg` on a pre-release). `--from-dmg` with `--no-upload` → `--from-dmg publishes: drop --no-upload`, exit 2.
        - Derived, from `$SLUG` only: `BASE=https://downloads.tegelapps.com`, `OUT=dist-release/$SLUG/$V`, `DMG_NAME=$NAME-$V.dmg`, `FEED=$BASE/$SLUG/appcast.xml`, `PREFIX=$BASE/$SLUG/`, `PREV=dist-release/$SLUG/appcast.xml`.
        - `--print-config` → print the five lines in Interfaces, exit 0.
     2. **Guards.**
@@ -1029,17 +1046,18 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
         - print `published $PREFIX$DMG_NAME`: the `downloadURL` that the publishing plan copies into `site/config.json` with the version (plan 05 for App 1, plan 06 for App 2; plan 04 CR-5).
   - **Makefile:** `test-release: ; bash scripts/release_test.sh`, and add `test-release` to `check`'s prerequisites.
 - [ ] **Step 4: Run it to verify it passes.**
-  - `bash scripts/release_test.sh`. Expected: `release_test: 18 passed, 0 failed`.
+  - `bash scripts/release_test.sh`. Expected: `release_test: 19 passed, 0 failed`.
   - `bash -n scripts/release.sh && echo syntax-ok` → `syntax-ok`.
-  - `make check` → the baseline, plus TegelStore, plus `release_test: 18 passed`.
+  - `make check` → the baseline, plus TegelStore, plus `release_test: 19 passed`.
 - [ ] **Step 5: Watch the new guards fail.** One at a time, re-running `bash scripts/release_test.sh` after each, then restoring:
   - make `check_ents` `return 0` → `FAIL ents-extra (exit 0)`;
-  - delete the `--sandbox` needs `--no-upload` rule → `FAIL sandbox-public`;
+  - delete the `--sandbox` needs `--no-upload` rule → `FAIL sandbox-public` (it now meets the pre-release rule's message);
+  - delete the pre-release needs `--no-upload` rule → `FAIL rc-public` (exit 1 at the placeholder guard);
   - delete the `stapler validate` line → `FAIL from-dmg-stapled` (the empty file then fails at `spctl`, with another message; `stapler` and `spctl` on an empty file exit 66 and 3, checked on the build Mac).
-  - Restored: `18 passed, 0 failed`.
+  - Restored: `19 passed, 0 failed`.
   - A `markdown/` literal can't be caught while `markdown` is the only app. Plan 06's `data` row adds the standing guard: a `print-config` case expecting `dist-release/data/<v>`, `…/data/appcast.xml` and `r2=$R2_BUCKET/data/`, watched failing (`unknown app: data`) before the row exists.
 - [ ] **Step 6: Commit:** `scripts/release.sh scripts/release_test.sh scripts/entitlements Makefile`, "feat(release): release.sh archive→notarise→DMG→signed appcast→R2, with print-config, from-dmg and an entitlement allowlist".
-- [ ] **Step 7: First real run (BLOCKED until Task 3).** This is Task 13 step 1.
+- [ ] **Step 7: First real run (needs Task 3, done 27 Oct).** This is Task 13 step 1.
 
 ### Task 13: End-to-end acceptance on private betas, BNPL record (Sat 21 – Sun 22 Nov; needs Task 3)
 
@@ -1156,7 +1174,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   - the proof is behavioural and comes with plan 05's first `v*` tag: its push shows the `macos` job running (no source grep, B16);
   - Commit: `.github/workflows/ci.yml`, "ci: run the macOS matrix on v* release tags".
 - [ ] **Step 1: Run Procedure P** with these deltas.
-  - **Stage 2 counts to record:** bun; swift (TegelKit + 40 TegelStore); `release_test: 18 passed`.
+  - **Stage 2 counts to record:** bun; swift (TegelKit + 41 TegelStore); `release_test: 19 passed`.
   - **Stage 4 `/cso` scope** (mandatory here: licensing, Keychain, entitlements, Sparkle, `release.sh`, `.env` handling):
     - **TegelStore:**
       - error → grace mapping (no 404 lock); the mid-flight race; key normalisation; no token or `Authorization` sent; HTTPS-only `apiBase`;

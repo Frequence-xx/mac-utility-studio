@@ -20,7 +20,7 @@
 
 **Branch and dates:** `m02-app1-features`, cut from `main` after plan 01 merges.
 - W2 (Tue 3 – Mon 9 Nov): Tasks 1–9. Needs plan 09 Drop A in `main` (`DESIGN.md`, `docs/design/app-ui-spec.md`; Mon 2 Nov).
-- W3 (Tue 10 – Mon 16 Nov): Tasks 10–17. Needs plan 09 Drop B in `main` (theme CSS, `docs/design/samples/`, `scripts/window-shot.sh`; Mon 9 Nov).
+- W3 (Tue 10 – Mon 16 Nov): Tasks 10–17. Needs plan 09 Drop B in `main` (theme CSS, `docs/design/samples/`, `scripts/window-shot.sh`; Mon 9 Nov), merged into the branch by Task 10 Step 0.
 
 **Shell:** `export PATH="$HOME/.local/bin:$PATH"` (bun, xcodegen). Build Mac: Intel iMac19,1, macOS 15.7, Xcode 26.3. This plan reads nothing from `.env`.
 
@@ -326,15 +326,14 @@ Expected: `Executed 4 tests, with 0 failures`.
 - Test: `Packages/TegelKit/Tests/TegelKitTests/FolderIndexFilesTests.swift`
 
 **Interfaces:**
-- Produces (contract): `FolderItem`, `FolderIndex.markdownFiles(in root: URL) throws -> [FolderItem]`.
+- Produces (contract): `FolderItem`, `FolderIndex.markdownFiles(in root: URL, limit: Int = maxFiles) throws -> [FolderItem]`.
 - Produces (additions):
   - `public static let markdownExtensions: Set<String> = ["md", "markdown", "mdown", "mkd", "mkdn"]` (lower-case, [F10])
   - `public static let maxFiles = 5_000`
-  - internal `markdownFiles(in root: URL, limit: Int) throws -> [FolderItem]`
 - Rules:
   - **Skip:** folders named `.git`, `node_modules`, `.build`, `DerivedData`, `Pods`, `dist` at any depth. Symlinked folders are never entered. Unreadable subfolders are skipped (the enumerator's `errorHandler` returns `true`).
   - **Keep:** other hidden folders stay in (`.github/` and `.claude/` hold agent docs).
-  - **Match:** extensions match case-insensitively. `relativePath` uses `/` separators. It comes from `pathComponents` after `resolvingSymlinksInPath()` on both the root and the item, never a string prefix: test roots are `/var/folders/…` while the enumerator returns `/private/var/…` (CR-P2-28).
+  - **Match:** extensions match case-insensitively. `relativePath` uses `/` separators. It comes from `pathComponents` after `resolvingSymlinksInPath()` on the root and on the item's parent folder, never on the item itself (a file link such as `AGENTS.md -> CLAUDE.md` keeps its own name) and never a string prefix: test roots are `/var/folders/…` while the enumerator returns `/private/var/…` (CR-P2-28).
   - **Order:**
     - rank 0: root `CLAUDE.md`;
     - rank 1: root `AGENTS.md`;
@@ -368,6 +367,11 @@ final class FolderIndexFilesTests: XCTestCase {
         try FileManager.default.createSymbolicLink(at: r.appending(path: "loop"), withDestinationURL: r)
         XCTAssertEqual(try rels(r), ["real/a.md"])
     }
+    func testFileSymlinkKeepsItsOwnName() throws {                 // AGENTS.md -> CLAUDE.md is a common repo layout
+        let r = try tree(["CLAUDE.md"])
+        try FileManager.default.createSymbolicLink(at: r.appending(path: "AGENTS.md"), withDestinationURL: r.appending(path: "CLAUDE.md"))
+        XCTAssertEqual(try rels(r), ["CLAUDE.md", "AGENTS.md"])
+    }
     func testSkipsUnreadableSubfolder() throws {                   // Review Focus 1
         let r = try tree(["locked/x.md", "open.md"])
         let locked = r.appending(path: "locked").path
@@ -389,12 +393,14 @@ Expected: FAIL, `cannot find 'FolderIndex' in scope`.
 
 - [ ] **Step 3: Implement `markdownFiles(in:limit:)`**
 
-Use `FileManager.enumerator(at:includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey], options: [], errorHandler: { _, _ in true })`. Call `skipDescendants()` on skip-list names and symlinks. The public overload passes `maxFiles`.
+Use `FileManager.enumerator(at:includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey], options: [], errorHandler: { _, _ in true })`. Call `skipDescendants()` on skip-list names and symlinks.
 
 - [ ] **Step 4: Run**
 
 Run: `swift test --package-path Packages/TegelKit --filter FolderIndexFilesTests`
-Expected: `Executed 6 tests, with 0 failures`.
+Expected: `Executed 7 tests, with 0 failures`.
+
+Then also resolve the item itself (`item.resolvingSymlinksInPath()`) and rerun `--filter testFileSymlinkKeepsItsOwnName`. Expected: FAIL, `["CLAUDE.md", "CLAUDE.md"]`. Restore and rerun: PASS.
 
 - [ ] **Step 5: Commit** `Packages/TegelKit/Sources/TegelKit/FolderIndex.swift Packages/TegelKit/Tests/TegelKitTests/FolderIndexFilesTests.swift`, "feat(tegelkit): FolderIndex.markdownFiles with skip rules and agent-first ordering"
 
@@ -411,7 +417,7 @@ Expected: `Executed 6 tests, with 0 failures`.
 - Produces (contract): `FolderIndex.search(_ query: String, in items: [FolderItem], limit: Int = 200) -> [SearchHit]`; `SearchHit { item, line, snippet }`.
 - Semantics:
   - **Query:** trimmed; empty → `[]`. Literal matching via `range(of:options: [.caseInsensitive, .diacriticInsensitive])`, never a regex.
-  - **Hits:** one hit per matching line. Lines are split with `split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)`, so CRLF counts once. `line` is 1-based.
+  - **Hits:** one hit per matching line. Lines are split on markdown-it's line breaks only, so `line` matches `data-line` (Task 6): `split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\n" || $0 == "\r\n" || $0 == "\r" })`. CRLF is one `Character`, so it counts once; `\.isNewline` would also split on VT, FF, NEL, U+2028 and U+2029. `line` is 1-based.
   - **Reading:** files are read through `TextFileLoader` (encodings and the 5 MB cap come with it); unreadable files are skipped.
   - **Order:** item order, then line; stop at `limit`.
   - **Cancellation (K11):** before each file, check `Task.isCancelled` and return the hits so far when it's set, so a superseded query stops reading files.
@@ -433,6 +439,7 @@ final class FolderSearchTests: XCTestCase {
     }
     func testCRLFLineNumbers() throws {
         XCTAssertEqual(pairs(FolderIndex.search("needle", in: try items(["a.md": "x\r\ny\r\nneedle\r\n"]))), ["a.md:3"])
+        XCTAssertEqual(pairs(FolderIndex.search("needle", in: try items(["a.md": "x\u{2028}y\nneedle"]))), ["a.md:2"])   // not a markdown-it break
     }
     func testCaseAndDiacriticInsensitive() throws {
         XCTAssertEqual(FolderIndex.search("cafe needle", in: try items(["a.md": "Café NEEDLE"])).count, 1)
@@ -485,6 +492,8 @@ Run: `swift test --package-path Packages/TegelKit --filter FolderSearchTests`
 Expected: `Executed 10 tests, with 0 failures`.
 
 Then comment out the `Task.isCancelled` check and rerun `--filter testCancelledScanStopsBeforeReading`. Expected: FAIL, 50 hits instead of `[]`. Restore the check and rerun: PASS.
+
+Then split on `\.isNewline` instead and rerun `--filter testCRLFLineNumbers`. Expected: FAIL, `a.md:3` for the U+2028 file. Restore and rerun: PASS.
 
 - [ ] **Step 5: Commit** `Packages/TegelKit/Sources/TegelKit/FolderIndex.swift Packages/TegelKit/Tests/TegelKitTests/FolderSearchTests.swift`, "feat(tegelkit): literal cross-file search with line numbers and windowed snippets"
 
@@ -576,7 +585,7 @@ Expected: `Executed 6 tests, with 0 failures`, three times.
 - Modify: `Packages/TegelKit/Sources/TegelKit/RendererWebView.swift`
 - Modify: `Packages/TegelKit/Tests/TegelKitTests/TestSupport.swift` (add `hosted` only; `fixtureURL(_:)` and `js(_:_:)` are plan 01's)
 - Regenerate: `Packages/TegelKit/Sources/TegelKit/Resources/Renderer/`
-- Test: `Renderer/test/lines.test.js`, `Packages/TegelKit/Tests/TegelKitTests/NavigationTests.swift`
+- Test: `Renderer/test/lines.test.js`, `Packages/TegelKit/Tests/TegelKitTests/WebView/NavigationTests.swift`
 
 **Interfaces:**
 - Consumes: `RendererWebView.render`, `RenderResult.headings` (contract).
@@ -612,10 +621,15 @@ test("line numbers count YAML front matter lines", () => {
 
 ```swift
 @MainActor final class NavigationTests: XCTestCase {
+    private let filler = (1...100).map { "Filler \($0)" }.joined(separator: "\n\n")
+    // Plan 09's base.css smooth-scrolls under prefers-reduced-motion: no-preference, and WebKit on macOS 15.7 has no
+    // scrollend event: turn smooth scrolling off so a read right after a scroll sees where it ends.
+    private func instantScroll(_ r: RendererWebView) async throws { _ = try await js(r, "document.documentElement.style.scrollBehavior = 'auto'; return true") }
+
     func testScrollToLineMovesViewport() async throws {
         let r = hosted()
         let md = (1...200).map { "Paragraph \($0)" }.joined(separator: "\n\n")        // paragraph N sits on line 2N-1
-        _ = try await r.render(md, options: RenderOptions(mode: .window, theme: .paper, baseURL: nil))
+        _ = try await r.render(md, options: RenderOptions(mode: .window, theme: .paper, baseURL: nil)); try await instantScroll(r)
         let moved = await r.scroll(toLine: 301)
         let y = try await js(r, "return scrollY") as? Double ?? 0
         let hit = try await js(r, "return document.querySelector('.tg-hit').textContent.trim()") as? String
@@ -623,20 +637,21 @@ test("line numbers count YAML front matter lines", () => {
     }
     func testScrollToHeadingMovesViewport() async throws {
         let r = hosted()
-        let md = (1...100).map { "Filler \($0)" }.joined(separator: "\n\n") + "\n\n## Last heading\n"
-        let res = try await r.render(md, options: RenderOptions(mode: .window, theme: .paper, baseURL: nil))
+        let md = filler + "\n\n## Target heading\n\n" + filler                          // filler after it too, so it can reach the top
+        let res = try await r.render(md, options: RenderOptions(mode: .window, theme: .paper, baseURL: nil)); try await instantScroll(r)
         let id = try XCTUnwrap(res.headings.last).id
         await r.scroll(toHeading: id)
         let top = try await js(r, "return document.getElementById('\(id)').getBoundingClientRect().top") as? Double ?? -1
-        XCTAssertTrue((0...40).contains(top))
+        XCTAssertTrue((-1...40).contains(top), "top \(top)")                          // scrollY is whole pixels: -0.09 seen on the build Mac
     }
     func testScrollToArabicHeading() async throws {
         let r = hosted(); let url = fixtureURL("rtl-arabic.md")
-        let res = try await r.render(try TextFileLoader.load(url).text, options: RenderOptions(mode: .window, theme: .paper, baseURL: url))
+        let res = try await r.render(try TextFileLoader.load(url).text + "\n\n" + filler, options: RenderOptions(mode: .window, theme: .paper, baseURL: url))
+        try await instantScroll(r)
         let h = try XCTUnwrap(res.headings.last)
         await r.scroll(toHeading: h.id)
         let top = try await js(r, "return document.getElementById(\(String(reflecting: h.id))).getBoundingClientRect().top") as? Double ?? -1
-        XCTAssertTrue((0...40).contains(top))
+        XCTAssertTrue((-1...40).contains(top), "top \(top)")
     }
 }
 // XCTest assertions take autoclosures, which can't `await`: bind async results to a `let` first (applies to every test in this plan).
@@ -661,7 +676,9 @@ Expected:
 Run: `(cd Renderer && bun test) && swift test --package-path Packages/TegelKit --filter NavigationTests`
 Expected: bun `0 fail` (plan 01's tests still pass); swift `Executed 3 tests, with 0 failures`.
 
-- [ ] **Step 5: Commit** `Renderer/src Renderer/test/lines.test.js Packages/TegelKit/Sources/TegelKit Packages/TegelKit/Tests/TegelKitTests/NavigationTests.swift Packages/TegelKit/Tests/TegelKitTests/TestSupport.swift`, "feat(renderer): source-line anchors, scroll(toLine:) and heading scroll"
+Then drop the second `filler` from `testScrollToHeadingMovesViewport` (the heading becomes the last block) and rerun `--filter testScrollToHeadingMovesViewport`. Expected: FAIL, `top` ≈ 550: the page can't scroll past its end (measured on the build Mac). Restore and rerun: PASS. Task 10 Step 0 watches `instantScroll` fail once plan 09's smooth scrolling is in.
+
+- [ ] **Step 5: Commit** `Renderer/src Renderer/test/lines.test.js Packages/TegelKit/Sources/TegelKit Packages/TegelKit/Tests/TegelKitTests/WebView/NavigationTests.swift Packages/TegelKit/Tests/TegelKitTests/TestSupport.swift`, "feat(renderer): source-line anchors, scroll(toLine:) and heading scroll"
 
 ---
 
@@ -674,7 +691,7 @@ Expected: bun `0 fail` (plan 01's tests still pass); swift `Executed 3 tests, wi
 - Create: `Apps/Markdown/App/ReaderController.swift`. If plan 01 already has a per-window model, add these members to it instead.
 - Create: `Apps/Markdown/App/FindBar.swift`, `Apps/Markdown/App/OutlineView.swift`, `Apps/Markdown/App/AppCommands.swift`
 - Modify: `Apps/Markdown/App/DocumentView.swift` (toolbar), `Apps/Markdown/App/MarkdownApp.swift` (add `.commands { AppCommands(isPro:); InspectorCommands() }`)
-- Test: `Packages/TegelKit/Tests/TegelKitTests/FindTests.swift`
+- Test: `Packages/TegelKit/Tests/TegelKitTests/WebView/FindTests.swift`
 
 **Interfaces:**
 - Produces (TegelKit, addition): `public func find(_ text: String, backwards: Bool = false) async -> Bool`.
@@ -741,7 +758,7 @@ Expected: `Executed 3 tests, with 0 failures`, then `** TEST SUCCEEDED **`. Then
 - ⌘G and ⇧⌘G move through matches; "zzzq" shows "Not found"; Esc closes the bar.
 - The inspector toggles from the View menu and the toolbar; clicking an Arabic heading scrolls to it.
 
-- [ ] **Step 5: Commit** `Packages/TegelKit/Sources/TegelKit/RendererWebView.swift Packages/TegelKit/Tests/TegelKitTests/FindTests.swift Apps/Markdown/App`, "feat(app): outline inspector and find bar on the public WKWebView find API"
+- [ ] **Step 5: Commit** `Packages/TegelKit/Sources/TegelKit/RendererWebView.swift Packages/TegelKit/Tests/TegelKitTests/WebView/FindTests.swift Apps/Markdown/App`, "feat(app): outline inspector and find bar on the public WKWebView find API"
 
 ---
 
@@ -760,7 +777,7 @@ Local images never load from `file:`. WebKit asks a `WKURLSchemeHandler` for `te
 - Create: `Apps/Markdown/App/Grants.swift`, `Apps/Markdown/App/ImageGrantBar.swift`
 - Create: `Apps/Markdown/AppTests/AppTestSupport.swift`, holding app-target copies of `tempDir`, `write`, `hosted`, `js` (plan 01's signature and body) and `squarePNG` (test helpers can't be shared across test targets)
 - Modify: `ReaderController.swift`; `DocumentView.swift` (render with `baseURL: fileURL`, the document, per master §3.3: plan 01's `fileURL?.deletingLastPathComponent()` would resolve `assets/x.png` one folder too high and widen the default root); `MarkdownApp.swift` (`App.init` runs `Grants.roots = BookmarkStore.resolveAll()`)
-- Test: `Renderer/test/images.test.js`, `Packages/TegelKit/Tests/TegelKitTests/{DocumentImageHandlerTests,LocalImageTests}.swift`, `Apps/Markdown/AppTests/{SandboxImageTests,GrantsTests}.swift`
+- Test: `Renderer/test/images.test.js`, `Packages/TegelKit/Tests/TegelKitTests/DocumentImageHandlerTests.swift`, `Packages/TegelKit/Tests/TegelKitTests/WebView/LocalImageTests.swift`, `Apps/Markdown/AppTests/{SandboxImageTests,GrantsTests}.swift`
 
 **Interfaces:**
 - Produces (TegelKit):
@@ -776,7 +793,7 @@ extension URL {
     nonisolated static func response(for request: URL, root: URL?) -> (HTTPURLResponse, Data)   // 200 + bytes, or 404 + no body
 }
 // RendererWebView additions
-public var readAccessURL: URL?                           // the grant root the handler serves images from; nil → the document's folder
+public var readAccessURL: URL?                           // the grant root the handler serves images from; nil → the document's folder; no baseURL → nothing
 public func loadedImages(outside folder: URL) -> [URL]   // served since the last render began, not inside `folder`; request order, no duplicates
 ```
 - `response(for:root:)` answers 200 only when all hold, otherwise 404 with no body:
@@ -786,7 +803,7 @@ public func loadedImages(outside folder: URL) -> [URL]   // served since the las
   4. `resourceValues(forKeys: [.isRegularFileKey, .contentTypeKey])` gives a regular file whose content type conforms to `UTType.image`.
   5. `Data(contentsOf: file, options: .mappedIfSafe)` succeeds.
   The 200 carries `Content-Type: <contentType.preferredMIMEType>`. `webView(_:start:)` sends the response, the data and `didFinish()`, and appends the resolved file to `served` on 200. `webView(_:stop:)` does nothing, because the answer was already sent. `// ponytail: synchronous mapped read on the main actor; move to a detached read if large images stall the window.`
-- `render` sets `handler.root = readAccessURL ?? options.baseURL?.deletingLastPathComponent()`, clears `served`, and passes `baseHref` = `options.baseURL` with its scheme set to `tegel-doc` through `URLComponents` (`tegel-doc:///Users/u/notes/my%20doc.md`). Quick Look passes `baseURL: nil`, so its root is nil and it serves nothing.
+- `render` sets `handler.root = options.baseURL.map { readAccessURL ?? $0.deletingLastPathComponent() }` (no `baseURL` → nil, even with `readAccessURL` set; master §3.3), clears `served`, and passes `baseHref` = `options.baseURL` with its scheme set to `tegel-doc` through `URLComponents` (`tegel-doc:///Users/u/notes/my%20doc.md`). Quick Look passes `baseURL: nil`, so its root is nil and it serves nothing.
 - Produces (JS):
   - **Relative images:** when `opts.baseHref` is set, `renderToHTML`'s `image` render rule (reading `baseHref` from markdown-it's `env`) rewrites a relative `src` (no scheme, not starting `//` or `#`) to `new URL(src, baseHref).href`, a `tegel-doc:` URL. Nothing else is rewritten. Don't use `<base>`: it would re-point the lazy `mermaid.min.js` load.
   - **Image wait:** when `mode !== 'quicklook'`, `page.js` waits for every `img` whose `src` starts with `tegel-doc:` (`load`/`error`, at most 1,500 ms in total) before posting `rendered`. Each failure is appended to `errors` as `"image: " + src`. This also makes print mode wait for images.
@@ -799,9 +816,10 @@ extension ReaderController { var needsImageGrant: Bool { get } }  // any error h
   - Text: "Some images in this document are in a folder Tegel Markdown hasn't been allowed to read."
   - Button: "Show Images…".
 - Button action:
-  1. `NSOpenPanel` with `canChooseDirectories = true`, `canChooseFiles = false`, `directoryURL` = the document's folder, `prompt` "Allow", `message` "Choose the folder that holds this document's images. Tegel Markdown only reads from it."
-  2. `BookmarkStore.save`, then append the folder to `Grants.roots`.
-  3. Set `renderer.readAccessURL` to the chosen folder and re-render.
+  1. `NSOpenPanel` with `canChooseDirectories = true`, `canChooseFiles = false`, `directoryURL` = the document's folder, `prompt` "Allow", `message` "Choose a folder that holds both this document and its images. Tegel Markdown only reads from it."
+  2. If the document isn't inside the chosen folder (`!doc.isInside(folder)`; master §3.2: the grant root contains the document), show an `NSAlert` sheet, message "This folder doesn't contain the document.", informative text "Choose the document's folder, or a folder above it that also holds the images." Nothing is saved and the bar stays.
+  3. `BookmarkStore.save`, then append the folder to `Grants.roots`.
+  4. Set `renderer.readAccessURL` to the chosen folder and re-render.
 - Single-file windows set `renderer.readAccessURL = Grants.root(containing: fileURL)`. Other `errors` keep plan 01's display; `image:` entries only drive the bar.
 
 - [ ] **Step 1: Create the fixture PNG** (the standard 1×1 PNG)
@@ -838,6 +856,7 @@ final class DocumentImageHandlerTests: XCTestCase {
         try squarePNG.write(to: root.appending(path: "assets/in.png")); _ = try write("# x", "a.md", in: root)
         try squarePNG.write(to: base.appending(path: "secret.png"))
         try FileManager.default.createSymbolicLink(at: root.appending(path: "link.png"), withDestinationURL: base.appending(path: "secret.png"))
+        try FileManager.default.createSymbolicLink(at: root.appending(path: "shared"), withDestinationURL: base)   // a folder link out of the root
     }
     private func req(_ rel: String) -> URL { URL(string: "tegel-doc://" + root.path(percentEncoded: true) + "/" + rel)! }
     private func status(_ u: URL, root: URL?) -> Int { DocumentImageHandler.response(for: u, root: root).0.statusCode }
@@ -852,7 +871,8 @@ final class DocumentImageHandlerTests: XCTestCase {
         XCTAssertEqual(status(req("%2E%2E/secret.png"), root: root), 404)
     }
     func testEverythingElseIs404() {                               // Review Focus 6
-        XCTAssertEqual(status(req("link.png"), root: root), 404)          // symlink out of the root
+        XCTAssertEqual(status(req("shared/secret.png"), root: root), 404) // through a symlinked folder: only isInside stops it
+        XCTAssertEqual(status(req("link.png"), root: root), 404)          // file symlink: its resource values describe the link, not an image
         XCTAssertEqual(status(req("a.md"), root: root), 404)              // not an image
         XCTAssertEqual(status(req("assets/nope.png"), root: root), 404)   // missing
         XCTAssertEqual(status(req("assets/in.png"), root: nil), 404)      // no root: Quick Look
@@ -967,7 +987,7 @@ Expected: `Executed 1 test, with 0 failures`; then `testImageLoadsInsideSandboxe
 Run: `make run-app FILES="Fixtures/markdown/local-image.md"`
 Expected:
 1. The bar shows (the 1×1 image failed: the repo is outside the container).
-2. "Show Images…" opens the panel at `Fixtures/markdown`; "Allow" removes the bar.
+2. "Show Images…" opens the panel at `Fixtures/markdown`. Choose `Fixtures/markdown/assets` first: the "This folder doesn't contain the document." alert shows and the bar stays. Then "Show Images…" again and "Allow" on `Fixtures/markdown`: the bar goes.
 3. After ⌘Q and the same command again, there's no bar: the bookmark resolved at launch.
 
 Then quit the app and run: `make test-app ONLY=SandboxImageTests`
@@ -976,7 +996,7 @@ Expected: `Executed 2 tests, with 0 failures`, with `testBookmarkedFolderOutside
 - [ ] **Step 9: Watch the path guards fail**
 
 Replace `isInside`'s body with `path(percentEncoded: false).hasPrefix(root.path(percentEncoded: false))` (the naive string prefix), then run: `swift test --package-path Packages/TegelKit --filter DocumentImageHandlerTests; make test-app ONLY=GrantsTests`
-Expected: FAIL in `testDotDotEscapeIs404` and `testEverythingElseIs404` (the symlink case), and in `testRootContainingComparesPathComponents` (`notes-old`). Restore the body and rerun both: `Executed 3 tests, with 0 failures` and `Executed 1 test, with 0 failures`.
+Expected: FAIL in `testDotDotEscapeIs404` and `testEverythingElseIs404` (the `shared/` folder case; `link.png` 404s on its type either way), and in `testRootContainingComparesPathComponents` (`notes-old`). Restore the body and rerun both: `Executed 3 tests, with 0 failures` and `Executed 1 test, with 0 failures`.
 
 - [ ] **Step 10: Commit** `Packages/TegelKit Renderer/src/markdown.js Renderer/src/page.js Renderer/test/images.test.js Fixtures/markdown/local-image.md Fixtures/markdown/assets Apps/Markdown/App Apps/Markdown/AppTests docs/reviews/m02.md`, "feat: local images through the tegel-doc: scheme handler, grant-root check, failure reporting and Show Images grant"
 
@@ -1034,7 +1054,7 @@ func search() async {
     - Initial selection: the first item. Window title: the folder name.
   - **Live reload:**
     - A root change re-indexes. The selection is kept if the file still exists, otherwise cleared.
-    - A change to the open file reloads the text and re-renders, keeping `scrollY` (read with `evaluateJavaScript("scrollY")` before, `scrollTo(0, y)` after).
+    - A change to the open file reloads the text and re-renders, keeping `scrollY` (read with `evaluateJavaScript("scrollY")` before, `scrollTo({top: y, behavior: 'instant'})` after: a plain `scrollTo(0, y)` would animate under plan 09's smooth scrolling).
   - **Restoration:**
     - SwiftUI "persists the value of the binding for the purposes of state restoration" and brings an already-open window to front instead of opening a duplicate ([WindowGroup](https://developer.apple.com/documentation/swiftui/windowgroup)).
     - `BookmarkStore.resolveAll()` in `App.init` restores access before any restored window builds its body.
@@ -1117,10 +1137,10 @@ Run: `make run-app ARGS="-TGForcePro YES -NSQuitAlwaysKeepsWindows YES"`, then b
 **UI spec:** DESIGN.md (§7 themes, §9 symbols) and app-ui-spec (Steps 3, 4).
 
 **Files:**
-- Consumes, no edit: the theme CSS (`Renderer/src/css/{base,paper,ink,studio,print}.css`, `index.html` link order) from plan 09 Task 6, with values in `DESIGN.md` §7; in `main` since Drop B (Mon 9 Nov). `page.js` already sets `data-theme` (plan 01 Task 5).
+- Consumes, no edit: the theme CSS (`Renderer/src/css/{base,paper,ink,studio,print}.css`, `index.html` link order) from plan 09 Task 6, with values in `DESIGN.md` §7; in `main` since Drop B (Mon 9 Nov), and in this branch from Step 0. `page.js` already sets `data-theme` (plan 01 Task 5).
 - Create: `Apps/Markdown/App/SettingsView.swift`
 - Modify: `MarkdownApp.swift` (add a `Settings { SettingsView() }` scene), `AppCommands.swift` (View ▸ Theme picker; View ▸ Actual Size, Zoom In, Zoom Out), `ReaderController.swift` (render with `ProGate.effectiveTheme(stored, isPro:)`; re-render on change; apply `pageZoom`; `enum Zoom`), `DocumentView.swift` (toolbar Theme menu, Task 7)
-- Test: `Packages/TegelKit/Tests/TegelKitTests/ThemeTests.swift`, `Apps/Markdown/AppTests/ZoomTests.swift`
+- Test: `Packages/TegelKit/Tests/TegelKitTests/WebView/ThemeTests.swift`, `Apps/Markdown/AppTests/ZoomTests.swift`
 
 **Interfaces:**
 - CSS: plan 09 Task 6 owns it. Tokens sit under `:root[data-theme="<name>"]`; dark values only under `@media screen and (prefers-color-scheme: dark)` with `:not([data-mode="print"])`. WKWebView follows the view's `NSAppearance`, so no app code is needed for dark mode.
@@ -1132,6 +1152,16 @@ Run: `make run-app ARGS="-TGForcePro YES -NSQuitAlwaysKeepsWindows YES"`, then b
 ```swift
 enum Zoom { static func step(_ zoom: Double, _ direction: Int) -> Double }   // 0 → 1.0; ±1 → next multiple of 0.1, clamped to 0.75…2.0
 ```
+
+- [ ] **Step 0: Merge plan 09 Drop B into the branch** (Tue 10 Nov). The branch was cut on 3 Nov, before Drop B merged; Tasks 10–17 need its theme CSS, `docs/design/samples/`, `scripts/window-shot.sh` and `design-shots.yml`.
+
+Run: `git switch main && git pull --ff-only && git switch m02-app1-features && git merge main -m "merge: main (plan 09 Drop B) into m02-app1-features" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && test -f Renderer/src/css/ink.css && test -f docs/design/samples/ar-spec.md && test -x scripts/window-shot.sh && test -f .github/workflows/design-shots.yml && echo ok`
+Expected: `ok`. A failing `test` means Drop B hasn't merged yet: wait for plan 09 Task 14, and don't start Tasks 10–17. On a conflict, keep both sides in `Renderer/src`, regenerate `Packages/TegelKit/Sources/TegelKit/Resources/Renderer/` with `make renderer` instead of merging it by hand, then `git add` the files and `git commit --no-edit`.
+
+Run: `make check`
+Expected: green. Record the new pass counts (plan 09's guards are now in) in `docs/reviews/m02.md`.
+
+Then delete the `instantScroll(r)` call from `testScrollToHeadingMovesViewport` (Task 6) and run `swift test --package-path Packages/TegelKit --filter NavigationTests`. Expected: FAIL, `top` far above 40: Drop B's `scroll-behavior: smooth` is still animating when the test reads it. Restore the call and rerun: `Executed 3 tests, with 0 failures`.
 
 - [ ] **Step 1: Write the tests** (1400×900 host; contrast uses WCAG 2 relative luminance: sRGB channels linearised, `L = 0.2126R + 0.7152G + 0.0722B`, ratio `(L1 + 0.05)/(L2 + 0.05)`)
 
@@ -1200,7 +1230,7 @@ final class ZoomTests: XCTestCase {
 
 Run: `swift test --package-path Packages/TegelKit --filter ThemeTests; make test-app ONLY=ZoomTests`
 Expected:
-- `Executed 5 tests, with 0 failures`: these are acceptance checks on plan 09's CSS, which is already in `main`;
+- `Executed 5 tests, with 0 failures`: these are acceptance checks on plan 09's CSS, which Step 0 merged in;
 - ZoomTests FAIL, `cannot find 'Zoom' in scope`.
 
 Then delete the `ink.css` `<link>` from `Packages/TegelKit/Sources/TegelKit/Resources/Renderer/index.html` and rerun ThemeTests.
@@ -1216,7 +1246,7 @@ Expected: `Executed 5 tests, with 0 failures`, then `Executed 1 test, with 0 fai
 Then run `make run-app FILES="Fixtures/markdown/gfm-kitchen-sink.md" ARGS="-TGForcePro YES"`. For each theme × light/dark (switch with System Settings ▸ Appearance), run `mkdir -p docs/reviews/m02-design && screencapture -x -o -w docs/reviews/m02-design/theme-<name>-<light|dark>.png` and click the reader window. Check by hand that ⌘+ / ⌘− / ⌘0 change the text size and that Settings ▸ Appearance shows the same value.
 Expected: 6 PNGs showing fixture text only, inputs for Task 17's design review.
 
-- [ ] **Step 5: Commit** `Packages/TegelKit/Tests/TegelKitTests/ThemeTests.swift Apps/Markdown/App Apps/Markdown/AppTests/ZoomTests.swift docs/reviews/m02-design`, "feat(app): theme picker in Settings ▸ Appearance, View menu and toolbar; page zoom; ThemeTests on plan 09's CSS"
+- [ ] **Step 5: Commit** `Packages/TegelKit/Tests/TegelKitTests/WebView/ThemeTests.swift Apps/Markdown/App Apps/Markdown/AppTests/ZoomTests.swift docs/reviews/m02-design`, "feat(app): theme picker in Settings ▸ Appearance, View menu and toolbar; page zoom; ThemeTests on plan 09's CSS"
 
 ---
 
@@ -1225,7 +1255,7 @@ Expected: 6 PNGs showing fixture text only, inputs for Task 17's design review.
 **Files:**
 - Modify: `Renderer/src/css/print.css`; regenerate
 - Create: `Packages/TegelKit/Sources/TegelKit/PDFExporter.swift`
-- Test: `Packages/TegelKit/Tests/TegelKitTests/PDFExporterTests.swift`
+- Test: `Packages/TegelKit/Tests/TegelKitTests/WebView/PDFExporterTests.swift`
 
 **Interfaces:**
 - Produces (contract): `PaperSize`, `PDFExporter.export(_ renderer: RendererWebView, to url: URL, paper: PaperSize) async throws`, which is `try await makePDFData(renderer, paper: paper).write(to: url)` (not `.atomic`: the save panel grants the file, not its folder).
@@ -1369,7 +1399,7 @@ Then comment out the `defer` that removes the private folder and rerun `--filter
 Note the observed `pageCount` from Step 4. Replace `25...60` with `observed×0.85...observed×1.15` (rounded), then rerun.
 Expected: PASS. Record the observed count in `docs/reviews/m02.md` under "PDF calibration (macOS 15.7 Intel)".
 
-- [ ] **Step 6: Commit** `Renderer/src/css/print.css Packages/TegelKit/Sources/TegelKit Packages/TegelKit/Tests/TegelKitTests/PDFExporterTests.swift docs/reviews/m02.md`, "feat(tegelkit): paginated A4/Letter PDFExporter via printOperation with print.css"
+- [ ] **Step 6: Commit** `Renderer/src/css/print.css Packages/TegelKit/Sources/TegelKit Packages/TegelKit/Tests/TegelKitTests/WebView/PDFExporterTests.swift docs/reviews/m02.md`, "feat(tegelkit): paginated A4/Letter PDFExporter via printOperation with print.css"
 
 ---
 
@@ -1714,7 +1744,7 @@ final class LocalizationTests: XCTestCase {
         }
     }
     func testArabicValuesAreArabic() throws {
-        for (key, v) in try table("ar") where key.contains(where: \.isLetter) && !untranslated.contains(v) {
+        for (key, v) in try table("ar") where key.replacing(/%(\d+\$)?(lld|@|d|f)/, with: "").contains(where: \.isLetter) && !untranslated.contains(v) {   // "%@:%lld" has no words
             XCTAssertTrue(v.unicodeScalars.contains { (0x0600...0x06FF).contains($0.value) }, "ar not Arabic: \(key)")
         }
     }
@@ -1734,6 +1764,8 @@ Mark brand-only keys `shouldTranslate: false`. The founder reviews the ar and fr
 
 Run: `make test-app ONLY=LocalizationTests && make run-app FILES="Fixtures/markdown/rtl-arabic.md" ARGS='-AppleLanguages "(ar)" -TGForcePro YES'`
 Expected: `Executed 3 tests, with 0 failures`.
+
+Then set one `ar` value in the catalog to its English text and rerun `make test-app ONLY=LocalizationTests/testArabicValuesAreArabic`. Expected: FAIL, `ar not Arabic: <that key>`. Restore it and rerun: PASS.
 
 Then open `Fixtures/markdown` as a folder, show the find bar and the inspector, and run `screencapture -x -w docs/reviews/m02-design/ar-ui.png` (click the folder window). Check and record pass/fail per item in `docs/reviews/m02.md`:
 - sidebar on the right, inspector on the left, toolbar mirrored;
@@ -1758,7 +1790,7 @@ Repeat the run with `"(nl)"` and `"(fr)"` and check that nothing is truncated.
 
 GitHub dispatches a workflow only if it exists on the default branch, and `--ref` then runs the branch's copy (K13).
 - Run: `git fetch origin && git ls-tree --name-only origin/main .github/workflows/`. Expected: `ci.yml` (plan 01) and `design-shots.yml` (plan 09 Drop B) are listed.
-- If `ci.yml` needs the change above, it lands on `main` first: `git switch main`, make the edit, run stage 3 (code review) on that one diff, `git commit` + `git push origin main` (D14), `git switch m02-app1-features && git rebase main`. The branch then carries it too.
+- If `ci.yml` needs the change above, it lands on `main` first: `git switch main`, make the edit, run stage 3 (code review) on that one diff, `git commit` + `git push origin main` (D14), `git switch m02-app1-features && git merge main -m "merge: main (ci.yml) into m02-app1-features" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"` (a merge, not a rebase: a rebase would drop Task 10 Step 0's merge and replay its conflicts). The branch then carries it too.
 
 Read the CI minutes as plan 05 Task 3 Step 3 defines (B20). If what's left can't cover the two dispatches below, don't dispatch: ask the user.
 

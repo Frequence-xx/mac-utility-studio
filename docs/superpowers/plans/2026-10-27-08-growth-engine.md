@@ -114,7 +114,7 @@ The sales targets hold only if enough qualified visitors arrive. With this plan'
 - **G1:** search brings little in a site's first two months; at most ≈ 200 clicks (the G2 stretch rate). The waitlist adds ≤ 60 visits. So ≈ 1,850–3,050 visits must come from the launch posts (PH, Show HN, r/macapps, IH; plan 05) and the launch-week directories (Task 17). No source gives their visit counts for a launch like this; they're measured from 8 Dec, not assumed.
 - **G2:** 10,000 impressions × 2–4% CTR = 200–400 clicks = 2–4 sales at 1%. **SEO alone can't reach G2's 25.** The other ≈ 1,300–1,500 visits per 30 days must come from App 2's launch on 2 Feb (cross-links), directories, AI citations (Task 13), the free tool (Task 9) and distribution (Task 19), or the conversion must run well above 1%.
 - **Re-plan checkpoint** (the one trigger kept from the old backlog, B5): at each weekly review, if qualified visits over the last 14 days are under half the window's need (G1: < 1,050 by Tue 22 Dec; G2: < 850 in any 14 days from Mon 8 Feb), or visit → sale is < 0.5% with ≥ 1,000 visits, write a re-plan in that week's KPI file (channels kept, dropped and added, each within HR1–HR9). The user approves it before any new feature or channel work, and plan 07's MIDDLE branch adds no scope without traffic and sales at pace.
-- **Qualified visits** = Cloudflare Web Analytics visits to the product, pricing, download and tool pages, read from the dashboard each week (bots excluded by Web Analytics).
+- **Qualified visits** = Cloudflare Web Analytics visits to the product, pricing and download pages, read from the dashboard each week (bots excluded by Web Analytics). Tool pages are left out because plan 04's `/tools/*` CSP blocks the beacon by design. Tool traffic is read from GSC clicks on the tool URL, and the tool's CTA leads to `/markdown/`, which is counted.
 
 ## File map
 
@@ -318,7 +318,7 @@ class KpiTests(unittest.TestCase):
   - **Report rows**, each with its source:
     - GSC impressions; GSC clicks;
     - qualified visits (`--visits`, Web Analytics) against the Channel-mix pace (K16);
-    - waitlist active count (`GET https://connect.mailerlite.com/api/groups/{id}` → `active_count`; check the field name on the first run);
+    - waitlist active count (`GET https://connect.mailerlite.com/api/groups?filter[name]=waitlist` → the item whose `id` is `MAILERLITE_GROUP_WAITLIST` → `active_count`; MailerLite has no single-group GET; check the field name on the first run);
     - sales, refunded, free; sales by ref; net per currency (`summarise`, from Step 8; until then `n/a (summarise not merged)`);
     - visit → sale, as sales ÷ qualified visits and sales ÷ GSC clicks;
     - refund rate.
@@ -354,8 +354,7 @@ def test_summarise_gross_and_net_per_currency(self):
 - [ ] **Step 1: Reference ids.**
   - Every link to checkout carries `?reference_id=<surface>-<placement>`. Values:
     - `app-folder`, `app-pdf`, `app-theme`, `app-licence`;
-    - `site-<page-slug>`;
-    - `tool-rtl`;
+    - `site-<page-slug>` (the tool links `/markdown/`, so its sales count there);
     - `email-launch`, `email-launch2`, `email-d0`, `email-d7`, `email-crosssell`, `email-v11`;
     - `bench-rtl`.
   - The ids carry no personal data.
@@ -410,6 +409,8 @@ def test_summarise_gross_and_net_per_currency(self):
   - Check step: MailerLite may review a new account before it can send (duration unverified). If it asks for a website, use the live `tegelapps.com`; the domain exists from W2 (plan 04).
 - [ ] **Step 2: Accept the DPA.** It is MailerLite's data processing terms, from the account's legal/settings page. Record the date. Plan 04's privacy page cites it.
 - [ ] **Step 3 🔒 Sender domain.** Authenticate `tegelapps.com` (DKIM/SPF TXT records in Cloudflare DNS: a DNS change on a live domain). Sender = `hello@tegelapps.com`, name `Tegel`.
+  - **SPF stays one record.** Email Routing already publishes `v=spf1 include:_spf.mx.cloudflare.net ~all` at the apex (plan 04 Task 3), and two `v=spf1` records are an SPF permerror for forwarding and MailerLite alike. Cloudflare's Email Routing DNS page says to merge includes and keep only one SPF record. So don't add MailerLite's SPF record: unlock Email Routing's SPF record (Email Routing → Settings → DNS records → Unlock) and add MailerLite's `include:` to it, before `~all`.
+  - Watch the SPF check catch two records first: `printf '"v=spf1 include:_spf.mx.cloudflare.net ~all"\n"v=spf1 include:_spf.example.net ~all"\n' | grep -c v=spf1` → `2`. On the live zone, before and after the change: `dig +short TXT tegelapps.com | grep -c v=spf1` → `1`. After the change, `dig +short TXT tegelapps.com | grep v=spf1` shows that one line holding both `include:_spf.mx.cloudflare.net` and MailerLite's include.
   - Expected: MailerLite shows the domain as verified, and `dig +short TXT <selector>._domainkey.tegelapps.com` returns the key.
 - [ ] **Step 4: Settings.**
   - **Subscribe settings:** "Double opt-in for API and integrations" **on**. That setting is under Account settings → Subscribe settings; MailerLite: "The same double opt-in for API email is sent to all subscribers added via API" (mailerlite.com/help/how-to-use-double-opt-in-when-collecting-subscribers, 27 Oct).
@@ -495,24 +496,29 @@ test('valid sign-up creates an unconfirmed subscriber and redirects', async () =
   - `daily cap reached returns the try-later page without calling MailerLite` (S17): `env.WAITLIST_KV.m.set('day:' + new Date().toISOString().slice(0, 10), '100')` → 303 `/waitlist/later/`, `calls.length === 0`.
   - `same address twice in 24 h calls MailerLite once`: three valid POSTs (`a@example.com` twice, then `A@Example.com`) → three 303s to `/waitlist/check-email/`, `calls.length === 1`, and no KV key contains `example.com`.
   - `KV failure fails closed`: `env.WAITLIST_KV.put = async () => { throw new Error('429') }` → 303 `/waitlist/later/`, no call.
+  - `missing KV binding fails closed`: `delete env.WAITLIST_KV` → 303 `/waitlist/later/`, no call. Step 6's preview check relies on this.
 - [ ] **Step 2: Run them.** `(cd site && bun test test/functions)`. Expected: FAIL (`Cannot find module '../../functions/api/waitlist.js'`).
 - [ ] **Step 3: Implement `onRequestPost`.**
   - Check order: Host (allowed hosts), Origin (exact match with `SITE_ORIGIN`), Content-Type, size (`Content-Length` and the actual text length ≤ 2048), fields, honeypot, then the KV cap and cooldown, then MailerLite. The KV writes happen before the call, so a failing provider can't be used to retry an address in a loop.
   - Hash with `crypto.subtle.digest('SHA-256', …)`.
   - Email check: trim; length ≤ 254; one `@`; a dot in the domain; no whitespace or control characters (`/^[^\s@]+@[^\s@]+\.[^\s@]+$/`).
   - Never `console.log` request data.
-- [ ] **Step 4: Run them.** `(cd site && bun test test/functions)`. Expected: all pass (14 tests). Then `make test-site`: its output includes these 14 (plan 04's `cd site && bun test` discovers `test/` and `tools/`). If it doesn't, add `bun test site/test site/tools` to `test-site` and commit the `Makefile` with this task (X21).
-- [ ] **Step 4b: Watch the new guards fail.** Comment out the Host check → `foreign host is forbidden` fails. Restore; comment out the cap read → `daily cap reached…` fails (one call made). Restore → 14 pass.
+- [ ] **Step 4: Run them.** `(cd site && bun test test/functions)`. Expected: all pass (15 tests). Then `make test-site`: its output includes these 15 (plan 04's `cd site && bun test` discovers `test/` and `tools/`). If it doesn't, add `bun test site/test site/tools` to `test-site` and commit the `Makefile` with this task (X21).
+- [ ] **Step 4b: Watch the new guards fail.** Comment out the Host check → `foreign host is forbidden` fails. Restore; comment out the cap read → `daily cap reached…` fails (one call made). Restore; make the KV calls optional (`env.WAITLIST_KV?.get(…)`, `?.put(…)`) → `missing KV binding fails closed` fails (one call made). Restore → 15 pass.
 - [ ] **Step 5: Commit** (`git add site/functions/api site/test/functions`, `feat(site): same-origin waitlist handler with double opt-in, host check and KV limits` + trailer).
-- [ ] **Step 6: KV and preview deploy.**
-  - **KV:** `. scripts/lib/env.sh && CLOUDFLARE_API_TOKEN="$(envget CLOUDFLARE_API_TOKEN)" CLOUDFLARE_ACCOUNT_ID="$(envget CLOUDFLARE_ACCOUNT_ID)" bunx wrangler@4.151.2 kv namespace create tegel-waitlist`; save the printed id with `envset CLOUDFLARE_KV_WAITLIST_ID <id>`. Bind it as `WAITLIST_KV` to the `tegel` Pages project for **both** Production and Preview (dashboard: Settings → Bindings; one namespace, so preview tests count toward the day cap, which is harmless).
-  - **Preview secrets** (CR-P2-9: without the environment flag, wrangler targets production). For each of `MAILERLITE_API_TOKEN` (value from `MAILERLITE_API_TOKEN_PAGES`), `MAILERLITE_GROUP_WAITLIST` and `SITE_ORIGIN` (`https://preview.tegel.pages.dev`, plan 04's preview alias), pipe the value in so it's never echoed: `envget MAILERLITE_API_TOKEN_PAGES | CLOUDFLARE_API_TOKEN="$(envget CLOUDFLARE_API_TOKEN)" CLOUDFLARE_ACCOUNT_ID="$(envget CLOUDFLARE_ACCOUNT_ID)" bunx wrangler@4.151.2 pages secret put MAILERLITE_API_TOKEN --project-name tegel --env preview`.
+- [ ] **Step 6: KV and preview deploy.** `H` below is plan 04's real pages.dev host, saved as `CLOUDFLARE_PAGES_HOST` (plan 04 Task 8 Step 5; it may carry a suffix, so it is never typed in). Every command that uses `H` starts with `. scripts/lib/env.sh && H="$(envget CLOUDFLARE_PAGES_HOST)" &&`.
+  - **KV 🔒 (dashboard, by hand):** the deploy token is Pages-only (plan 04 K2) and has no Workers KV permission. U approves "create the Workers KV namespace `tegel-waitlist` and bind it as `WAITLIST_KV` to the `tegel` Pages project, Production and Preview". Then, with Playwright:
+    - Storage & Databases → KV → Create → `tegel-waitlist`. Save its ID with `. scripts/lib/env.sh && envset CLOUDFLARE_KV_WAITLIST_ID <id>` (not a secret).
+    - Workers & Pages → tegel → Settings → Bindings → KV namespace `WAITLIST_KV` → `tegel-waitlist`, for **both** Production and Preview. It is one namespace, so preview tests count toward the day cap, which is harmless.
+    - No `wrangler kv` command runs in this plan.
+  - **Preview secrets** (CR-P2-9: without the environment flag, wrangler targets production). Set each of `MAILERLITE_API_TOKEN` (value from `MAILERLITE_API_TOKEN_PAGES`), `MAILERLITE_GROUP_WAITLIST` and `SITE_ORIGIN` (plan 04's preview alias, `printf 'https://preview.%s' "$H"`). Pipe the value in so it's never echoed: `. scripts/lib/env.sh && need MAILERLITE_API_TOKEN_PAGES && envget MAILERLITE_API_TOKEN_PAGES | CLOUDFLARE_API_TOKEN="$(envget CLOUDFLARE_API_TOKEN)" CLOUDFLARE_ACCOUNT_ID="$(envget CLOUDFLARE_ACCOUNT_ID)" bunx wrangler@4.151.2 pages secret put MAILERLITE_API_TOKEN --project-name tegel --env preview`.
   - **Check step** (`--env preview` is documented only on a third-party mirror of the wrangler docs, 27 Oct): `… bunx wrangler@4.151.2 pages secret list --project-name tegel --env preview` lists the three names. If the flag is rejected, set them in the dashboard under Settings → Variables and Secrets → Preview, and record that.
   - **Deploy** with plan 04's preview command (it runs from `site/`, so `functions/` uploads; X9).
   - **Expected** (one `-w` each, CR-P2-9):
-    - `curl -s -o /dev/null -w '%{http_code}' -X POST https://preview.tegel.pages.dev/api/waitlist` → `403` (no Origin);
-    - `curl -s -o /dev/null -w '%{http_code} %{redirect_url}' -X POST -H "Origin: https://preview.tegel.pages.dev" -H 'Content-Type: application/x-www-form-urlencoded' --data 'email=a@example.com&consent=on&website=bot' https://preview.tegel.pages.dev/api/waitlist` → `303 https://preview.tegel.pages.dev/waitlist/check-email/`. The honeypot is filled, so the function is proven live without sending mail.
-    - **KV binding:** the same POST without `website=bot` and with `email=<STUDIO_EMAIL+preview@…>` → `303 …/waitlist/check-email/` (an unbound KV fails closed to `/waitlist/later/`). Then `… bunx wrangler@4.151.2 kv key list --namespace-id "$(envget CLOUDFLARE_KV_WAITLIST_ID)"` shows one `day:` key and one `addr:` key, and no address in clear. Forget the test subscriber in MailerLite.
+    - `curl -s -o /dev/null -w '%{http_code}' -X POST "https://preview.$H/api/waitlist"` → `403` (no Origin);
+    - `curl -s -o /dev/null -w '%{http_code} %{redirect_url}' -X POST -H "Origin: https://preview.$H" -H 'Content-Type: application/x-www-form-urlencoded' --data 'email=a@example.com&consent=on&website=bot' "https://preview.$H/api/waitlist"` → `303 https://preview.<H>/waitlist/check-email/`. The honeypot is filled, so the function is proven live without sending mail.
+    - **KV binding, checked through the endpoint:** the same POST without `website=bot` and with `email=<STUDIO_EMAIL+preview@…>` → `303 …/waitlist/check-email/`. A missing or failing binding answers `…/waitlist/later/` instead (`missing KV binding fails closed`, `KV failure fails closed`), so `check-email` proves the cap read and both KV writes went through. KV is never read directly: the Pages-only token can't, and wrangler v4's `kv key` commands read local storage unless `--remote`. The unit tests cover "no address in a KV key". Forget the test subscriber in MailerLite.
+    - **Close the preview endpoint.** The zone's rate-limiting rule doesn't cover pages.dev, so take the mail token away: `. scripts/lib/env.sh && CLOUDFLARE_API_TOKEN="$(envget CLOUDFLARE_API_TOKEN)" CLOUDFLARE_ACCOUNT_ID="$(envget CLOUDFLARE_ACCOUNT_ID)" bunx wrangler@4.151.2 pages secret delete MAILERLITE_API_TOKEN --project-name tegel --env preview` (or delete it in the dashboard, as above). Then `pages secret list … --env preview` no longer lists it, and a preview sign-up ends on `/waitlist/error/` with no mail sent. A later task that needs a live preview puts it back with the command above.
 
 ### Task 8: Waitlist copy, pages and go-live (C drafts, U approves; Wed 11 – Mon 16 Nov)
 
@@ -545,7 +551,7 @@ test('valid sign-up creates an unconfirmed subscriber and redirects', async () =
   - **check-email:** "Check your inbox and confirm your address. Nothing arrives until you do. If it isn't there in 10 minutes, look in spam."
   - **confirmed:** "You're on the list. Two emails, then the list is deleted. Meanwhile you can try the RTL Markdown checker." (Link it once Task 9 is live.)
   - **invalid:** "That didn't work: please enter a valid email and tick the box." + a link back.
-  - **error:** "We couldn't save your address just now. Please try again later, or email hello@tegelapps.com and we'll add it by hand."
+  - **error:** "We couldn't save your address just now. Please try again in 24 hours, or email hello@tegelapps.com and we'll add it by hand." (The address's 24 h cooldown key is written before the MailerLite call, so an earlier retry would only show check-email.)
   - **later:** "The waitlist is taking a break for today. Please try again tomorrow, or email hello@tegelapps.com and we'll add you by hand."
 - [ ] **Step 3: The double-opt-in confirmation email** (MailerLite → Subscribe settings → API double opt-in email). Write it into `email-copy.md`:
 
@@ -577,7 +583,7 @@ Buyers. If you buy a licence, Polar (our merchant of record) shares your email w
   - the confirm link lands on `/waitlist/confirmed/`;
   - the MailerLite group `waitlist` shows 1 active.
   - Then 7 rapid POSTs in a loop: `for i in $(seq 7); do curl -s -o /dev/null -w '%{http_code} ' -X POST -H 'Origin: https://tegelapps.com' -H 'Content-Type: application/x-www-form-urlencoded' --data 'email=a&consent=on&website=x' https://tegelapps.com/api/waitlist; done` → at least one `429`.
-  - Host check on the production deployment: `curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Origin: https://tegelapps.com' -H 'Content-Type: application/x-www-form-urlencoded' --data 'email=a@example.com&consent=on&website=' https://tegel.pages.dev/api/waitlist` → `403` (K8).
+  - Host check on the production deployment: `. scripts/lib/env.sh && curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Origin: https://tegelapps.com' -H 'Content-Type: application/x-www-form-urlencoded' --data 'email=a@example.com&consent=on&website=' "https://$(envget CLOUDFLARE_PAGES_HOST)/api/waitlist"` → `403` (K8).
   - Finally, remove the test subscriber (`POST /api/subscribers/{id}/forget`).
 - [ ] **Step 8: Commit** (`git add site/templates/partials/waitlist-form.html site/content/en/waitlist site/content/ar/waitlist docs/growth/email-copy.md`, `feat(site): waitlist form, result pages and consent copy` + trailer). Run Task 23 for `m08-waitlist`, then merge.
 
@@ -665,7 +671,7 @@ test('the tool drops every non-data: image source, same-origin paths included', 
   - **EN H1:** `RTL Markdown checker`.
   - **Lead (49 words):** `Paste Markdown or open a .md file to see how Arabic, Hebrew, Persian and Urdu paragraphs will display. Each block takes its direction from its first letter, the way browsers do with dir="auto", so a paragraph that starts with an English word turns left-to-right. This page flags those blocks.`
   - **Privacy line:** `Your text stays in this browser tab. Nothing is uploaded.`
-  - **CTA under the preview:** `Need it on paper? Tegel Markdown exports paginated A4 and Letter PDFs that keep right-to-left text correct.`, linking to `/download/` and to checkout with `?reference_id=tool-rtl`.
+  - **CTA under the preview:** `Need it on paper? Tegel Markdown exports paginated A4 and Letter PDFs that keep right-to-left text correct.`, linking to `/markdown/` only. The tool goes live on 23 Nov, before `/download/` (W6) and the checkout gate (plan 04 Task 14) open, and plan 04's link test fails the build on a missing page.
   - **Print stylesheet:** `.preview { display: none }`, and `.print-note` shows: `Printing from this page is turned off. Tegel Markdown Pro exports paginated, right-to-left-correct PDFs.`
   - **AR page:** the same copy in Arabic (U reviews).
 - [ ] **Step 6: Build.** Plan 04's build bundles `main.js` into `site/public/tools/rtl-markdown-check/` (plan 04 Task 5). Expected:
@@ -775,7 +781,8 @@ test('the tool drops every non-data: image source, same-origin paths included', 
                            benefitID: "b")
     #expect(base.checkoutURL(ref: "app-pdf").absoluteString == "https://buy.polar.sh/polar_cl_abc?reference_id=app-pdf")
     #expect(base.checkoutURL(ref: "a b").absoluteString.hasSuffix("reference_id=a%20b"))
-    #expect(base.checkoutURL(ref: "x&host=evil.example").host == "buy.polar.sh")
+    let q = URLComponents(url: base.checkoutURL(ref: "x&host=evil.example"), resolvingAgainstBaseURL: false)!.queryItems!
+    #expect(q.count == 1 && q[0].name == "reference_id" && q[0].value == "x&host=evil.example")   // `&` and `=` stay inside the value
 }
 ```
 
@@ -810,7 +817,7 @@ test('the tool drops every non-data: image source, same-origin paths included', 
 ```
 
 - [ ] **Step 3: Run them.** `swift test --package-path Packages/TegelKit --filter checkoutURLAddsReference` and `xcodebuild test -scheme markdown -destination 'platform=macOS' -only-testing:MarkdownAppTests/UpsellContextTests`. Expected: FAIL (`checkoutURL(ref:)` and `UpsellContext` not found).
-- [ ] **Step 4: Implement** to the interfaces, run both, expect PASS, then watch the preview guards fail: map every page instead of the first two → `preview.count` fails; add `try data.write(to: FileManager.default.temporaryDirectory.appending(path: "p.pdf"))` in `loadPreview` → the file assertion fails (and `make readonly-gate` flags the line). Restore both → PASS. Then `make check`: no regression.
+- [ ] **Step 4: Implement** to the interfaces, run both, expect PASS. Watch the injection guard fail: build the query with `percentEncodedQuery = "reference_id=" + ref.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!`, which leaves `&` and `=` raw → `checkoutURLAddsReference` fails (two query items); restore → PASS. Then watch the preview guards fail: map every page instead of the first two → `preview.count` fails; add `try data.write(to: FileManager.default.temporaryDirectory.appending(path: "p.pdf"))` in `loadPreview` → the file assertion fails (and `make readonly-gate` flags the line). Restore both → PASS. Then `make check`: no regression.
 - [ ] **Step 5: Wire the moments** (free tier only, `!isPro`). Each moment calls `openWindow(id: "pro", value:)`; `ProUpsellView(feature:)` shows the feature's title and body above plan 02's bullets and terms line (`One-time purchase for 2 Macs. No subscription. 14-day refund.`), with these buttons:
   - `Buy Pro…` opens `checkoutURL(ref: "app-<feature>")` (`app-folder`, `app-pdf`, `app-theme`);
   - `Enter Licence Key…` opens Settings on the Licence tab (plan 03; mechanism recorded in Step 1);
@@ -922,8 +929,9 @@ It never changes your files, sends no telemetry and needs no account. The only n
 - [ ] **Step 1: Check steps.**
   - In the Polar sandbox (Task 4 Step 1 order, opt-in ticked): the order JSON has `customer.email` and `custom_field_data`. Record the custom-field key exactly as Polar returns it (`marketing_opt_in` expected, value `true`).
   - In MailerLite, with `STUDIO_EMAIL+t1@…` as an **unsubscribed** test subscriber, an upsert with `status:"active"` leaves it unsubscribed.
+  - **Account-wide API double opt-in (Task 6 Step 4):** upsert a new `STUDIO_EMAIL+t3@…` with `subscriber_payload`'s body into a scratch group. Expected: status `active`, and no confirmation email arrives within 10 minutes. If the waitlist confirmation arrives instead, buyers would get the waitlist wording and stall unconfirmed: don't activate Step 7; tell the user.
   - **Queued sends** (unverified on 27 Oct): add `STUDIO_EMAIL+t2@…` to a scratch group whose scratch automation waits 1 day before one email, then remove it with `DELETE /api/subscribers/{id}/groups/{group_id}`. Expected: the automation's subscriber list no longer shows it as queued, and no email arrives the next day. If it's still queued, the sync's remove uses `DELETE /api/subscribers/{id}` instead (the subscriber leaves every group and automation; a buyer of both apps is then re-added to the other group by that product's next sync). Delete the scratch group and automation (Free allows 3 automations).
-  - Record all three results here.
+  - Record all four results here.
 - [ ] **Step 2: Failing tests.**
 
 ```python
@@ -1038,7 +1046,7 @@ This was email 1 of 2. The second comes when the next Tegel app launches; then t
   - **To `buyers-markdown`** (opted-in buyers only: consent, lid 1, K9, HR7; measured as `email-crosssell` sales ÷ emails sent). Copy and recipients come verbatim from plan 06 Task 15's `docs/launch/data-crosssell-email.md`: its subject, body, `?reference_id=email-crosssell` links, closing line and segment rule (P1-10). This plan adds only the footer and `{$unsubscribe}`, then sends at **09:30 CET**. If the group is over MailerLite Free's 250 subscribers, ask the user before sending (plan 06's segment rule).
   - **Coordination:** plan 08 owns the MailerLite account and this one send; plan 06 sends nothing. Plan 06's "cross-sell email" exit item is met by this send.
   - 🔒 U approves both copies and the sends. Expected: sent counts recorded.
-- [ ] **Step 3: Delete the waitlist** (Tue 2 Feb, after the send). For each subscriber in `waitlist` who isn't in a buyers group, `POST /api/subscribers/{id}/forget` ("completely deleted and forgotten within 30 days", developers.mailerlite.com). Expected: the group has 0 members, and the consent promise is kept.
+- [ ] **Step 3: Delete the waitlist** (Tue 2 Feb, after the send). For each subscriber in `waitlist` who isn't in a buyers group, `POST /api/subscribers/{id}/forget` ("completely deleted and forgotten within 30 days", developers.mailerlite.com). Those who are in a buyers group only leave the waitlist group: `DELETE /api/subscribers/{id}/groups/<MAILERLITE_GROUP_WAITLIST>`. Expected: the group has 0 members, and the consent promise is kept.
 - [ ] **Step 4: v1.1 news** to `buyers-markdown` on plan 07's v1.1 release date. Subject `Tegel Markdown 1.1: math, footnotes and custom CSS, free for every owner`. Body: three features from plan 07, `Update from the app menu: Tegel Markdown > Check for Updates`, and `ref=email-v11` on any checkout link. 🔒 send.
 - [ ] **Step 5: Commit** each copy as it is written (`docs(growth): <email> copy` + trailer).
 
