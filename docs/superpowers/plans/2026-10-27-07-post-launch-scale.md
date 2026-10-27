@@ -979,7 +979,7 @@ func testDismissMonitorWatchesNoKeys() { XCTAssertTrue(ActionPanel.dismissMask.i
 
 ### Task D7: Polar product, site page, release, launch (outward-facing)
 
-- [ ] **Step 1: Polar.** Sandbox: product at the D1 price with a licence-key benefit (2 activations); buy it and activate in Debug. Then live (approval).
+- [ ] **Step 1: Polar.** Sandbox: product at the D1 price with a licence-key benefit (2 activations); buy it and activate in Debug. Then live (approval). Record the live product id under `select` in `scripts/gates/products.json` (G0 Step 3 left it `[]`; G4 counts App 3 from it, and an App 3 refund missing from the window orders would be subtracted again as an older one) and commit it.
   - **BNPL check** (rule 7): run plan 05 Task 2 Step 11's procedure, unchanged, on the live App 3 checkout link before it goes public; screenshots to `docs/reviews/m07d-polar/checkout-{safari,chrome}-{nl,us}.png`. Its stop rule applies (B17).
   - The product carries plan 05's opt-in field (`marketing_opt_in`, unticked) and a EUR price set by the user (K10).
 - [ ] **Step 2: Site.** `site/content/<slug from D1>.md`: a permission explanation, a privacy statement (what is read, and when), a silent captioned demo (rules 2 and 4). Deploy; URL → 200.
