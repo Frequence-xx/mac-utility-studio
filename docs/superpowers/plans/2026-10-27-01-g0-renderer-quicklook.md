@@ -43,9 +43,9 @@ Master §2/§3 and CLAUDE.md apply (platform, build Mac, product rules, secrets,
 
 Each line names an input class the spec implies, the expected behaviour, and the test that pins it.
 
-1. **Hostile Markdown.** `<script>`, `onerror=`, `javascript:` links, SVG with script, `<iframe>`, remote `<img>`, Mermaid `click`, HTML in a Mermaid label, an `init` directive, a `<style>` that hides the page, `file://` links, `<meta refresh>`, `<base>`, `@import`, a `<script src>` pointing at another `file:` URL, a `# mermaid` heading.
+1. **Hostile Markdown.** `<script>`, `onerror=`, `javascript:` links, SVG with script, `<iframe>`, remote `<img>`, Mermaid `click`, HTML in a Mermaid label, an `init` directive, a `<style>` that hides the page, `file://` links, a relative link to `index.html`, an inline `style` attribute, `<meta refresh>`, `<base>`, `@import`, a `<script src>` pointing at another `file:` URL, a `# mermaid` heading.
    - Expected: no script runs, no network request, no navigation; the surrounding text still renders and stays visible.
-   - Pinned by: Task 3 `link syntax never yields…` (string level); Task 5 `testHostileFixtureRunsNoScriptAndMakesNoRequest`, `testClickingHostileLinksNeverNavigates`, `testScriptFromAnotherFileURLNeverRuns` and `testMermaidBasicRendersTwoDiagrams` (WebKit level), each watched failing in Task 5 Step 9.
+   - Pinned by: Task 3 `link syntax never yields…` (string level); Task 5 `testHostileFixtureRunsNoScriptAndMakesNoRequest`, `testClickingHostileLinksNeverNavigates`, `testLinkToTheRendererPageIsBlockedAndKeepsTheDocument`, `testDocumentStylesAreDroppedAndTableAlignmentStays`, `testScriptFromAnotherFileURLNeverRuns` and `testMermaidBasicRendersTwoDiagrams` (WebKit level), each watched failing in Task 5 Step 9.
 2. **Odd encodings and sizes.** UTF-16 with BOM, Windows-1252, a NUL byte, an empty file, a 50 MB file, a 2 GB file opened in the window, a FIFO named `.md`, a cut through a multibyte character.
    - Expected: the text decodes, or a banner shows; nothing reads past 5 MB; a FIFO fails fast; Quick Look stays under 2 s.
    - Pinned by: Task 4 tests (incl. `testFIFOFailsFastInsteadOfBlocking`), Task 7 Step 6 and Task 8 Step 7.
@@ -112,7 +112,7 @@ Each line names an input class the spec implies, the expected behaviour, and the
 - Produces: Make targets `check generate renderer test-js test-swift test-shell build fixtures clean` (master §3.1). `build` depends on `generate` (`xcodegen generate`), so a fresh clone builds; plan 02's `test-app` depends on it too (CR-P2-17). `test-js` runs `bun audit` (S27). `test-shell` runs the `.env` test and the guards.
 - Produces (K1), `scripts/lib/env.sh`, loaded with `. scripts/lib/env.sh` from the repo root; the file is `${ENV_FILE:-.env}`:
   - `envget KEY` prints the value through a literal parse of the first line starting `KEY=`, in the forms `.env.example` uses. A `'…'` value (envset's form) has each `'\''` turned back into `'`; a `"…"` value is taken as written, with no escapes. Anything after the closing quote is ignored, and an unterminated quote reads as empty. An unquoted value ends where a `#` starts it or follows a blank, so `KEY=   # note` reads as empty, and surrounding blanks are trimmed. It never sources the file and prints nothing for a missing key.
-  - `envset KEY VALUE` refuses a bad key name or a value with a newline (exit 1). Otherwise, under `umask 077`, it writes every other line plus `KEY='VALUE'` (each `'` escaped as `'\''`) to a `mktemp` file in the same folder, then `mv`s it over the original (atomic, mode 600).
+  - `envset KEY VALUE` refuses a bad key name or a value with a newline (exit 1). Otherwise, under `umask 077`, it writes every other line plus `KEY='VALUE'` (each `'` escaped as `'\''`) to a `mktemp` file in the same folder, then `mv`s it over the original (atomic, mode 600). The read-modify-write holds a `mkdir "$f.lock"` lock, so parallel agents never drop each other's keys (a vendor shows some tokens only once). A subshell-scoped trap removes the lock on every exit path; a lock held for 10 s fails with exit 1 rather than hanging.
   - `need KEY...` returns 1 with `missing .env key: KEY` for the first empty key. It never prints a value.
 - Produces (K1, K13): `scripts/check-guards.sh` exits 1 and lists the lines when `scripts`, `Makefile` or `site` contain `set -a` or a `bunx <pkg>` with no `@version`, or when a `uses:` line in `.github/workflows` isn't pinned to a 40-hex SHA.
 
@@ -191,9 +191,9 @@ check: test-js test-swift test-shell build
 generate:
 	$(XCODEGEN) generate
 renderer:
-	cd Renderer && $(BUN) install --frozen-lockfile && $(BUN) build.js
+	cd Renderer && $(BUN) install --frozen-lockfile --ignore-scripts && $(BUN) build.js
 test-js:
-	cd Renderer && $(BUN) install --frozen-lockfile && $(BUN) audit && $(BUN) test && $(BUN) build.js --check
+	cd Renderer && $(BUN) install --frozen-lockfile --ignore-scripts && $(BUN) audit && $(BUN) test && $(BUN) build.js --check
 test-swift: $(G0)
 	swift test --package-path $(PKG)
 test-shell:
@@ -235,7 +235,7 @@ Packages/TegelKit/TestHost/Info.plist
 ```
 
 Run: `make -n test-js build`
-Expected: three lines, `cd Renderer && bun install --frozen-lockfile && bun audit && bun test && bun build.js --check`, `xcodegen generate` and the `xcodebuild` line. Nothing runs. (`make -n check` would stop here with `No rule to make target 'Fixtures/generate.js'`, because Task 2 creates it.)
+Expected: three lines, `cd Renderer && bun install --frozen-lockfile --ignore-scripts && bun audit && bun test && bun build.js --check`, `xcodegen generate` and the `xcodebuild` line. Nothing runs. (`make -n check` would stop here with `No rule to make target 'Fixtures/generate.js'`, because Task 2 creates it.)
 
 - [ ] **Step 6: Write the `.env` helper test and watch it fail**
 
@@ -252,6 +252,8 @@ meta='a$(touch "'"$d"'/pwn")b`id` & ; ( ) \ "q" $HOME'
 envset APPLE_DEVELOPER_ID_IDENTITY "$id"
 envset PW "$meta"
 envset PW2 x; envset PW2 y
+for i in $(seq 20); do envset "P$i" "$i" & done; wait   # 20, not 2: two racing writers can both survive by luck
+[ "$(grep -c '^P[0-9]' "$ENV_FILE")" = 20 ] && [ ! -e "$ENV_FILE.lock" ] || fail "concurrent envset calls lost a key or left the lock"
 [ "$(envget APPLE_DEVELOPER_ID_IDENTITY)" = "$id" ] || fail "round-trip: spaces, colon, parentheses, quote"
 [ "$(envget PW)" = "$meta" ] || fail "round-trip: shell metacharacters"
 [ "$(envget PW2)" = y ] && [ "$(grep -c '^PW2=' "$ENV_FILE")" = 1 ] || fail "overwrite keeps one line"
@@ -301,7 +303,12 @@ envset() {  # envset KEY VALUE: write KEY='VALUE' atomically with mode 600; a ne
   case "$2" in *'
 '*) echo "envset: $1: value has a newline" >&2; return 1;; esac
   (
-    umask 077; f="${ENV_FILE:-.env}"
+    umask 077; f="${ENV_FILE:-.env}"; n=0
+    until mkdir "$f.lock" 2>/dev/null; do   # one writer at a time: parallel agents must not drop each other's keys
+      n=$((n + 1)); [ $n -lt 100 ] || { echo "envset: $f.lock held for 10 s; remove it if no envset is running" >&2; exit 1; }
+      sleep 0.1
+    done
+    trap 'rmdir "$f.lock"' EXIT; trap 'exit 1' HUP INT TERM   # set only once the lock is ours
     t=$(mktemp "$(dirname "$f")/.env.XXXXXX") || exit 1
     { [ -f "$f" ] && grep -v "^$1=" "$f"
       printf "%s='%s'\n" "$1" "$(printf '%s' "$2" | sed "s/'/'\\\\''/g")"; } > "$t" && mv -f "$t" "$f"
@@ -320,6 +327,9 @@ Expected: `FAIL: a shell reading the file sees other values` and `exit=1`. Rever
 
 Then watch the `.env.example` cases fail on a reader that only unquotes: temporarily replace the unquoted branch `{ sub(/(^|[ \t])#.*/, "", v); sub(/[ \t\r]+$/, "", v) }` with `{ }` and run `scripts/lib/env_test.sh; echo "exit=$?"`.
 Expected: `FAIL: .env.example syntax: a comment-only value reads empty` and `exit=1`. The reader this replaces fails the same way, which is how the comment-only `POLAR_ACCESS_TOKEN` and `CLOUDFLARE_API_TOKEN` lines in today's `.env` passed `need`. Revert; `env_test: PASS` again.
+
+Then watch the lock fail: temporarily delete the `until mkdir … done` loop and the `trap` line, and run `scripts/lib/env_test.sh; echo "exit=$?"`.
+Expected: `FAIL: concurrent envset calls lost a key or left the lock` and `exit=1` (in a scratch run on the build Mac, 20 unlocked writers kept 2 keys, under bash and zsh). Revert; `env_test: PASS` again.
 
 - [ ] **Step 8: Write the guard and watch it fail on planted lines**
 
@@ -489,12 +499,22 @@ Expected:
 
 - [ ] **Step 5: Check the religious-text guard (product rule 3)**
 
-Watch it catch a planted line first. `-Mutf8` makes Perl read the Arabic words in the pattern as characters; without it they stay UTF-8 bytes and never match the `-CSD`-decoded input, so only the `\x{…}` code points would be checked:
-`SCRATCH="$TMPDIR/tegel-m01"; mkdir -p "$SCRATCH"; printf 'clean\nسورة\n' > "$SCRATCH/plant.md"; perl -CSD -Mutf8 -ne 'print "$ARGV:$.: $_" if /[\x{FDFA}\x{FDFB}\x{06DD}\x{06DE}\x{06E9}\x{FD3E}\x{FD3F}]|بسم|قال رسول|سورة|آية/' "$SCRATCH/plant.md"`
-Expected: one line, `…/plant.md:2: سورة`. Run it again without `-Mutf8`: no line.
+`scan` decodes each file whole, the way `TextFileLoader` will (Task 4): a UTF-16LE BOM means UTF-16LE, then strict UTF-8, else Windows-1252. A plain `perl -CSD` line scan dies with `Malformed UTF-8 character (fatal)` on `cp1252.md` and stops there (reproduced on the build Mac, perl 5.34.1), and it reads `utf16le-bom.md` as bytes, so that file's Arabic would go unscanned. `-Mutf8` makes Perl read the Arabic words in the pattern as characters; without it they stay UTF-8 bytes and never match the decoded text, so only the `\x{…}` code points would be checked.
 
-Run: `perl -CSD -Mutf8 -ne 'print "$ARGV:$.: $_" if /[\x{FDFA}\x{FDFB}\x{06DD}\x{06DE}\x{06E9}\x{FD3E}\x{FD3F}]|بسم|قال رسول|سورة|آية/' Fixtures/markdown/*.md Fixtures/generate.js; echo "exit=$?"`
-Expected: no matched lines, then `exit=0`. Then read every Arabic, Persian and Urdu line by eye: only the sentences listed in Step 2 appear.
+Watch it catch planted lines first, with `cp1252.md` listed before them, so a crash would hide them:
+```bash
+SCRATCH="$TMPDIR/tegel-m01"; mkdir -p "$SCRATCH"
+scan() { perl -Mutf8 -MEncode -0777 -ne 'binmode STDOUT, ":utf8"; my $t = s/\A\xFF\xFE// ? decode("UTF-16LE", $_) : eval { decode("UTF-8", $_, Encode::FB_CROAK | Encode::LEAVE_SRC) } // decode("cp1252", $_); my $n = 0; for (split /\n/, $t) { $n++; print "$ARGV:$n: $_\n" if /[\x{FDFA}\x{FDFB}\x{06DD}\x{06DE}\x{06E9}\x{FD3E}\x{FD3F}]|بسم|قال رسول|سورة|آية/ }' "$@"; echo "exit=$?"; }
+printf 'clean\nسورة\n' > "$SCRATCH/plant.md"
+{ printf '\377\376'; printf 'clean\nآية\n' | iconv -f UTF-8 -t UTF-16LE; } > "$SCRATCH/plant16.md"
+scan Fixtures/markdown/cp1252.md "$SCRATCH/plant.md" "$SCRATCH/plant16.md"
+scan Fixtures/markdown/*.md Fixtures/generate.js
+```
+Expected:
+- First call: exactly `…/plant.md:2: سورة` and `…/plant16.md:2: آية`, then `exit=0`. Remove `-Mutf8` from `scan` and repeat that call: only `exit=0`.
+- Second call: no matched lines, then `exit=0` (about 3 s; `huge-50mb.md` is read whole).
+
+Then read every Arabic, Persian and Urdu line by eye: only the sentences listed in Step 2 appear.
 
 - [ ] **Step 6: Commit** `Fixtures .gitattributes .gitignore`: "test: add shared Markdown fixtures and the g0/huge generator"
 
@@ -527,13 +547,13 @@ Expected: no matched lines, then `exit=0`. Then read every Arabic, Persian and U
   }
 }
 ```
-Run: `cd Renderer && bun install && grep -c '"markdown-it@14.3.3"' bun.lock && bun audit; echo "exit=$?"`
-Expected: the install completes, the grep prints `1`, then `No vulnerabilities found` and `exit=0`. `bun audit` asks the npm registry, so `make check` needs the network.
+Run: `cd Renderer && bun install --ignore-scripts && grep -c '"markdown-it@14.3.3"' bun.lock && bun audit; echo "exit=$?"`
+Expected: the install completes, the grep prints `1`, then `No vulnerabilities found` and `exit=0`. `bun audit` asks the npm registry, so `make check` needs the network. This first install writes `bun.lock`, so it can't be `--frozen-lockfile`; every later install is (master Global constraints).
 
 Watch the audit fail (S27) in a scratch copy, so the repo is never touched:
 ```bash
 SCRATCH="$TMPDIR/tegel-m01"; mkdir -p "$SCRATCH"; rm -rf "$SCRATCH/audit-probe"
-rsync -a --exclude node_modules Renderer/ "$SCRATCH/audit-probe/" && cd "$SCRATCH/audit-probe" && bun add dompurify@3.1.2 && bun audit; echo "exit=$?"
+rsync -a --exclude node_modules Renderer/ "$SCRATCH/audit-probe/" && cd "$SCRATCH/audit-probe" && bun add --ignore-scripts dompurify@3.1.2 && bun audit; echo "exit=$?"
 ```
 Expected: `dompurify` listed with at least one advisory (3.1.2 predates the 3.1.3 prototype-pollution fix) and `exit=1`.
 
@@ -835,7 +855,7 @@ Expected: FAIL with `Exceeded timeout of 1 seconds` (the open blocks waiting for
   - `public var timeout: Duration`, defaulting to `.seconds(10)`. It covers the page load plus the render.
   - `public enum RendererError: Error, Equatable { case timeout }`.
   - The network rule list (S7): `WKContentRuleListStore.default().compileContentRuleList(forIdentifier: "tegel-no-network", encodedContentRuleList:)` with `[{"trigger":{"url-filter":"^https?:"},"action":{"type":"block"}},{"trigger":{"url-filter":"^wss?:"},"action":{"type":"block"}},{"trigger":{"url-filter":"^ftp:"},"action":{"type":"block"}}]`, compiled once per process and added to the user content controller before the first load.
-  - For tests only: `internal let indexURL: URL` and `internal private(set) var blockedNavigations: Int`.
+  - For tests only: `internal var indexURL: URL` (a `var`, so `testFailedPageLoadThrowsWithinTheTimeout` can point it at a missing file) and `internal private(set) var blockedNavigations: Int`.
 - Produces (build): `bun build.js` writes the resource folder; `bun build.js --check` exits 1 and lists differing files when the committed output ≠ a fresh build.
 - Test helper: `@MainActor func js(_ r: RendererWebView, _ body: String) async throws -> Any?`, implemented as `try await r.webView.callAsyncJavaScript(body, contentWorld: .page)`.
 
@@ -1063,6 +1083,15 @@ Run: `swift test --package-path Packages/TegelKit --filter testWebKitRunsInsideS
     do { _ = try await first.value; XCTFail("expected cancellation") } catch is CancellationError {}
 }
 
+@MainActor func testFailedPageLoadThrowsWithinTheTimeout() async throws {
+    let r = RendererWebView(); r.timeout = .seconds(1)
+    r.indexURL = r.indexURL.deletingLastPathComponent().appending(path: "missing.html")   // the page load fails
+    let thrown = expectation(description: "render threw")
+    let task = Task { do { _ = try await r.render("# x", options: RenderOptions()) } catch { thrown.fulfill() } }
+    await fulfillment(of: [thrown], timeout: 2)                 // a hang fails here instead of stalling the suite
+    task.cancel()
+}
+
 @MainActor func testHeadingNamedLikeADocumentPropertyKeepsItsIdAndLinksJumpToIt() async throws {
     // C10: DOMPurify's SANITIZE_DOM alone drops id="title" ('title' in document); so do images, links, name, open, style.
     let r = RendererWebView()
@@ -1116,11 +1145,31 @@ Expected: FAIL to compile with `cannot find 'RendererWebView' in scope`.
         let beacon = try BeaconServer(port: 47123); try await beacon.start(); defer { beacon.stop() }
         let r = RendererWebView()
         _ = try await r.render(try TextFileLoader.load(fixtureURL("hostile.md")).text, options: RenderOptions())
-        _ = try await js(r, "document.querySelectorAll('#doc a').forEach(a => a.click()); return 0")
+        // Mermaid wraps node B's `click` in an SVG <a>, which has no .click(): dispatch the event instead.
+        _ = try await js(r, "document.querySelectorAll('#doc a').forEach(a => a.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}))); return 0")
         try await Task.sleep(for: .milliseconds(500))
         XCTAssertEqual(r.webView.url, r.indexURL)
         XCTAssertEqual(beacon.connectionCount, 0)
         XCTAssertGreaterThanOrEqual(r.blockedNavigations, 1)     // #http-link survives the sanitiser, so the guard must fire
+    }
+    func testLinkToTheRendererPageIsBlockedAndKeepsTheDocument() async throws {
+        // `index.html` resolves to indexURL: a URL-only policy would allow it, reload the page and blank the document.
+        let r = RendererWebView()
+        _ = try await r.render("[home](index.html)\n\nSENTINEL-KEEP\n", options: RenderOptions())
+        let before = r.blockedNavigations
+        _ = try await js(r, "document.querySelector('#doc a').dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true})); return 0")
+        try await Task.sleep(for: .milliseconds(500))
+        XCTAssertGreaterThan(r.blockedNavigations, before)
+        let text = try await js(r, "return document.body.innerText") as? String ?? ""
+        XCTAssertTrue(text.contains("SENTINEL-KEEP"))
+    }
+    func testDocumentStylesAreDroppedAndTableAlignmentStays() async throws {
+        // The CSP allows inline styles, so a kept document `style` could cover or restyle the text.
+        let r = RendererWebView()
+        _ = try await r.render("<p style=\"position:fixed;inset:0\">cover</p>\n\n| n |\n|--:|\n| 1 |\n", options: RenderOptions())
+        let styled = try await js(r, "return document.querySelector('#doc p').hasAttribute('style')") as? Bool
+        let align = try await js(r, "return getComputedStyle(document.querySelector('#doc td')).textAlign") as? String
+        XCTAssertEqual(styled, false); XCTAssertEqual(align, "right")
     }
     func testScriptFromAnotherFileURLNeverRuns() async throws {  // S6: a sanitiser bypass that injects <script src> next to the document
         let dir = FileManager.default.temporaryDirectory.appending(path: "tegel-s6-\(UUID())")
@@ -1146,7 +1195,7 @@ Expected: FAIL to compile with `cannot find 'RendererWebView' in scope`.
 
 **`sanitize.js`** (plain ES module, no DOM access):
 - `SANITIZE_CONFIG` exactly as in Interfaces. DOMPurify's defaults already drop `on*` handlers and `javascript:` and `file:` URLs; the hook drops `file:` again so no option can bring it back.
-- `addHooks` installs the one `uponSanitizeAttribute` hook with the four rules in Interfaces. `data.attrValue` arrives trimmed; test the scheme case-insensitively. `forceKeepAttr` is DOMPurify's documented way for a hook to keep an attribute its URI allow-list would drop.
+- `addHooks` installs the one `uponSanitizeAttribute` hook with the four rules in Interfaces. The hook trims `data.attrValue` and lower-cases it itself, and tests the scheme on that copy; the attribute keeps its original value. The tests pass raw values such as `' FILE:///etc/passwd'` and `' DATA:text/html…'`. `forceKeepAttr` is DOMPurify's documented way for a hook to keep an attribute its URI allow-list would drop.
 
 Run: `cd Renderer && bun test test/sanitize.test.js`
 Expected: `5 pass`, `0 fail`.
@@ -1158,7 +1207,7 @@ Watch the K15 rule fail: temporarily delete the no-`fileImages` `IMG` `src` rule
 - At load, also add one `click` listener on `#doc` for `a[href^="#"]`. It calls `preventDefault()`, takes `frag = decodeURIComponent(href.slice(1))`, and runs `scrollIntoView()` on `document.getElementById('user-content-' + frag) ?? document.getElementById(frag)`. No navigation happens.
 - `render` runs these steps:
   1. Set `<html data-theme data-mode>`.
-  2. Sanitise with `DOMPurify.sanitize(renderToHTML(markdown, opts), { ...SANITIZE_CONFIG, SANITIZE_NAMED_PROPS: true, RETURN_DOM_FRAGMENT: true })` and call `#doc.replaceChildren(fragment)`. `SANITIZE_NAMED_PROPS` prefixes every `id` and `name` with `user-content-`. That keeps DOMPurify's clobbering protection, but a heading slugged `title`, `images`, `links`, `name`, `open` or `style` keeps its id: the default `SANITIZE_DOM` check alone deletes any id that exists on `document` or a form (C10, CR 4).
+  2. Sanitise with `DOMPurify.sanitize(renderToHTML(markdown, opts), { ...SANITIZE_CONFIG, SANITIZE_NAMED_PROPS: true, RETURN_DOM_FRAGMENT: true })`. In that fragment, remove every `style` attribute whose trimmed value doesn't match `/^text-align:\s*(left|right|center);?$/i` (markdown-it's table alignment is the only style the renderer emits; the CSP's `'unsafe-inline'` would let any other document style cover or restyle the text). Then call `#doc.replaceChildren(fragment)`. This filter is not a DOMPurify hook: hooks are global, and Mermaid's SVG pass (step 4) and plan 07's KaTeX pass need their generated inline styles. `SANITIZE_NAMED_PROPS` prefixes every `id` and `name` with `user-content-`. That keeps DOMPurify's clobbering protection, but a heading slugged `title`, `images`, `links`, `name`, `open` or `style` keeps its id: the default `SANITIZE_DOM` check alone deletes any id that exists on `document` or a form (C10, CR 4).
   3. `await new Promise(r => setTimeout(r, 0))`, so the text paints before Mermaid. Don't use `requestAnimationFrame`, which doesn't fire in windowless views.
   4. If `#doc pre[data-mermaid]` exists:
      - load Mermaid once through a module-scoped promise: inject `<script src="mermaid.min.js">`, and in its `load` handler take `globalThis.mermaid` once (the bundle's last line assigns it, so it shadows any `id="mermaid"` element) and keep it in that module variable. Every later call uses the module variable. **Never** test `window.mermaid` (or any page global) to decide whether to load: `# mermaid` would give a heading `id="mermaid"`, and named access would make that test pass with the heading (S11). The `user-content-` prefix (step 2) already prevents that; this rule is the second layer;
@@ -1177,14 +1226,16 @@ Watch the K15 rule fail: temporarily delete the no-`fileImages` `IMG` `src` rule
   - a navigation delegate. Both the handler and the delegate are one private `NSObject` proxy that holds the renderer `weak`.
 - It uses a 1024×768 frame and starts with the page marked dirty, so it loads nothing yet. `indexURL` is `Bundle.module.url(forResource: "index", withExtension: "html", subdirectory: "Renderer")!`. Every load is `loadFileURL(indexURL, allowingReadAccessTo: indexURL.deletingLastPathComponent())`.
 - **Network rule list (S7):** compiled once per process (a `@MainActor` static cached `Task`), from the JSON in Interfaces. Before the first load, `render` awaits it and calls `configuration.userContentController.add(list)`.
-- **Navigation policy:** allow only when the request URL, with its fragment dropped, equals `indexURL`. Otherwise `.cancel` and `blockedNavigations += 1`.
+- **Navigation policy (master §3.2):**
+  - `.cancel` and `blockedNavigations += 1` for every action whose `navigationType == .linkActivated`, whatever its URL. A relative `index.html`, `index.html#x` or `[x]()` link resolves to `indexURL`, so a URL check alone would let it reload the page and blank the document, in the window and in Quick Look.
+  - Any other action is allowed only when its request URL, with the fragment dropped, equals `indexURL`, so only the renderer's own loads pass. Otherwise `.cancel` and `blockedNavigations += 1`.
+  - Opening links is plan 02's (Task 6, the window only); this plan opens nothing.
 - **`render` steps:**
   1. If a render is pending, resume it with `CancellationError()` and mark the page dirty. "Pending" includes still waiting for the page load. A timed-out render also marks the page dirty.
-  2. If the page is dirty, install the rule list if it isn't installed yet, (re)load `indexURL` and await `didFinish`. A reload kills any in-flight JS, so a stale `rendered` can't be misattributed.
-  3. Install a continuation tagged with a token.
+  2. Install a continuation tagged with a token and start the deadline: a `Task.sleep(for: timeout)` resumes it with `.timeout` if the token is still pending. Both happen before any preparation or loading, so a stalled rule-list compile or page load also ends at the deadline.
+  3. If the page is dirty, install the rule list if it isn't installed yet, (re)load `indexURL` and wait for `didFinish`. `didFail` and `didFailProvisionalNavigation` for that load resume the token with their error, and the page stays dirty. A reload kills any in-flight JS, so a stale `rendered` can't be misattributed.
   4. Call `callAsyncJavaScript("await window.tegel.render(markdown, opts)", arguments: ["markdown": md, "opts": ["mode": …, "theme": …, "baseHref": …]], in: nil, in: .page)`. A JS error resumes with that error.
   5. Resume with the decoded `rendered` message body (`JSONSerialization` → `JSONDecoder`) only while that token is awaiting. Ignore every other message.
-  6. A `Task.sleep(for: timeout)` resumes with `.timeout` if the token is still pending.
 
 **`tegel-renderer://` fallback (S6).** Switch to it if Step 8 shows either:
 - `page.js` never loads (a `script-src` violation on the `file:` page, so WebKit's `'self'` doesn't match `file:`); or
@@ -1195,7 +1246,7 @@ Then serve the renderer folder through a `WKURLSchemeHandler` registered for `te
 - [ ] **Step 8: Run the tests and watch them pass**
 
 Run: `make renderer && swift test --package-path Packages/TegelKit --filter 'RendererWebViewTests|HostileInputTests'`
-Expected: `Executed 13 tests, with 0 failures` (9 + 4).
+Expected: `Executed 16 tests, with 0 failures` (10 + 6).
 
 - [ ] **Step 9: Watch every guard fail, one at a time, then restore it**
 
@@ -1213,8 +1264,11 @@ For each row: make the temporary edit, run `make renderer` if the edit touches `
 | 8 | In `markdown.js`, also give `li`, `th`, `td` and nested `p` a `dir="auto"` (CR-P1-2) | `testMixedBidiDirections` | `ul`, `blockquote` and `table` read `ltr`, and `firstCellIsRight` is false |
 | 9 | Drop `SANITIZE_NAMED_PROPS: true` from the main pass (C10) | `testHeadingNamedLikeADocumentPropertyKeepsItsIdAndLinksJumpToIt` | The heading ids are `[""]`: `SANITIZE_DOM` deleted `id="title"` |
 | 10 | Remove the `#doc` `click` listener | `testHeadingNamedLikeADocumentPropertyKeepsItsIdAndLinksJumpToIt` | `top` is well over 40: the native jump looks for `id="title"`, which no longer exists |
+| 11 | Drop the `.linkActivated` rule from the navigation policy (the `indexURL` check alone) | `testLinkToTheRendererPageIsBlockedAndKeepsTheDocument` | `blockedNavigations` is unchanged and `SENTINEL-KEEP` is gone: the link reloaded the page blank |
+| 12 | Remove the main pass's `style` filter. Then, separately, make it remove every `style`, alignment included | `testDocumentStylesAreDroppedAndTableAlignmentStays` | First `styled` is `true`; then `align` is `start` |
+| 13 | Start the deadline after `didFinish` again (the old order) and ignore `didFail`/`didFailProvisionalNavigation` | `testFailedPageLoadThrowsWithinTheTimeout` | `Asynchronous wait failed: Exceeded timeout of 2 seconds`: the render never returns |
 
-After the last row: `make renderer`, re-run Step 8 (`Executed 13 tests, with 0 failures`), and `git status --short Renderer/src Packages/TegelKit/Sources/TegelKit/Resources` prints only this task's intended files.
+After the last row: `make renderer`, re-run Step 8 (`Executed 16 tests, with 0 failures`), and `git status --short Renderer/src Packages/TegelKit/Sources/TegelKit/Resources` prints only this task's intended files.
 
 - [ ] **Step 10: Run the full JS suite**
 
@@ -1259,7 +1313,7 @@ Expected: `bun audit` clean, `19 pass`, `0 fail` (12 markdown, 2 page, 5 sanitiz
 Run: `make test-swift 2>&1 | grep -E 'G0 swift-test|Executed'`
 Expected on the build Mac: `G0 swift-test ms=[…]` and 0 failures.
 
-If the test fails **only on the < 1000 ms assertion**, don't change the threshold. Record the numbers and continue. The test stays red until G0 is decided (Task 13), and the pipeline baseline notes it.
+If the test fails **only on the < 1000 ms assertion**, don't change the threshold. Record the numbers and continue. The test stays red until G0 is decided (Task 13), and the pipeline baseline notes it. While it is red, run `make -k check` wherever this plan says `make check`: plain `make` stops at the first failed prerequisite, so `test-shell` and `build` would never run.
 
 - [ ] **Step 3: Create `docs/gates/G0.md`**
 
@@ -1463,7 +1517,7 @@ Expected: `0`.
         com.apple.security.app-sandbox: true
         com.apple.security.network.client: true   # WKWebView in a sandbox [F5]
 ```
-No `/` read exception (K4): Quick Look already grants the extension the previewed file, and plan 02's `tegel-doc:` handler serves its images.
+No `/` read exception (K4): Quick Look renders with `baseURL: nil` and shows no local images, so the extension needs no file access beyond the previewed file Quick Look hands it.
 Also add `- target: markdown.quicklook` to the `markdown` target's `dependencies`. XcodeGen embeds it into `Contents/PlugIns`.
 
 - [ ] **Step 3: Implement `PreviewViewController.swift`**
@@ -1612,7 +1666,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1    # v7.0.1
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6   # v2.2.0
         with: { bun-version: 1.4.0 }
-      - run: make test-js                  # bun install --frozen-lockfile, bun audit, bun test, build.js --check
+      - run: make test-js                  # bun install --frozen-lockfile --ignore-scripts, bun audit, bun test, build.js --check
   macos:
     if: github.event_name == 'workflow_dispatch'
     strategy: { fail-fast: false, matrix: { os: [macos-15, macos-26] } }
@@ -1635,9 +1689,11 @@ jobs:
           unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/xcodegen/bin" >> "$GITHUB_PATH"
       - run: sw_vers && uname -m && xcodebuild -version && xcodegen --version
-      - run: make test-swift
+      - run: make test-swift              # red while the G0 perf test is (Task 6); the job then fails, after the steps below
       - run: make build
+        if: ${{ !cancelled() }}
       - name: G0 benchmark (5 cold runs)
+        if: ${{ !cancelled() }}
         run: |
           BIN="build/Build/Products/Debug/Tegel Markdown.app/Contents/MacOS/Tegel Markdown"
           for i in 1 2 3 4 5; do "$BIN" --benchmark < Fixtures/markdown/g0-1mb.md; done | tee bench.jsonl
@@ -1683,8 +1739,16 @@ If `build.js --check` fails only on Linux, compare `bun build.js` output between
 
 - [ ] **Step 4: Dispatch the macOS matrix**
 
-Run: `gh workflow run ci.yml --ref m01-g0-renderer`, then `gh run watch $(gh run list --workflow ci.yml --branch m01-g0-renderer -L 1 --json databaseId -q '.[0].databaseId')`, then `gh run view <id> --log | grep -E 'Xcode 26|"mermaidCount"|G0 swift-test'`.
-Expected: both matrix legs succeed, each printing `Xcode 26.3` and 5 JSON lines with `"mermaidCount":5,"errors":0`. Add two G0.md rows: `GitHub macos-15 · arm64` and `GitHub macos-26 · arm64`, each with the run URL as evidence. These rows are supporting evidence; the G0 legs are the Intel 15 and Scaleway 27 rows.
+Run (the pattern from plan 09 Task 11; `--event workflow_dispatch`, because `ci.yml` also runs on every push):
+```bash
+last() { gh run list --workflow ci.yml --branch m01-g0-renderer --event workflow_dispatch -L1 --json databaseId -q '.[0].databaseId'; }
+OLD=$(last)
+gh workflow run ci.yml --ref m01-g0-renderer
+for i in $(seq 30); do ID=$(last); [ -n "$ID" ] && [ "$ID" != "$OLD" ] && break; sleep 2; done
+[ -n "$ID" ] && [ "$ID" != "$OLD" ] && gh run watch "$ID" && gh run view "$ID" --log | grep -E 'Xcode 26|"mermaidCount"|G0 swift-test'
+```
+`gh workflow run` creates the run asynchronously, so the loop waits up to 60 s for a dispatch run ID that differs from the one before; `-L1` alone can return the previous run or the push run.
+Expected: each matrix leg prints `Xcode 26.3` and 5 JSON lines with `"mermaidCount":5,"errors":0`, and both legs succeed. While the G0 perf test is still red (Task 6), a leg's `make test-swift` step fails on that test alone; `make build` and the benchmark still run (`if: ${{ !cancelled() }}`), so the rows below still get their numbers. Add two G0.md rows: `GitHub macos-15 · arm64` and `GitHub macos-26 · arm64`, each with the run URL as evidence. These rows are supporting evidence; the G0 legs are the Intel 15 and Scaleway 27 rows.
 
 - [ ] **Step 5: Commit** `docs/gates/G0.md`: "docs(g0): CI arm64 macOS 15/26 benchmark results"
 
@@ -1893,7 +1957,7 @@ Record the user's choice under Decision. Plan 02 starts only after that.
 
 Run **Procedure P (master §11)** with id `m01` and branch `m01-g0-renderer`. Every command block that uses `$SCRATCH` or `$BASE` starts with `SCRATCH="$TMPDIR/tegel-m01"; mkdir -p "$SCRATCH"; BASE=$(git merge-base HEAD main)`. This plan's deltas:
 
-- [ ] **Step 1: Stages 1–3 as in P.** Stage 2 lists the red G0 perf test (Task 6) as known, if it is still red.
+- [ ] **Step 1: Stages 1–3 as in P.** Stage 2 lists the red G0 perf test (Task 6) as known, if it is still red, and then runs `make -k check`, so `test-shell` and `build` still run and are counted; the expected result is that one failure and nothing else.
 
 - [ ] **Step 2: Stage 4, `/cso` scope**
 - `Renderer/src/{index.html,page.js,sanitize.js,markdown.js}`, `build.js` and the committed `Resources/Renderer/`;

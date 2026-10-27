@@ -4,9 +4,9 @@
 
 **Goal:** A Polar sandbox purchase activates, validates and deactivates Tegel Markdown Pro end to end. Sparkle updates 1.0.0-b1 → 1.0.0-b2 through a signed feed served locally (betas never reach the public R2 feed, K7). `scripts/release.sh` gives a notarised, stapled DMG that passes Gatekeeper on a clean Mac.
 
-**Architecture:** TegelStore (second library in `Packages/TegelKit`) holds a pure grace policy, a URLSession Polar client, a Security.framework Keychain store and an `@Observable` `LicenseManager` that feeds the app's existing `isPro` seam. Polar values reach Info.plist through xcconfig (D16), and Sparkle 2.10.1 comes in over SPM. One bash release script runs native tools (xcodebuild, notarytool, stapler, hdiutil, codesign, spctl), then `generate_appcast`, then a `wrangler r2 object put --remote` upload.
+**Architecture:** TegelStore (second library in `Packages/TegelKit`) holds a pure grace policy, a URLSession Polar client, a Security.framework Keychain store and an `@Observable` `LicenseManager` that feeds the app's existing `isPro` seam. Polar values reach Info.plist through xcconfig (D16), and Sparkle 2.10.1 comes in over SPM. One bash release script runs native tools (xcodebuild, notarytool, stapler, hdiutil, codesign, spctl), then `generate_appcast`, then a curl SigV4 upload to R2's S3 endpoint (no npm code runs while the signing keys are unlocked).
 
-**Tech Stack:** Swift 6 / SwiftPM tools 6.0, Swift Testing, Security.framework, URLSession, SwiftUI, XcodeGen 2.46, Sparkle 2.10.1, Polar customer-portal licence API, Cloudflare R2 + wrangler 4.151.2 via `bunx`, bash.
+**Tech Stack:** Swift 6 / SwiftPM tools 6.0, Swift Testing, Security.framework, URLSession, SwiftUI, XcodeGen 2.46, Sparkle 2.10.1, Polar customer-portal licence API, Cloudflare R2 through its S3 API with `curl --aws-sigv4` (curl ≥ 7.75; macOS 15 ships 8.x), bash.
 
 **Spec:** `BUSINESS-PLAN.md` (§5 rules 3 and 5, §6.4, §7.3, §7.4, §13 risk 7); `docs/superpowers/plans/2026-10-27-00-master-roadmap.md` (Global constraints, Review focus 5, D5, D12, D14–D16, §3.3, §5 H2/H4/H5, §6); facts `docs/research/2026-10-27-technical-facts.md` [F#]; rules `CLAUDE.md`.
 
@@ -36,7 +36,7 @@ Master Review focus 5 belongs to this plan. Most likely first:
 2. **Polar 404** (retired API version, revoked key, activation removed in the portal) → exactly like offline: grace, key kept, a later 200 restores Pro. Pinned by `refresh404WithinGraceNeverLocks`, `refresh404AfterGraceIsLapsedAndKeepsKey`, `refreshAfterLapseWith200RestoresPro` (Task 7); Task 13 step 14.
 3. **Clock moved backwards** (`now < lastValidatedAt`) → Pro within a 1-day skew; beyond it `.lapsed` until the next 200, and `lastValidatedAt` is never moved by a failure. Pinned by `smallBackwardSkewStaysPro`, `clockMovedBackwardsBeyondSkewIsLapsedWithoutMovingStamp`, `futureStampBeyondSkewIsLapsed` (Task 4), `refreshWithClockBackwardsKeepsLastValidatedAt` (Task 7).
 4. **Activation limit reached, or an unknown key** → specific copy, state stays free, nothing stored. Pinned by `activateMapsErrors` (Task 5), `activateLimitReachedThrowsAndStaysFree` (Task 7); Task 13 step 13.
-5. **Key pasted with spaces or newlines**, including a line break inside the key from a wrapped email → normalised before it is sent or stored. Pinned by `normalisedKeyStripsAllWhitespace`, `activateSendsNormalisedKeyAndComputerNameThenStores` (Task 7).
+5. **Key pasted with spaces or newlines**, including a line break inside the key from a wrapped email → normalised before it is sent or stored. Pinned by `normalisedKeyStripsAllWhitespace`, `activateSendsNormalisedKeyAndModelLabelThenStores` (Task 7).
 
 Also pinned:
 - A 200 counts only with `status == "granted"` and the stored activation id; a block page, a stub or a drifted body is a failure that goes through grace (`validate200WithoutGrantedMatchingActivationIsFailure`).
@@ -44,7 +44,7 @@ Also pinned:
 - A lapsed licence whose activation is gone can be removed from the Licence tab, so the key can be entered again (`lapsedLicenceCanBeRemoved`).
 - One activate/deactivate at a time (`concurrentActivateSendsOneRequest`), and a Keychain save failure releases the new activation (`activateKeychainSaveFailureRollsBack`).
 - A key for another Tegel app is rejected, its activation released and nothing stored (`activateWrongBenefitDeactivatesAndThrows`, `activateWrongProductThrowsAndStaysFree`; Task 13 step 13).
-- The release guards (dirty tree, missing key, placeholder values, bad args, private betas, `--print-config` paths, `--from-dmg` checks, the entitlement allowlist) are covered by `scripts/release_test.sh`.
+- The release guards (dirty tree, missing key, placeholder values, bad args, private betas, `--print-config` paths, `--from-dmg` checks including the app's identity, the entitlement allowlist, no store flag in the direct build, a locked screen, a version already published) are covered by `scripts/release_test.sh`.
 
 ## H2 dependency (Developer ID)
 
@@ -129,7 +129,7 @@ Needs plan 04's Cloudflare account and the `tegelapps.com` zone, plus H4's card.
 - None in the repo; writes `.env` keys.
 
 **Interfaces:**
-- Produces these `.env` names, used by Task 12: `R2_BUCKET`, `R2_PUBLIC_BASE_URL`, `CLOUDFLARE_ACCOUNT_ID` (if plan 04 hasn't set it), `CLOUDFLARE_R2_API_TOKEN`.
+- Produces these `.env` names, used by Task 12: `R2_BUCKET`, `R2_PUBLIC_BASE_URL`, `CLOUDFLARE_ACCOUNT_ID` (if plan 04 hasn't set it), `CLOUDFLARE_R2_API_TOKEN`, and the token's S3 credentials `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`.
 
 - [ ] **Step 1: Enable R2** in the dashboard (Playwright).
   - Ask the user first: "Enable R2 on the Cloudflare account? It may ask for a card; our use stays inside the free tier."
@@ -143,23 +143,26 @@ Needs plan 04's Cloudflare account and the `tegelapps.com` zone, plus H4's card.
 - [ ] **Step 4: Create the token.** R2 → Manage API tokens → Create:
   - permission **Object Read & Write**, applied to **`tegel-downloads` only**;
   - `. scripts/lib/env.sh; envset CLOUDFLARE_R2_API_TOKEN '<token>'`; then `. scripts/lib/env.sh; need CLOUDFLARE_ACCOUNT_ID && echo saved`, and if it exits 1, copy the id from the dashboard and `. scripts/lib/env.sh; envset CLOUDFLARE_ACCOUNT_ID '<id>'`.
-  - This bucket-scoped token is the only credential any R2 upload uses (K2). Plan 04's Pages deploy token has no R2 permission.
-- [ ] **Step 5: Verify the token and the `--remote` flag.** Wrangler v4 runs "in local mode by default" (developers.cloudflare.com/workers/wrangler/migration/update-v3-to-v4/). Run this in a temp dir so the local state doesn't land in the repo:
+  - The same page shows the token's **S3 credentials, once**: the Access Key ID and the Secret Access Key (developers.cloudflare.com/r2/api/tokens/; check the wording on the day). Copy each the moment it's shown and save it without it touching a command line: `. scripts/lib/env.sh && envset R2_ACCESS_KEY_ID "$(pbpaste)" && pbcopy </dev/null`, then the same with `R2_SECRET_ACCESS_KEY`. Check: `. scripts/lib/env.sh; need R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY && echo saved` → `saved`.
+  - This bucket-scoped token, through those S3 credentials, is the only credential any R2 upload uses (K2). Plan 04's Pages deploy token has no R2 permission.
+- [ ] **Step 5: Verify the S3 credentials with the release script's upload command.** `release.sh` uploads with `curl --aws-sigv4` against R2's S3 endpoint `https://<account id>.r2.cloudflarestorage.com`, region `auto` (developers.cloudflare.com/r2/api/s3/api/; check it on the day), so no npm code runs at release time. This probe uses the same command.
+  - **Ask the user first** (Global Constraints: any upload to R2): "Upload one 2-byte test object `probe.txt` to `tegel-downloads`, read it back through `downloads.tegelapps.com`, then delete it?" Run the block only after a yes.
   ```bash
   . scripts/lib/env.sh
-  TOKEN=$(envget CLOUDFLARE_R2_API_TOKEN); ACCT=$(envget CLOUDFLARE_ACCOUNT_ID)   # read before leaving the repo; not exported
-  cd "$(mktemp -d)" && printf ok > probe.txt
-  w() { CLOUDFLARE_API_TOKEN="$TOKEN" CLOUDFLARE_ACCOUNT_ID="$ACCT" bunx wrangler@4.151.2 r2 object "$@"; }
-  w put tegel-downloads/probe-local.txt --file probe.txt
-  w put tegel-downloads/probe-remote.txt --file probe.txt --content-type text/plain --remote
-  for k in probe-local probe-remote; do curl -s -o /dev/null -w "$k %{http_code}\n" "https://downloads.tegelapps.com/$k.txt"; done
-  curl -s -o /dev/null -w 'tls1.1 %{http_code}\n' --tls-max 1.1 https://downloads.tegelapps.com/probe-remote.txt
-  w delete tegel-downloads/probe-remote.txt --remote
+  KID=$(envget R2_ACCESS_KEY_ID); SEC=$(envget R2_SECRET_ACCESS_KEY); S3="https://$(envget CLOUDFLARE_ACCOUNT_ID).r2.cloudflarestorage.com/tegel-downloads"   # not exported
+  curl --version | head -1
+  T=$(mktemp); printf ok > "$T"
+  curl -s -o /dev/null -w 'unsigned %{http_code}\n' -T "$T" "$S3/probe.txt"
+  curl -s -o /dev/null -w 'put %{http_code}\n' --aws-sigv4 "aws:amz:auto:s3" --user "$KID:$SEC" -H 'Content-Type: text/plain' -H 'Cache-Control: no-store' -T "$T" "$S3/probe.txt"
+  curl -sI https://downloads.tegelapps.com/probe.txt | grep -ciE '^(HTTP/2 200|content-type: text/plain|cache-control: no-store)'
+  curl -s -o /dev/null -w 'tls1.1 %{http_code}\n' --tls-max 1.1 https://downloads.tegelapps.com/probe.txt
+  curl -s -o /dev/null -w 'delete %{http_code}\n' --aws-sigv4 "aws:amz:auto:s3" --user "$KID:$SEC" -X DELETE "$S3/probe.txt"
+  rm -f "$T"
   ```
-  Expected: `probe-local 404`, `probe-remote 200`, `tls1.1 000`.
-  - If the remote `put` fails with an auth error, the bucket-scoped token doesn't work with wrangler. **Don't widen it** to an account-level R2 token (K2 rejects that). Stop, record the error, and ask the user how to proceed.
+  Expected: `curl 8.…` (anything ≥ 7.75.0, the first with `--aws-sigv4`), then `unsigned` with any code but `200` (watched failing: the upload needs the signature), `put 200`, `3` (the public HEAD returns the object with both headers R2 stored), `tls1.1 000`, `delete 204`.
+  - If the signed `put` fails with a payload-hash error, add `-H 'x-amz-content-sha256: UNSIGNED-PAYLOAD'` here and to `release.sh`'s `r2put`, and record which form worked. If it fails with an auth error, **don't widen** the token to an account-level R2 token (K2 rejects that). Stop, record the error, and ask the user how to proceed.
 
-No commit; Task 4 adds `CLOUDFLARE_R2_API_TOKEN`, `R2_BUCKET` and `R2_PUBLIC_BASE_URL` to `.env.example`.
+No commit; Task 4 adds `CLOUDFLARE_R2_API_TOKEN`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` and `R2_PUBLIC_BASE_URL` to `.env.example`.
 
 ### Task 3: Developer ID certificate and notarytool profile (H2)
 
@@ -190,6 +193,7 @@ No commit; Task 4 adds `CLOUDFLARE_R2_API_TOKEN`, `R2_BUCKET` and `R2_PUBLIC_BAS
 - [ ] **Step 4: The notary credentials (done 27 Oct; verify).**
   - Run: `. scripts/lib/env.sh; [ "$(envget NOTARY_KEYCHAIN_PROFILE)" = tegel-notary ] && xcrun notarytool history --keychain-profile tegel-notary >/dev/null && echo notary-ok`
   - Expected: `notary-ok`.
+  - Run it with the Mac **unlocked**: with the screen locked, the same command printed "No Keychain password item found for profile: tegel-notary" although the profile was intact (build Mac, 27 Oct). `release.sh` refuses to start on a locked screen (Task 12).
   - The profile holds the key's contents, not its path: with the `.p8` moved aside, `notarytool history --keychain-profile tegel-notary` still succeeded (build Mac, 27 Oct). So Step 5 can take the plaintext off disk without breaking notarisation.
   - If the profile is ever lost: `xcrun notarytool store-credentials tegel-notary --key <the .p8 from TegelKeys> --key-id "$KID" ${ISS:+--issuer "$ISS"}` (`--issuer` is "Required for Team API Keys. Do not provide for Individual API Keys", `xcrun notarytool store-credentials --help` on Xcode 26.3).
 - [ ] **Step 5: Keys at rest (K3).** The Keychain holds both keys, so the plaintext files leave `$HOME`.
@@ -260,7 +264,7 @@ No commit.
   - Run `git checkout main && git pull --ff-only origin main && git checkout -b m03-commerce-release`.
   - Add these names, without values, to `.env.example`:
     - under `# --- Polar`: `POLAR_SANDBOX_PRODUCT_ID_MARKDOWN`, `POLAR_SANDBOX_BENEFIT_ID_MARKDOWN`, `POLAR_SANDBOX_PORTAL_URL`, `POLAR_SANDBOX_TEST_LICENSE_KEY`, `POLAR_SANDBOX_OTHER_LICENSE_KEY`;
-    - under `# --- Cloudflare`: `CLOUDFLARE_R2_API_TOKEN`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`.
+    - under `# --- Cloudflare`: `CLOUDFLARE_R2_API_TOKEN`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`.
   - Remove the `ASC_API_KEY_PATH` and `SPARKLE_PRIVATE_KEY_BACKUP_PATH` lines: the key files live offline (K3).
   - Commit: `.env.example`, "chore(env): name the m03 Polar sandbox and R2 keys; drop key paths (K3)".
 - [ ] **Step 2: Write the failing test.**
@@ -516,7 +520,13 @@ No commit.
   - K5: one `activate`/`deactivate` at a time. A call made while another is in flight throws `CancellationError()` and sends nothing (the UI disables its buttons while busy, so only code can hit this).
 - New, internal:
   - `static func normalisedKey(_ raw: String) -> String`. It removes **all** whitespace and newlines, not just the ends: Polar keys contain none, so this also fixes a key wrapped across lines in an email.
-  - `static var computerName: String { (SCDynamicStoreCopyComputerName(nil, nil) as String?) ?? "Mac" }`, the activation label (`import SystemConfiguration`). Not `Host.current()`, which does a blocking DNS lookup that can stall offline (CR-P2-26).
+  - `static var modelLabel: String`, the activation label: the hardware model from `sysctlbyname("hw.model")`, such as `iMac19,1` (compiled and run with `swiftc -swift-version 6` on the build Mac, 27 Oct). Never the computer name: "<First name>'s MacBook Pro" would send personal data to Polar, which `/privacy/` doesn't disclose. Not `Host.current()` either, which does a blocking DNS lookup that can stall offline (CR-P2-26).
+    ```swift
+    static var modelLabel: String {
+        var n = 0; sysctlbyname("hw.model", nil, &n, nil, 0)
+        var b = [UInt8](repeating: 0, count: max(n, 1)); sysctlbyname("hw.model", &b, &n, nil, 0)
+        let s = String(decoding: b.prefix { $0 != 0 }, as: UTF8.self); return s.isEmpty ? "Mac" : s }
+    ```
   - `init(client: PolarClient, keychain: KeychainStore, now: Date)`, the designated init: it applies the policy at `now`. The §3.3 public init is a `convenience init` that passes `.now`, so the contract is unchanged. Tests pass a clock relative to `t0` (15 Jan 2027), so no test depends on today's date.
 - Test helpers, in this test file:
   - `let granted = respond(200, #"{"status":"granted","activation":{"id":"act_1"}}"#)`, a validate 200 for `lic`.
@@ -525,7 +535,6 @@ No commit.
 - [ ] **Step 1: Write the failing test.** Each test also deletes its Keychain store at the end (`defer { try? store.delete() }`, omitted below).
   ```swift
   import Foundation
-  import SystemConfiguration
   import Testing
   @testable import TegelStore
 
@@ -542,12 +551,12 @@ No commit.
           #expect(LicenseManager.normalisedKey("  ABCD-1234 \n") == "ABCD-1234")
           #expect(LicenseManager.normalisedKey("ABCD-\r\n1234\t") == "ABCD-1234")
       }
-      @Test func activateSendsNormalisedKeyAndComputerNameThenStores() async throws {
+      @Test func activateSendsNormalisedKeyAndModelLabelThenStores() async throws {
           let (m, store, host) = try makeManager(stored: nil, respond(200, #"{"id":"act_9","license_key":{"benefit_id":"ben-1"}}"#))
           try await m.activate(key: " K-1\n")
           let (_, body) = try #require(StubURLProtocol.requests(host: host).first)
           #expect(body["key"] == "K-1")
-          #expect(body["label"] == ((SCDynamicStoreCopyComputerName(nil, nil) as String?) ?? "Mac"))
+          #expect(body["label"]?.wholeMatch(of: #/[A-Za-z]+[0-9]+,[0-9]+/#) != nil)   // a model id such as "iMac19,1", never a computer name
           #expect(store.load()?.key == "K-1"); #expect(store.load()?.activationID == "act_9"); #expect(m.isPro)
       }
       @Test func concurrentActivateSendsOneRequest() async throws {           // K5: one mutation in flight
@@ -654,7 +663,7 @@ No commit.
   - **Serialising (K5):** `private var mutating = false`. `activate` and `deactivate` start with `guard !mutating else { throw CancellationError() }; mutating = true; defer { mutating = false }`. Both run on the main actor, so the flag is set before the first `await`.
   - **`activate`:**
     1. Normalise the key.
-    2. Call `client.activate(key:label:)` with `label: Self.computerName`.
+    2. Call `client.activate(key:label:)` with `label: Self.modelLabel`.
     3. `keychain.save(StoredLicense(key:activationID:lastValidatedAt: .now))`, then `state = .pro`.
     4. If the save throws: `try? await client.deactivate(key:activationID:)` (best-effort rollback, so a failed save never eats a slot), then rethrow the save error. `// ponytail: no retry queue; a slot left by a failed rollback is freed in the Polar portal.`
     - Polar errors propagate unchanged, and nothing is stored on error. That includes `.wrongProduct`, whose activation `PolarClient` has already released.
@@ -674,7 +683,8 @@ No commit.
   - delete the `guard !mutating` line → `concurrentActivateSendsOneRequest` fails (2 requests, 0 cancelled);
   - delete the rollback `deactivate` → `activateKeychainSaveFailureRollsBack` fails (requests `["activate"]`);
   - make the designated `init` use `.now` instead of `now` → `initAppliesPolicyToStoredLicence` fails whatever today's date is (its `.pro` and `.lapsed` expectations need different real dates);
-  - add `guard isPro else { return }` at the top of `deactivate` → `lapsedLicenceCanBeRemoved` fails (state stays `.lapsed`, the key stays stored).
+  - add `guard isPro else { return }` at the top of `deactivate` → `lapsedLicenceCanBeRemoved` fails (state stays `.lapsed`, the key stays stored);
+  - make `modelLabel` return `"Jan's iMac"` (a computer name) → `activateSendsNormalisedKeyAndModelLabelThenStores` fails.
   - Restored: 19 passed.
 - [ ] **Step 6: Commit:** `Packages/TegelKit/Sources/TegelStore/LicenseManager.swift Packages/TegelKit/Tests/TegelStoreTests/LicenseManagerTests.swift`, "feat(store): add LicenseManager; grace on every failure, serialised mutations, save rollback".
 
@@ -770,12 +780,12 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   | any other error (a Keychain save failure, whose activation `LicenseManager` has already released) | "Tegel couldn't save the licence on this Mac. Try again." |
 
   - A `CancellationError` shows nothing: it only means another licence action was already running.
-  - The activation label is the computer name; `LicenseManager` sends it (Task 7).
+  - The activation label is the hardware model (`hw.model`, such as `iMac19,1`), never the computer name; `LicenseManager` sends it (Task 7).
   - Add the tab `.tabItem { Label("Licence", systemImage: "key") }` to the Settings `TabView`.
 - [ ] **Step 3: Run the smoke test (GUI), on the build Mac with a Debug build against the sandbox.**
   1. `. scripts/lib/env.sh; envget POLAR_SANDBOX_TEST_LICENSE_KEY | sed 's/^/  /;s/$/\n/' | pbcopy`. This puts the key on the clipboard with leading spaces and a trailing newline, without printing it.
   2. Paste it, then click Activate. Expected: "Pro is active on this Mac", and folder mode is enabled.
-  3. Sandbox dashboard → the order's licence key → activations. Expected: one activation whose label equals `scutil --get ComputerName`. This also confirms `SCDynamicStoreCopyComputerName` works inside the sandbox.
+  3. Sandbox dashboard → the order's licence key → activations. Expected: one activation whose label equals `sysctl -n hw.model` (`iMac19,1` here), not `scutil --get ComputerName`. This also confirms `sysctlbyname("hw.model")` works inside the sandbox.
   4. Disconnect the network, quit, relaunch. Expected: still Pro, no error. Reconnect.
   5. Deactivate this Mac. Expected: the free copy shows, and the dashboard shows 0 activations.
   6. Type the key `TEGEL-0000` and Activate. Expected: the `.notFound` copy.
@@ -890,7 +900,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
 
 **Interfaces:**
 - Consumes:
-  - `scripts/lib/env.sh` (plan 01 Task 1) and the `.env` keys `APPLE_TEAM_ID`, `APPLE_DEVELOPER_ID_IDENTITY`, `NOTARY_KEYCHAIN_PROFILE`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_R2_API_TOKEN`, `R2_BUCKET`;
+  - `scripts/lib/env.sh` (plan 01 Task 1) and the `.env` keys `APPLE_TEAM_ID`, `APPLE_DEVELOPER_ID_IDENTITY`, `NOTARY_KEYCHAIN_PROFILE`, `CLOUDFLARE_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`;
   - `Config/PolarSandbox.xcconfig` (Task 8);
   - Sparkle Keychain account `tegelapps` (Task 10);
   - Release signing (Task 11).
@@ -917,7 +927,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
     - `dist-release/$SLUG/appcast.xml`, a copy of the last published feed. It is the base of the next release's appcast; the public feed is never fetched back (K7);
     - public `https://downloads.tegelapps.com/$SLUG/<NAME>-<version>.dmg` and `…/$SLUG/appcast.xml`.
   - `scripts/entitlements/<target>.plist`: the allowed entitlements for each signed bundle, named by its bundle id minus `com.tegelapps.` (K7).
-  - `check_ents <bundle> <expected.plist>`, a function in `release.sh`. The script runs `main` only when executed, so `release_test.sh` can source it.
+  - `check_ents <bundle> <expected.plist>`, `check_direct <settings>`, `check_unlocked`, `check_unpublished`, `check_app <app>` and `r2put <file> <key> <content-type> <cache-control>`, functions in `release.sh`. The script runs `main` only when executed, so `release_test.sh` can source it.
 
 - [ ] **Step 1: Write the failing test** `scripts/release_test.sh`. It uses no network, no Developer ID and no build; the entitlement cases sign a copy of `/usr/bin/true` ad hoc.
   ```bash
@@ -926,7 +936,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   set -uo pipefail
   ROOT=$(git rev-parse --show-toplevel); pass=0; fail=0; tmps=(); trap 'rm -rf "${tmps[@]}"' EXIT
   X=$(mktemp -d); tmps+=("$X")                                # fixtures outside every clone
-  KEYS="APPLE_TEAM_ID APPLE_DEVELOPER_ID_IDENTITY NOTARY_KEYCHAIN_PROFILE CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_R2_API_TOKEN R2_BUCKET"
+  KEYS="APPLE_TEAM_ID APPLE_DEVELOPER_ID_IDENTITY NOTARY_KEYCHAIN_PROFILE CLOUDFLARE_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET"
   U="usage: scripts/release.sh <app> <version> [--sandbox] [--yes] [--no-upload] [--print-config] [--from-dmg <path>]"
   PC=$'out=dist-release/markdown/1.0.0\ndmg=TegelMarkdown-1.0.0.dmg\nfeed=https://downloads.tegelapps.com/markdown/appcast.xml\ndownload_prefix=https://downloads.tegelapps.com/markdown/\nr2=$R2_BUCKET/markdown/'
   commit() { git -C "$D" add -A && git -C "$D" -c user.name=t -c user.email=t@t commit -qm t; }
@@ -939,6 +949,9 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   ents() { local name=$1 want=$2 bin=$3 out got
     out=$(bash -c '. "$1/scripts/release.sh"; check_ents "$2" "$3"' _ "$D" "$bin" "$X/ok.plist" 2>&1); got=$?
     if [[ $got == "$want" ]]; then ((pass++)); else ((fail++)); echo "FAIL $name (exit $got): $out"; fi; }
+  fn() { local name=$1 want=$2 sub=$3 out got; shift 3   # runs one release.sh function; variables set on the call reach it
+    out=$(bash -c '. "$1/scripts/release.sh"; shift; "$@"' _ "$D" "$@" 2>&1); got=$?
+    if [[ $got == "$want" && $out == *"$sub"* ]]; then ((pass++)); else ((fail++)); echo "FAIL $name (exit $got): $out"; fi; }
 
   fresh; check usage            2 "$U"
          check unknown-app      2 "unknown app: nope"      nope 1.0.0
@@ -967,9 +980,23 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   for v in ok extra; do cp /usr/bin/true "$X/$v"; codesign -f -s - --entitlements "$X/$v.plist" "$X/$v" 2>/dev/null; done
   ents ents-match 0 "$X/ok"
   ents ents-extra 1 "$X/extra"
+  # No store flag in a direct build: plan 07's UNLOCKED/MAS there would ship Pro free.
+  fn direct-clean       0 ""           check_direct $'    SWIFT_ACTIVE_COMPILATION_CONDITIONS = \n'
+  fn direct-store-flag  1 "store flag" check_direct $'    SWIFT_ACTIVE_COMPILATION_CONDITIONS = MAS UNLOCKED\n'
+  # A locked screen hides the notary profile (Task 3 Step 4); a stub ioreg reports one.
+  mkdir -p "$X/bin"; printf '%s\n' '#!/bin/sh' "echo '\"CGSSessionScreenIsLocked\"=Yes'" > "$X/bin/ioreg"; chmod +x "$X/bin/ioreg"
+  PATH="$X/bin:$PATH" fn locked 1 "unlock the Mac first" check_unlocked
+  # A published version is never published again: named in the last feed, or already on R2 (file:// stands in for downloads.tegelapps.com).
+  echo '<enclosure url="https://downloads.tegelapps.com/markdown/TegelMarkdown-1.0.1.dmg"/>' > "$X/feed.xml"
+  PREV=$X/none.xml PREFIX=file://$X/ DMG_NAME=TegelMarkdown-1.0.2.dmg fn unpublished     0 ""                  check_unpublished
+  PREV=$X/feed.xml PREFIX=file://$X/ DMG_NAME=TegelMarkdown-1.0.1.dmg fn already-in-feed 1 "already published" check_unpublished
+  PREV=$X/none.xml PREFIX=file://$X/ DMG_NAME=TegelMarkdown-1.0.0.dmg fn already-on-r2   1 "already published" check_unpublished
+  # --from-dmg: another app's DMG renamed to this app's name fails on its bundle id.
+  mkdir -p "$X/Data.app/Contents"; $P -c 'Add :CFBundleIdentifier string com.tegelapps.data' "$X/Data.app/Contents/Info.plist" >/dev/null
+  SLUG=markdown fn from-dmg-wrong-app 1 "expected com.tegelapps.markdown, got com.tegelapps.data" check_app "$X/Data.app"
   echo "release_test: $pass passed, $fail failed"; [[ $fail == 0 ]]
   ```
-- [ ] **Step 2: Run it to verify it fails.** `bash scripts/release_test.sh`. Expected: FAIL, `cp: …/scripts/release.sh: No such file or directory`, … `release_test: 0 passed, 19 failed`.
+- [ ] **Step 2: Run it to verify it fails.** `bash scripts/release_test.sh`. Expected: FAIL, `cp: …/scripts/release.sh: No such file or directory`, … `release_test: 0 passed, 26 failed`.
 - [ ] **Step 3: Implement.**
   - **`scripts/entitlements/`** (the allowlist; any change to it is a reviewed commit, never generated from `project.yml`):
     ```bash
@@ -981,12 +1008,32 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
     plutil -p "$A"; plutil -p "$Q"
     ```
     Expected: the app file holds D5's four keys plus the two mach-lookup names; the Quick Look file holds plan 01's Quick Look set after K4 (`app-sandbox`, `network.client`, no `files.absolute-path` exception). If plan 01's Quick Look set differs, copy plan 01's, never widen it here.
-  - **`scripts/release.sh`** runs under `set -euo pipefail` and **never uses `set -x`**. Its last line is `if [[ ${BASH_SOURCE[0]} == "$0" ]]; then main "$@"; fi`. `check_ents` is:
+  - **`scripts/release.sh`** runs under `set -euo pipefail` and **never uses `set -x`**. Its last line is `if [[ ${BASH_SOURCE[0]} == "$0" ]]; then main "$@"; fi`. `check_ents` and the other checks are below (the new cases ran under `/bin/bash` 3.2 against these bodies on the build Mac, 27 Oct: 7 passed; with `check_unpublished`'s `die` removed, 2 failed):
     ```bash
     check_ents() {   # <bundle> <expected.plist>: the signed entitlements must equal the allowlist exactly
       diff <(codesign -d --entitlements - --xml "$1" 2>/dev/null | plutil -convert xml1 -o - -) <(plutil -convert xml1 -o - "$2") >/dev/null \
         || die 1 "entitlements of ${1##*/} differ from $2"; }
+    check_direct() {   # <-showBuildSettings output>: a store flag (plan 07) in a direct build would ship Pro unlocked
+      if grep -qE '^ *SWIFT_ACTIVE_COMPILATION_CONDITIONS = (.* )?(UNLOCKED|MAS)( |$)' <<<"$1"; then die 1 "direct build has a store flag (UNLOCKED or MAS)"; fi; }
+    check_unlocked() {   # a locked screen hides the notary profile from notarytool (Task 3 Step 4)
+      local r; r=$(ioreg -n Root -d1)
+      if [[ $r == *'"CGSSessionScreenIsLocked"=Yes'* ]]; then die 1 "the screen is locked: unlock the Mac first"; fi; }
+    check_unpublished() {   # the DMG is cached as immutable for a year, so a version is published once
+      if { [ -f "$PREV" ] && grep -qF "$DMG_NAME" "$PREV"; } || curl -fsI "$PREFIX$DMG_NAME" >/dev/null 2>&1; then
+        die 1 "$DMG_NAME already published; bump the version"; fi; }
+    check_app() {   # <app>: a --from-dmg app is this app, signed by our team, with its allowlisted entitlements and benefit
+      local p=/usr/libexec/PlistBuddy id b k w
+      id=$($p -c 'Print :CFBundleIdentifier' "$1/Contents/Info.plist"); [ "$id" = "com.tegelapps.$SLUG" ] || die 1 "expected com.tegelapps.$SLUG, got $id"
+      [ "$(codesign -dv "$1" 2>&1 | sed -n 's/^TeamIdentifier=//p')" = "$TEAM" ] || die 1 "${1##*/} is not signed by the APPLE_TEAM_ID team"
+      for b in "$1" "$1"/Contents/PlugIns/*.appex; do id=$($p -c 'Print :CFBundleIdentifier' "$b/Contents/Info.plist"); check_ents "$b" "scripts/entitlements/${id#com.tegelapps.}.plist"; done
+      k=TG_POLAR_BENEFIT_ID_$(printf %s "$SLUG" | tr a-z- A-Z_); w=$(sed -n "s/^$k *= *//p" Config/Release.xcconfig)
+      [ -n "$w" ] && [ "$($p -c 'Print :TGPolarBenefitID' "$1/Contents/Info.plist")" = "$w" ] || die 1 "TGPolarBenefitID is not $k from Config/Release.xcconfig"; }
+    r2put() {   # <file> <key> <content-type> <cache-control>: S3 SigV4 PUT to R2 with curl; no npm code at release time (K2)
+      curl --fail -sS -o /dev/null --aws-sigv4 "aws:amz:auto:s3" --user "$R2_KEY_ID:$R2_SECRET" -H "Content-Type: $3" -H "Cache-Control: $4" \
+        -T "$1" "https://$ACCOUNT.r2.cloudflarestorage.com/$R2_BUCKET/$2"; }
     ```
+    - `check_app` expects bundle id `com.tegelapps.$SLUG` (master §3.1: prefix + target name) and the benefit from `TG_POLAR_BENEFIT_ID_<SLUG in capitals>`, so plan 06's `data` row needs no change.
+    - `r2put` passes the S3 credentials in curl's argv; the master accepts that on the single-user build Mac. It is the command Task 2 Step 5 probed.
     `main`, in order:
     1. **Arguments.**
        - Parse. No args, an unknown flag or `--from-dmg` without a path → the usage line, exit 2.
@@ -997,16 +1044,20 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
        - `--print-config` → print the five lines in Interfaces, exit 0.
     2. **Guards.**
        - `cd "$(git rev-parse --show-toplevel)"`, then `. scripts/lib/env.sh`;
-       - `need` the six keys (exit 1, `missing .env key: KEY`; only the name is printed). Values go into **unexported** shell variables with `envget` (`TEAM`, `IDENTITY`, `PROFILE`, `ACCOUNT`, `R2_TOKEN`, `R2_BUCKET`), and each reaches only the commands that need it;
+       - `need` the seven keys (exit 1, `missing .env key: KEY`; only the name is printed). Values go into **unexported** shell variables with `envget` (`TEAM`, `IDENTITY`, `PROFILE`, `ACCOUNT`, `R2_KEY_ID`, `R2_SECRET`, `R2_BUCKET`), and each reaches only the commands that need it;
        - `[ -z "$(git status --porcelain)" ] || die 1 "working tree is dirty"`;
        - without `--sandbox`, `grep -q REPLACE_IN_PLAN_05 Config/Release.xcconfig` → `Config/Release.xcconfig still has REPLACE_IN_PLAN_05; pass --sandbox for a beta`, exit 1.
     3. **`--from-dmg <path>`** replaces steps 4–11 (each failure → exit 1):
        - `[ -f "$SRC" ] || die 1 "no such DMG: $SRC"`; `[ "${SRC##*/}" = "$DMG_NAME" ] || die 1 "expected $DMG_NAME, got ${SRC##*/}"`;
        - `xcrun stapler validate "$SRC" >/dev/null 2>&1 || die 1 "not notarised and stapled: $DMG_NAME"`, then step 11's `spctl -t open` check;
        - `hdiutil attach -nobrowse -readonly -mountpoint "$OUT/mnt" "$SRC"` (detached by a `trap`): the app's `CFBundleShortVersionString == $V`, `TGPolarAPIBase == https://api.polar.sh`, and `BUILD` = its `CFBundleVersion`;
+       - `check_app "$OUT/mnt/"*.app`: the bundle id is this app's, the TeamIdentifier from `codesign -dv` is `APPLE_TEAM_ID`, the app and appex entitlements equal the allowlist, and `TGPolarBenefitID` equals this app's key in `Config/Release.xcconfig`. A renamed DMG of another app stops here, before its feed is signed;
        - print `sha256 $(shasum -a 256 "$SRC" | cut -d' ' -f1)`. Plan 05 compares it with the smoke-tested file's hash;
-       - `$OUT` is **not** wiped (the DMG usually lives in it); go to step 12.
-    4. **Set up:** `OUT` wiped; `BUILD=$(git rev-list --count HEAD)` (a monotonic `CFBundleVersion` that Sparkle compares); `xcodegen generate`.
+       - `$OUT` is **not** wiped (the DMG usually lives in it); `check_unlocked` (the appcast step uses the Sparkle key in the Keychain); go to step 12.
+    4. **Set up:**
+       - `check_unlocked`, first: a locked screen hides the notary profile (Task 3 Step 4). It sits here and at the end of item 3, before each path's first Keychain use, so `release_test.sh`'s full-script cases never depend on the screen;
+       - `OUT` wiped; `BUILD=$(git rev-list --count HEAD)` (a monotonic `CFBundleVersion` that Sparkle compares); `xcodegen generate`;
+       - `S=$(xcodebuild -project Tegel.xcodeproj -scheme "$SCHEME" -configuration Release -showBuildSettings 2>/dev/null)`, then `check_direct "$S"`: the direct build's `SWIFT_ACTIVE_COMPILATION_CONDITIONS` holds neither `UNLOCKED` nor `MAS` (plan 07's store flags; a leak would ship Pro free). Every app here is direct; plan 07's Setapp channel skips this line. A failing `xcodebuild` stops the script at the assignment (`set -e`), so the check never passes on empty output.
     5. **Archive:**
        ```
        xcodebuild archive -scheme $SCHEME -configuration Release -destination 'generic/platform=macOS' \
@@ -1036,25 +1087,27 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
         - the Sparkle tools: `GA=build/release-dd/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_appcast`; if absent (a `--from-dmg` run in a fresh checkout), `xcodegen generate && xcodebuild -resolvePackageDependencies -derivedDataPath build/release-dd >/dev/null` first;
         - `"$GA" --account tegelapps --download-url-prefix "$PREFIX" -o "$OUT/feed/appcast.xml" "$OUT/feed"`;
         - checks: `grep "$DMG_NAME" "$OUT/feed/appcast.xml" | grep -q 'sparkle:edSignature='` and `grep -q '<!-- sparkle-signatures:' "$OUT/feed/appcast.xml"` (generate_appcast signs the whole feed because the app's Info.plist sets `SURequireSignedFeed`; Sparkle 2.10.1 `generate_appcast/FeedXML.swift`), then print `appcast signatures present`.
-    13. **Confirm** unless `--yes`: print the DMG name, `du -h`, `shasum -a 256` and the two destination URLs; `read -r -p "Publish to downloads.tegelapps.com? [y/N] " a || a=`; anything but `y` → `aborted: nothing uploaded`, exit 1. With no TTY, `read` hits EOF and aborts.
-    14. **Upload**, DMG first so the appcast never points at a missing file. The bucket-scoped token goes to this one command only (K2):
-        - `CLOUDFLARE_API_TOKEN="$R2_TOKEN" CLOUDFLARE_ACCOUNT_ID="$ACCOUNT" bunx wrangler@4.151.2 r2 object put "$R2_BUCKET/$SLUG/$DMG_NAME" --file … --content-type application/x-apple-diskimage --cache-control "public, max-age=31536000, immutable" --remote`;
-        - then `"$R2_BUCKET/$SLUG/appcast.xml"` with `--content-type application/xml --cache-control "public, max-age=300" --remote`.
+    13. **Confirm.** First, always (with `--yes` too), `check_unpublished`: if `$PREV` already names `$DMG_NAME`, or `curl -fsI "$PREFIX$DMG_NAME"` succeeds, exit 1 with `<DMG> already published; bump the version`. The DMG is served `immutable` for a year, so re-signing the same version would leave cached users with a DMG that fails the new feed's signature. Then, unless `--yes`: print the DMG name, `du -h`, `shasum -a 256` and the two destination URLs; `read -r -p "Publish to downloads.tegelapps.com? [y/N] " a || a=`; anything but `y` → `aborted: nothing uploaded`, exit 1. With no TTY, `read` hits EOF and aborts.
+    14. **Upload** with `r2put`, DMG first so the appcast never points at a missing file. The bucket-scoped token's S3 credentials go to this one command only (K2), and no npm dependency tree is fetched while codesign, the notary profile and the Sparkle key are usable without a prompt:
+        - `r2put "$OUT/feed/$DMG_NAME" "$SLUG/$DMG_NAME" application/x-apple-diskimage "public, max-age=31536000, immutable"`;
+        - then `r2put "$OUT/feed/appcast.xml" "$SLUG/appcast.xml" application/xml "public, max-age=300"`.
     15. **Post-upload:**
         - `curl -fsSI "$PREFIX$DMG_NAME" | head -1` → `HTTP/2 200`; `curl -fsS "$FEED?v=$BUILD" | grep -c "$DMG_NAME"` ≥ 1 (a read-back check only);
         - `cp "$OUT/feed/appcast.xml" "$PREV"`, the base for the next release;
         - print `published $PREFIX$DMG_NAME`: the `downloadURL` that the publishing plan copies into `site/config.json` with the version (plan 05 for App 1, plan 06 for App 2; plan 04 CR-5).
   - **Makefile:** `test-release: ; bash scripts/release_test.sh`, and add `test-release` to `check`'s prerequisites.
 - [ ] **Step 4: Run it to verify it passes.**
-  - `bash scripts/release_test.sh`. Expected: `release_test: 19 passed, 0 failed`.
+  - `bash scripts/release_test.sh`. Expected: `release_test: 26 passed, 0 failed`.
   - `bash -n scripts/release.sh && echo syntax-ok` → `syntax-ok`.
-  - `make check` → the baseline, plus TegelStore, plus `release_test: 19 passed`.
+  - `make check` → the baseline, plus TegelStore, plus `release_test: 26 passed`.
 - [ ] **Step 5: Watch the new guards fail.** One at a time, re-running `bash scripts/release_test.sh` after each, then restoring:
   - make `check_ents` `return 0` → `FAIL ents-extra (exit 0)`;
   - delete the `--sandbox` needs `--no-upload` rule → `FAIL sandbox-public` (it now meets the pre-release rule's message);
   - delete the pre-release needs `--no-upload` rule → `FAIL rc-public` (exit 1 at the placeholder guard);
-  - delete the `stapler validate` line → `FAIL from-dmg-stapled` (the empty file then fails at `spctl`, with another message; `stapler` and `spctl` on an empty file exit 66 and 3, checked on the build Mac).
-  - Restored: `19 passed, 0 failed`.
+  - delete the `stapler validate` line → `FAIL from-dmg-stapled` (the empty file then fails at `spctl`, with another message; `stapler` and `spctl` on an empty file exit 66 and 3, checked on the build Mac);
+  - make `check_direct`, `check_unlocked` and `check_app` each `return 0` in turn → `FAIL direct-store-flag`, `FAIL locked`, `FAIL from-dmg-wrong-app`;
+  - delete `check_unpublished`'s `die` → `FAIL already-in-feed` and `FAIL already-on-r2`.
+  - Restored: `26 passed, 0 failed`.
   - A `markdown/` literal can't be caught while `markdown` is the only app. Plan 06's `data` row adds the standing guard: a `print-config` case expecting `dist-release/data/<v>`, `…/data/appcast.xml` and `r2=$R2_BUCKET/data/`, watched failing (`unknown app: data`) before the row exists.
 - [ ] **Step 6: Commit:** `scripts/release.sh scripts/release_test.sh scripts/entitlements Makefile`, "feat(release): release.sh archive→notarise→DMG→signed appcast→R2, with print-config, from-dmg and an entitlement allowlist".
 - [ ] **Step 7: First real run (needs Task 3, done 27 Oct).** This is Task 13 step 1.
@@ -1119,7 +1172,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
 - [ ] **Step 9: Key email.** Record whether the email to `POLAR_EMAIL` contains the key. If it doesn't, take the key from the portal; that result feeds plan 05's FAQ.
 - [ ] **Step 10 (GUI): activate.**
   - Paste the key with leading spaces and a trailing newline → Activate. Expected: "Pro is active on this Mac", and folder mode works.
-  - Dashboard: the activation label = `scutil --get ComputerName`.
+  - Dashboard: the activation label = `sysctl -n hw.model`.
 - [ ] **Step 11 (GUI): offline relaunch.** Disconnect the network, ⌘Q, relaunch. Expected: still Pro, no error dialog. Reconnect.
 - [ ] **Step 12 (GUI): deactivate.** Deactivate this Mac. Expected: the free copy, and 0 activations in the dashboard.
 - [ ] **Step 13: Error copy.**
@@ -1174,7 +1227,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   - the proof is behavioural and comes with plan 05's first `v*` tag: its push shows the `macos` job running (no source grep, B16);
   - Commit: `.github/workflows/ci.yml`, "ci: run the macOS matrix on v* release tags".
 - [ ] **Step 1: Run Procedure P** with these deltas.
-  - **Stage 2 counts to record:** bun; swift (TegelKit + 41 TegelStore); `release_test: 19 passed`.
+  - **Stage 2 counts to record:** bun; swift (TegelKit + 41 TegelStore); `release_test: 26 passed`.
   - **Stage 4 `/cso` scope** (mandatory here: licensing, Keychain, entitlements, Sparkle, `release.sh`, `.env` handling):
     - **TegelStore:**
       - error → grace mapping (no 404 lock); the mid-flight race; key normalisation; no token or `Authorization` sent; HTTPS-only `apiBase`;
@@ -1183,7 +1236,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
     - **Keychain:** item attributes and ACL; nothing logged; `failSaves` is internal and only tests set it.
     - **Entitlements:** the b2 app's signed sets equal `scripts/entitlements/*.plist`, and those equal D5 plus the two mach-lookup names (app) and plan 01's Quick Look set.
     - **Sparkle:** `SUPublicEDKey` present; HTTPS feed; `SURequireSignedFeed` and `SUVerifyUpdateBeforeExtraction` true; `SUEnableSystemProfiling` absent; EdDSA on every enclosure and on the feed (Task 13 step 7 watched a tampered feed fail).
-    - **`release.sh`:** quoting; no `set -x`; no value echoed; key values unexported; guard order; every path from `$SLUG`; the previous feed only from `dist-release/` (no `curl` fetches a feed to build on); the entitlement diff; `--sandbox` never publishes; the `--from-dmg` checks; the confirmation; upload order; the bucket-scoped token only, wrangler pinned (K2).
+    - **`release.sh`:** quoting; no `set -x`; no value echoed; key values unexported; guard order; every path from `$SLUG`; the previous feed only from `dist-release/` (no `curl` fetches a feed to build on); the entitlement diff; `--sandbox` never publishes; the `--from-dmg` checks (`check_app`); no store flag in the direct build; the locked-screen guard; no republished version; the confirmation; upload order; only the bucket-scoped token's S3 credentials, uploaded by `curl` with no npm code (K2).
     - **`.env` (K1):** every block in this plan's code sources `scripts/lib/env.sh`; no `set -a`. **`.env.example`:** names only.
     - **Keys at rest (K3):** `find ~/.tegel-signing ~/.tegel-secrets -type f \( -name '*.key' -o -name '*.p8' -o -name '*.p12' \) 2>/dev/null` prints nothing (watched listing two files in Task 3 step 5).
     - **Debug override compiled out of Release:** plan 02's marker check (CR-P2-18: a key of at least 16 bytes, ≥ `1` on a Debug build, `0` on the b2 app).
@@ -1220,9 +1273,13 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
 
 ## Hand-offs to plan 05
 
-1. **arm64 / macOS 27 leg** on Scaleway M1 lease L2 (Thu 26 Nov 09:00 → Fri 27 Nov 09:00), second after plan 05's macOS 27 matrix, using b2. Copy `dist-release/markdown/beta-feed/` to the lease (`scp -r`), serve it there exactly as in Task 13 step 1, then repeat Task 13 steps 3–4, 7 and 10–12. Record them in `docs/gates/m03-acceptance.md` labelled "Scaleway M1, macOS 27". Task 15 runs after this leg.
+1. **arm64 / macOS 27 leg** on Scaleway M1 lease L2 (Thu 26 Nov 09:00 → Fri 27 Nov 09:00), second after plan 05's macOS 27 matrix, using b2.
+   - **The feed holds b1 and b2 only.** Plan 05 keeps its RC entries in its own `dist-release/markdown/rc-feed/` (plan 05 Task 3 Step 4), so `beta-feed/` is still Task 13 step 6's feed. Check before copying: `grep -c '<item>' dist-release/markdown/beta-feed/appcast.xml` → `2`. With an rc entry, b1 would be offered the RC (production Polar) instead of b2, and steps 7 and 10–12 would fail.
+   - On the lease, stop plan 05's feed server first (`pkill -f 'http.server 8765'`). Copy `beta-feed/` over (`scp -r`), serve it exactly as in Task 13 step 1, then repeat Task 13 steps 3–4, 7 and 10–12. Step 3 replaces plan 05's rc1 install with b1; step 7.5 must show `1.0.0-b2` before step 10.
+   - **Licence key (steps 10–12):** b2 is a `--sandbox` build, so it talks to sandbox Polar. Use `POLAR_SANDBOX_TEST_LICENSE_KEY` (both its slots are free after Task 13 step 13), put on the clipboard with Task 9 step 3 item 1's command and pasted over Screen Sharing; never `POLAR_QA_LICENSE_KEY`, which is production.
+   - Record the rows in `docs/gates/m03-acceptance.md` labelled "Scaleway M1, macOS 27". Task 15 runs after this leg.
 2. **Nothing beta is on R2.** The first objects under `markdown/` are 1.0.0's, published with `scripts/release.sh markdown 1.0.0 --from-dmg <the smoke-tested DMG>`; compare the printed `sha256` with the smoked file's. That run is also the first real use of `release.sh`'s appcast and upload half.
-3. **RC Sparkle acceptance:** RC builds use the same local signed feed and `-SUFeedURL` override as Task 13 steps 6–7. No RC goes on the public feed (K7).
+3. **RC Sparkle acceptance:** RC builds use a local signed feed and the `-SUFeedURL` override as in Task 13 steps 6–7, but in their own folder, `dist-release/markdown/rc-feed/` (a copy of `beta-feed/` plus the RC), so `beta-feed/` stays b1/b2 for the L2 leg. No RC goes on the public feed (K7).
 4. **Replace `REPLACE_IN_PLAN_05` in `Config/Release.xcconfig`** in all four settings: `TG_POLAR_ORGANIZATION_ID`, `TG_POLAR_CHECKOUT_URL_MARKDOWN`, `TG_POLAR_PORTAL_URL` and `TG_POLAR_BENEFIT_ID_MARKDOWN` (the live Markdown licence benefit). Create the live product with the same benefit settings (limit 2, `enable_customer_admin`) at $14 (D15). Check with a Release build (`xcodebuild -scheme markdown -configuration Release -derivedDataPath build`), not `make build` (Debug).
 5. **Live BNPL row** in `docs/gates/bnpl.md` [F3g].
 6. **FAQ input:** whether the key arrives by email (Task 13 step 9), and the error copy from Task 9.

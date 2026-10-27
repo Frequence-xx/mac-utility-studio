@@ -36,7 +36,7 @@
 | App entry | `Apps/Markdown/App/MarkdownApp.swift`: `@main struct MarkdownApp: App`, `DocumentGroup(viewing: MarkdownFile.self) { DocumentView(file: $0.document, fileURL: $0.fileURL) }`, `@NSApplicationDelegateAdaptor(AppDelegate.self)` |
 | Reader view | `Apps/Markdown/App/DocumentView.swift`, hosting `RendererWebView.webView` through `NSViewRepresentable` |
 | Swift API | `RenderOptions` has a `public init(mode: RenderMode = .window, theme: RendererTheme = .paper, baseURL: URL? = nil)`; `RendererWebView.render` resolves after the `rendered` message |
-| Makefile | targets per master §3.1; `make check` = `test-js test-swift build`; derived data in `build` (`build/Build/Products/<Config>/Tegel Markdown.app`) |
+| Makefile | targets per master §3.1; `make check` = the list in master §3.1 (after plan 01: `test-js test-swift test-shell build`; Task 1 adds `test-app`); derived data in `build` (`build/Build/Products/<Config>/Tegel Markdown.app`) |
 | K4 renderer pieces | CSP `img-src 'self' data: tegel-doc:` (no `file:`); `addHooks(purify, { fileImages: true })` in `sanitize.js` keeps `src` only on `img` and only when it starts with `tegel-doc:` (plan 01 owns the hook and its tests); Quick Look renders with `baseURL: nil` |
 | Make | a `generate` target (`xcodegen generate`, CR-P2-17) |
 | Tests | `Packages/TegelKit/Tests/TegelKitTests/TestSupport.swift` holds `fixtureURL(_:) -> URL` and `@MainActor js(_:_:) async throws -> Any?`. `js` runs its body through `callAsyncJavaScript`, so every script `return`s its value. WebKit test files go under `TegelKitTests/WebView/` (plan 01 Task 5); if plan 01 took Branch B, run them with `xcodebuild test -project Tegel.xcodeproj -scheme TegelKitHostTests -derivedDataPath build -only-testing:TegelKitHostTests/<Class>` instead of `swift test --filter <Class>` |
@@ -47,7 +47,7 @@ If plan 01 used other names, substitute them in every command and path below. Do
 
 Master §2/§3 and CLAUDE.md apply (platform, read-only, no network, imagery, honest pricing, contract names). Deltas for this plan:
 - **Writes:** the only file write is the PDF at the save-panel URL (Task 12), plus the app's own container (bookmarks, settings, `makePDFData`'s private folder, which is gone before the call returns).
-- **Renderer security:** this plan changes no CSP and no DOMPurify config (plan 01 owns both, K4). Document images reach the page only as `tegel-doc:` URLs that `DocumentImageHandler` serves from the grant root (Task 8). Navigation stays blocked; Mermaid keeps `securityLevel: 'strict'`.
+- **Renderer security:** this plan changes no CSP and no DOMPurify config (plan 01 owns both, K4). Document images reach the page only as `tegel-doc:` URLs that `DocumentImageHandler` serves from the grant root (Task 8). Navigation stays blocked: only App 1's window hands `http`, `https` and `mailto` link clicks to `NSWorkspace` through `RendererWebView.openLink` (Task 6), and Quick Look opens nothing. Mermaid keeps `securityLevel: 'strict'`.
 - **Free:** Quick Look, single-file window, highlighting, Mermaid, RTL, local images, find, outline, all four UI languages (D6), the paper theme.
 - **Pro:** folder mode (sidebar, cross-document search, live reload), PDF export, the ink and studio themes.
 - **Copy:** state the licence limits ("one-time", "2 Macs", "14-day refund"); no price in the app (it changes by hand on 15 Dec, D15); no urgency, no counters. Screenshots use `Fixtures/markdown/` and `docs/design/samples/` only.
@@ -93,7 +93,7 @@ Master §2/§3 and CLAUDE.md apply (platform, read-only, no network, imagery, ho
 | `Packages/TegelKit/Sources/TegelKit/{BookmarkStore,FolderIndex,FileWatcher,PDFExporter,Diagnostics}.swift` | Contract units plus `Diagnostics` | 2–5, 11, 13 |
 | `Packages/TegelKit/Sources/TegelKit/DocumentImageHandler.swift` | the `tegel-doc:` scheme handler and `URL.isInside(_:)` | 8 |
 | `Packages/TegelKit/Sources/TegelKit/QuickLookSetup.swift` | Quick Look settings path and deep link (plan 08's interface) | 15 |
-| `Packages/TegelKit/Sources/TegelKit/RendererWebView.swift` | + `scroll(toLine:)`, `find`, `readAccessURL`, `loadedImages(outside:)` | 6, 7, 8 |
+| `Packages/TegelKit/Sources/TegelKit/RendererWebView.swift` | + `scroll(toLine:)`, `openLink`, `find`, `readAccessURL`, `loadedImages(outside:)` | 6, 7, 8 |
 | `Apps/Markdown/App/MarkdownApp.swift` (plan 01) | `isPro` environment, `pro` window | 1 |
 | `Renderer/src/{markdown.js,page.js,build.js}` | line anchors, scroll, relative images → `tegel-doc:` via `baseHref`, image wait and errors, version file | 6, 8, 13 |
 | `Renderer/src/css/{base,print}.css` | `.tg-hit`, print breaks (theme CSS: plan 09 Task 6) | 6, 11 |
@@ -590,7 +590,11 @@ Expected: `Executed 6 tests, with 0 failures`, three times.
 **Interfaces:**
 - Consumes: `RendererWebView.render`, `RenderResult.headings` (contract).
 - Produces:
-  - **HTML:** every block-level opening token with a markdown-it `map` gets `data-line="<map[0] + 1 + front-matter line offset>"`. That is the 1-based line in the file as loaded, which is the same numbering as `SearchHit.line`.
+  - **HTML:** every block-level opening token with a markdown-it `map` gets `data-line="<map[0] + 1 + front-matter line offset>"`. That is the 1-based line in the file as loaded, which is the same numbering as `SearchHit.line`. Fenced and indented code and Mermaid blocks carry it on their `pre` too (Step 3).
+  - **Links (master §3.2):** `public var openLink: ((URL) -> Void)?` on `RendererWebView` (addition), nil by default.
+    - Plan 01's navigation policy already cancels and counts every `.linkActivated` action. After that, when `openLink` is set and the URL's lower-cased scheme is `http`, `https` or `mailto`, it calls `openLink(url)`. Every other scheme (`file:`, `smb:`, `ftp:`, `tel:`, `javascript:`, `x-apple…`) is dropped.
+    - A same-document `#frag` link never reaches the policy: plan 01's `#doc` listener scrolls it in JS to `user-content-<frag>`, because `SANITIZE_NAMED_PROPS` prefixes ids but not hrefs.
+    - Task 7's `ReaderController` sets `openLink` to `NSWorkspace.shared.open` for App 1's window. Quick Look leaves it nil and opens nothing. The user's browser opening after a click is not a network call by the app (rule 1).
   - **JS:** `window.tegel.scrollToLine(line: number): boolean`.
     - It picks the last element in document order whose `data-line` ≤ `line`, calls `scrollIntoView({block: 'start'})`, and moves the class `tg-hit` onto it.
     - It returns `false` when there are no anchors.
@@ -608,11 +612,12 @@ Expected: `Executed 6 tests, with 0 failures`, three times.
 import { test, expect } from "bun:test";
 import { renderToHTML } from "../src/markdown.js";
 test("block elements carry 1-based source lines", () => {
-  const html = renderToHTML("# Title\n\nFirst para\n\n- item\n\n```js\nx\n```\n", { mode: "window" });
+  const html = renderToHTML("# Title\n\nFirst para\n\n- item\n\n```js\nx\n```\n\n```mermaid\ngraph TD\n```\n", { mode: "window" });
   expect(html).toMatch(/<h1[^>]*data-line="1"/);
   expect(html).toMatch(/<p[^>]*data-line="3"/);
   expect(html).toMatch(/<ul[^>]*data-line="5"/);
-  expect(html).toMatch(/data-line="7"/);
+  expect(html).toMatch(/<pre[^>]*data-line="7"/);                     // plan 01's fence rule prints its own <pre>
+  expect(html).toMatch(/<pre[^>]*data-line="11"[^>]*>graph TD/);       // so does its Mermaid rule
 });
 test("line numbers count YAML front matter lines", () => {
   expect(renderToHTML("---\ntitle: x\n---\n\nBody line\n", { mode: "window" })).toMatch(/<p[^>]*data-line="5"/);
@@ -653,6 +658,18 @@ test("line numbers count YAML front matter lines", () => {
         let top = try await js(r, "return document.getElementById(\(String(reflecting: h.id))).getBoundingClientRect().top") as? Double ?? -1
         XCTAssertTrue((-1...40).contains(top), "top \(top)")
     }
+    func testWindowLinksOpenOnlyWebAndMailURLs() async throws {
+        let r = hosted(); var opened: [String] = []
+        r.openLink = { opened.append($0.absoluteString) }
+        for href in ["https://example.com/a", "mailto:a@example.com", "ftp://example.com/x", "tel:123", "file:///System/Applications/Calculator.app"] {
+            _ = try await r.render("<a href=\"\(href)\">link</a>", options: RenderOptions(mode: .window, theme: .paper, baseURL: nil))
+            _ = try await js(r, "document.querySelector('#doc a').dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true})); return 0")
+            try await Task.sleep(for: .milliseconds(300))                          // one link per render: no navigation interrupts another
+        }
+        // ftp: and tel: survive DOMPurify, so only the scheme check drops them; file: loses its href in plan 01's sanitiser.
+        XCTAssertEqual(opened, ["https://example.com/a", "mailto:a@example.com"])
+        XCTAssertEqual(r.webView.url, r.indexURL)
+    }
 }
 // XCTest assertions take autoclosures, which can't `await`: bind async results to a `let` first (applies to every test in this plan).
 ```
@@ -662,19 +679,21 @@ test("line numbers count YAML front matter lines", () => {
 Run: `(cd Renderer && bun test test/lines.test.js); swift test --package-path Packages/TegelKit --filter NavigationTests`
 Expected:
 - bun: 2 failures (no `data-line`);
-- swift: `value of type 'RendererWebView' has no member 'scroll(toLine:)'`.
+- swift: `value of type 'RendererWebView' has no member 'scroll(toLine:)'` (and `'openLink'`).
 
 - [ ] **Step 3: Implement**
 
-- **markdown.js:** a core rule after `block` sets `data-line` on tokens with `map` and `nesting !== -1`. It adds the number of lines the front-matter step removed.
-- **page.js:** `scrollToLine` as specified.
-- **Swift:** `scroll(toLine:)` calls `evaluateJavaScript("window.tegel.scrollToLine(\(line))")` and casts the result to `Bool`.
+- **markdown.js:** a core rule after `block` sets `data-line` on tokens with `map` and `nesting !== -1`. It adds the number of lines the front-matter step removed. Plan 01's `fence` and `code_block` rules and its Mermaid `pre` print a fixed string that ignores token attributes, so each adds ` data-line="<token.attrGet('data-line')>"` to its `pre` itself. Without that, the `data-line="7"` assertion fails and a search hit inside a code block scrolls to the block before it.
+- **page.js:** `scrollToLine` as specified. The Mermaid pass copies the `pre`'s `data-line` onto the `div.mermaid` or `div.mermaid-error` that replaces it.
+- **Swift:** `scroll(toLine:)` calls `evaluateJavaScript("window.tegel.scrollToLine(\(line))")` and casts the result to `Bool`. `openLink` is a stored property; the navigation delegate calls it as Interfaces says, after plan 01's cancel-and-count.
 - Then run `make renderer`.
 
 - [ ] **Step 4: Run**
 
 Run: `(cd Renderer && bun test) && swift test --package-path Packages/TegelKit --filter NavigationTests`
-Expected: bun `0 fail` (plan 01's tests still pass); swift `Executed 3 tests, with 0 failures`.
+Expected: bun `0 fail` (plan 01's tests still pass); swift `Executed 4 tests, with 0 failures`.
+
+Then make the scheme check accept every scheme and rerun `--filter testWindowLinksOpenOnlyWebAndMailURLs`. Expected: FAIL, `opened` also lists `ftp://example.com/x` and `tel:123`. Restore and rerun: PASS.
 
 Then drop the second `filler` from `testScrollToHeadingMovesViewport` (the heading becomes the last block) and rerun `--filter testScrollToHeadingMovesViewport`. Expected: FAIL, `top` ≈ 550: the page can't scroll past its end (measured on the build Mac). Restore and rerun: PASS. Task 10 Step 0 watches `instantScroll` fail once plan 09's smooth scrolling is in.
 
@@ -711,6 +730,7 @@ Then drop the second `filler` from `testScrollToHeadingMovesViewport` (the headi
 extension FocusedValues { @Entry var reader: ReaderController? }
 struct AppCommands: Commands { let isPro: Bool }
 ```
+- `ReaderController.init` sets `renderer.openLink = { NSWorkspace.shared.open($0) }` (Task 6), so every App 1 window, folder windows included, opens `http`, `https` and `mailto` links in the user's apps. Quick Look never sets it.
 - Menus, in this task:
   - Edit ▸ Find, via `CommandGroup(replacing: .textEditing)` so the system's own ⌘F item isn't duplicated: "Find…" ⌘F (shows the bar and focuses it), "Find Next" ⌘G, "Find Previous" ⇧⌘G.
   - Outline toggle: View ▸ Show/Hide Inspector, from `InspectorCommands()`.
@@ -1794,10 +1814,20 @@ GitHub dispatches a workflow only if it exists on the default branch, and `--ref
 
 Read the CI minutes as plan 05 Task 3 Step 3 defines (B20). If what's left can't cover the two dispatches below, don't dispatch: ask the user.
 
-Run: `git push -u origin m02-app1-features && gh workflow run ci.yml --ref m02-app1-features && gh workflow run design-shots.yml --ref m02-app1-features -f run_app_shots=true && gh run watch`
+Run (plan 09 Task 11's pattern: record the last dispatch run, dispatch, poll until a new run ID appears, then use only that ID; `-L1` alone can return the previous run or, for `ci.yml`, the push run, and a bare `gh run watch` or `gh run download` errors without a terminal):
+```bash
+git push -u origin m02-app1-features
+last() { gh run list --workflow "$1" --branch m02-app1-features --event workflow_dispatch -L1 --json databaseId -q '.[0].databaseId'; }
+OLD_CI=$(last ci.yml); OLD_DS=$(last design-shots.yml)
+gh workflow run ci.yml --ref m02-app1-features
+gh workflow run design-shots.yml --ref m02-app1-features -f run_app_shots=true
+for i in $(seq 30); do CI=$(last ci.yml); DS=$(last design-shots.yml); [ -n "$CI" ] && [ "$CI" != "$OLD_CI" ] && [ -n "$DS" ] && [ "$DS" != "$OLD_DS" ] && break; sleep 2; done
+[ -n "$CI" ] && [ "$CI" != "$OLD_CI" ] && [ -n "$DS" ] && [ "$DS" != "$OLD_DS" ] && echo "ci=$CI design-shots=$DS" \
+  && gh run watch "$CI" && gh run watch "$DS" && gh run download "$DS" -n design-shots-macos-26 -D docs/reviews/m02-design/runner
+```
 - These two dispatches are the milestone's macOS runs: one matrix run each, not one per push. Re-dispatch only after a fix to the code under test, and read the minutes again first.
 - This needs `gh auth login` by the user. Without it, ask the user to press "Run workflow" for the branch under Actions.
-- Expected: `ci.yml` green on `macos-15` and `macos-26` (arm64), including `PDFExporterTests` (FB20581927 is a recent WebKit bug, so `macos-26` matters most), `ThemeTests`, `DocumentImageHandlerTests`, `LocalImageTests` and `FindTests`. `design-shots.yml` uploads `design-shots-macos-26`; download it with `gh run download -D docs/reviews/m02-design/runner` for Step 2.
+- Expected: `ci.yml` green on `macos-15` and `macos-26` (arm64), including `PDFExporterTests` (FB20581927 is a recent WebKit bug, so `macos-26` matters most), `ThemeTests`, `DocumentImageHandlerTests`, `LocalImageTests` and `FindTests`. `design-shots.yml` uploads `design-shots-macos-26`, which the block's last command extracts straight into `docs/reviews/m02-design/runner/` for Step 2 (one named artifact gets no subfolder, per `gh run download --help`). The `ci=… design-shots=…` line gives the two run IDs.
 - Record the run URLs in m02.md.
 - macOS 27 isn't tested in this milestone. Add a "Pending remote checks (lease L2, Thu 26 Nov 09:00 → Fri 27 Nov 09:00; third in its order, after plan 05's matrix and plan 03's acceptance)" list to m02.md: PDF suite, local images under the sandbox, folder restore, Arabic UI, all on macOS 27 arm64. On L2's last leg (macOS 14, if offered): Welcome's first-launch trigger and its macOS 14 Quick Look copy.
 
@@ -1808,6 +1838,7 @@ Run: `git push -u origin m02-app1-features && gh workflow run ci.yml --ref m02-a
   - Export: every handler-served image outside the document's folder is listed before the PDF is written; "Cancel" writes nothing. `makePDFData`'s private folder is 0700 and gone when the call returns.
   - `markdown.js`: the `baseHref` rewrite touches only relative image `src`. (The `fileImages` hook and the CSP are plan 01's, under its own stage 4.)
   - `page.js`: `image:` error strings are never inserted as HTML; `scrollToLine` and `data-line` stay harmless with hostile raw HTML; `data-theme` can't be set by content.
+  - `RendererWebView.openLink`: only `http`, `https` and `mailto` reach `NSWorkspace`; `file:`, `smb:` and app links never do; Quick Look never sets it.
   - `FolderIndex`: symlinks, the read cap via `TextFileLoader`, search cancellation. The window open path: no whole-file read (Task 1).
   - `Diagnostics`: no key, no paths. Welcome: opens only `QuickLookSetup.settingsURL` or the Settings home, and bundled samples.
   - Quick Look: plan 01's hostile-Markdown tests (in `make check`).

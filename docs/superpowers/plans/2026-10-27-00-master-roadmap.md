@@ -39,6 +39,7 @@ Cluster ids (K1–K18) refer to `docs/reviews/m00-consolidated.md`.
   - Pro holds only while `-1 day ≤ now − lastValidatedAt ≤ grace`. Outside that window the state is `.lapsed`, and the next successful validation restores Pro (K5).
   - A validation succeeds only on a 200 that decodes to `status == "granted"` with the stored activation id. Anything else counts as a failure: grace, never a lock.
 - **Kill path (K14):** whenever sales end (G1b "stop the studio", the end of maintenance, or the user's call), new sales stop first. Then one final build ships that keeps Pro for any stored licence with no further online checks. G3 STOP stops development but keeps the apps on sale (BUSINESS-PLAN §12). That release still needs the user's approval (CLAUDE.md).
+- **No npm code at release time:** `scripts/release.sh` runs no npm or `bunx` code. Its R2 uploads use `curl` with AWS SigV4, which plan 03 implements. Every `bun install` runs against the committed `bun.lock` with `--frozen-lockfile --ignore-scripts`; the one exception is plan 01 Task 3's first install, which writes `bun.lock` and so takes `--ignore-scripts` alone.
 - **Product rules 1–9 in `CLAUDE.md`** apply to all UI, copy and assets.
 - **Budget ceiling:** €200 cash, as itemised in §10 plus the remote-Mac line in §9 below.
 
@@ -61,7 +62,7 @@ These are the five input classes the spec implies but no feature test exercises 
 | Repo | `git@github-mus:Frequence-xx/mac-utility-studio.git`, `main` pushed (bootstrap commit) |
 | Build Mac | Intel iMac19,1, macOS 15.7.7, Xcode 26.3 (the last Xcode this Mac can run) [F1, F2] |
 | Installed | Xcode 26.3, Swift 6.2.4, xcodegen, bun, node, python3, brew, gh, graphify, cubic (logged in), codex (logged in), Playwright MCP |
-| Signing | Only `Apple Development: Hamza Bouzaggou (W3Q9G8NSHG)`. **No Developer ID Application certificate.** Blocks W4 (H2) |
+| Signing | **27 Oct:** Developer ID Application certificate (G2 Sub-CA) for team `23N7947PKX` in the login Keychain, expires **Fri 26 Nov 2027**. ASC Team API key created; notarytool profile `tegel-notary` stored; the first test notarisation was submitted and is still pending. Open: K3 (plaintext keys to encrypted storage, plan 03 Task 3 Step 5). Source: plan 03 Task 3 Status. The Keychain's `Apple Development: Hamza Bouzaggou (W3Q9G8NSHG)` belongs to another team and is never used |
 | Accounts | None created yet for the studio |
 
 ## 2. Decisions taken in planning (my calls; each one can be overridden)
@@ -78,7 +79,7 @@ These are the five input classes the spec implies but no feature test exercises 
 | D8 | Domain, DNS, Pages, R2 and support email all on **Cloudflare**. Registrar replaces Porkbun [F8] | One account and one card; email routing is free |
 | D9 | The site is a ~100-line **bun build script** that reuses markdown-it/highlight.js from `Renderer/`. No static-site-generator dependency | Ladder rung 2: the parser is already in the repo |
 | D10 | Tests run in three layers: `bun test` (pure renderer → HTML string), `swift test` (TegelKit/TegelStore, including WKWebView integration and PDF), `xcodebuild build` (apps and extensions). `make check` runs all three | Each layer runs on the build Mac with no new tools |
-| D11 | **Test machines:** macOS 15 Intel = the build Mac. macOS 15/26 arm64 = GitHub Actions `macos-15`/`macos-26`, on demand only [F7]. **macOS 27 arm64 = a Scaleway M1, 24-hour lease (€3.19 incl. VAT)** for G0 (L1) and the W5 matrix (L2) [F9]. macOS 14 = GitHub `macos-14` for automated tests, running a binary built on a newer runner and handed over as an artefact (K13), plus the last slot of lease L2 if Scaleway offers it (H6) | The build Mac can't run 26/27 [F1] |
+| D11 | **Test machines:** macOS 15 Intel = the build Mac. macOS 15/26 arm64 = GitHub Actions `macos-15`/`macos-26`, on demand only [F7]. **macOS 27 arm64 = a Scaleway M1, 24-hour lease (€3.19 incl. VAT)** for G0 (L1) and the W5 matrix (L2) [F9]. macOS 14: **no GitHub runner after Mon 2 Nov 2026**, when GitHub retires the `macos-14` label (actions/runner-images #13518; plan 09 V16 already lists it as deprecated; re-check the issue before any plan relies on the date). The only macOS 14 leg is the last slot of lease L2, a reinstall to macOS 14 if Scaleway offers that image (H6, plan 05 Task 3); otherwise that matrix row reads "n/a: image retired" and the user decides the minimum (H12) | The build Mac can't run 26/27 [F1] |
 | D12 | DMG built with `hdiutil` (no create-dmg). Appcast and DMGs on R2 behind `downloads.tegelapps.com` | Ladder rung 4: native tool |
 | D13 | The **9-stage pipeline** (Procedure P, §11) runs at the end of each milestone plan (01–09) and before every release tag. Per-task review comes from subagent-driven-development | "Whenever you're done with a major task" = a milestone |
 | D14 | One branch per milestone (`m01-g0-renderer`, …), merged into `main` after the pipeline passes, then pushed. **Pushing to this private repo is treated as authorised** (the user set up access for it) | Keeps a base SHA for cubic; history stays reviewable |
@@ -96,12 +97,16 @@ A plan that needs to change anything here lists it under **"Contract change requ
 
 ```
 mac-utility-studio/
-├─ Makefile                       # targets: check, generate, renderer, test-js, test-swift, test-app, test-release, test-site, test-scripts,
-│                                 #          test-smoke, site, build, fixtures, clean (+ readonly-gate from W10)
-│                                 # check: test-js test-swift test-app test-release test-site test-scripts build (+ readonly-gate)
-│                                 #        plus the K1 guard (no `set -a`, no unpinned `bunx <pkg>`) and `bun audit` (plan 01)
+├─ Makefile                       # targets, each with the plan and task that creates it:
+│                                 #   check generate renderer test-js test-swift test-shell build fixtures clean (plan 01 Task 1);
+│                                 #   test-app run-app (plan 02 Task 1); test-release (plan 03 Task 12); test-site (plan 04 Task 4,
+│                                 #   with the first site/test); test-scripts (plan 05 Task 6); readonly-gate (plan 06 Task 11)
+│                                 # check: test-js test-swift test-shell build test-app test-release test-site test-scripts readonly-gate
+│                                 #   This is the one authoritative list; other plans point here. A target joins check's
+│                                 #   prerequisites in the task that creates it. test-shell runs the K1 guard (no `set -a`,
+│                                 #   no unpinned `bunx <pkg>`); test-js runs `bun audit` (plan 01)
 │                                 # generate = xcodegen generate; test-app and build depend on it
-│                                 # test-smoke (GUI: test-smoke-dmg.sh) stays OUT of check (K13)
+│                                 # scripts/test-smoke-dmg.sh (GUI, plan 05 Task 1) runs by hand and stays OUT of check (K13)
 │                                 # derived data: build/
 ├─ project.yml                    # XcodeGen; options.bundleIdPrefix: com.tegelapps; bundle id = prefix + "." + target name
 │                                 # targets/schemes: markdown, markdown.quicklook, MarkdownAppTests; data, data.quicklook (W10)
@@ -131,10 +136,11 @@ mac-utility-studio/
 │  ├─ functions/                  # route modules ONLY: every file here is deployed as a route
 │  ├─ test/functions/             # Function tests (K8), importing ../../functions/api/*.js
 │  └─ static/{_headers,_redirects,site.css,css/tokens.css,img/,media/,llms.txt}   # deploy runs from site/
-├─ scripts/lib/env.sh             # K1: envget KEY (literal parse, never `source`), envset KEY VALUE (umask 077, mktemp + atomic mv,
+├─ scripts/lib/env.sh             # K1: envget KEY (literal parse, never `source`), envset KEY VALUE (umask 077, mkdir lock, mktemp + atomic mv,
 │                                 #     writes KEY='…' with ' escaped, rejects newlines), need. Callers: `. scripts/lib/env.sh`,
 │                                 #     then KEY="$(envget KEY)" cmd. No `set -a; . ./.env` anywhere
 ├─ scripts/release.sh             # <app> <version> [--sandbox] [--yes] [--no-upload] [--print-config] [--from-dmg <path>]; version X.Y.Z[-bN|-rcN]
+│                                 # runs no npm or bunx code; R2 uploads are curl + SigV4 (plan 03; Global constraints)
 │                                 # the app `case` sets SLUG (markdown|data); every path uses it: dist-release/$SLUG/,
 │                                 #   $SLUG/appcast.xml, --download-url-prefix …/$SLUG/, $R2_BUCKET/$SLUG/ (K7)
 │                                 # --print-config prints the resolved paths and exits; --from-dmg publishes an already
@@ -166,7 +172,9 @@ mac-utility-studio/
   - Steps: `renderToHTML`, then `DOMPurify.sanitize(html, {...SANITIZE_CONFIG, SANITIZE_NAMED_PROPS: true, RETURN_DOM_FRAGMENT: true})` from `sanitize.js`
     (forbids the tags `script`, `style`, `iframe`, `object`, `embed`, `form`, `base`, `meta` via `FORBID_TAGS`, every `on*` attribute,
     `javascript:` and `file:` URLs, and `data:` URLs except `data:image/*`. `tegel-doc:` is kept **only on `img[src]`**, via the
-    `fileImages` hook installed by page.js; `file:` is never kept), then `#doc.replaceChildren(fragment)`.
+    `fileImages` hook installed by page.js; `file:` is never kept), then remove every `style` attribute in that fragment unless its trimmed value is exactly
+    `text-align:` + `left`/`right`/`center` (markdown-it's table alignment), then `#doc.replaceChildren(fragment)`. The CSP allows `'unsafe-inline'` styles, so a kept
+    document `style` could hide or spoof the text. This runs on the main pass only: Mermaid's SVG pass and plan 07's KaTeX pass keep their generated inline styles.
     Anything else that sanitises HTML (site tool, KaTeX) imports the same module.
     `SANITIZE_NAMED_PROPS` prefixes every document `id`/`name` with `user-content-`, which keeps DOMPurify's clobbering protection, so `headings[].id` is the
     prefixed DOM id. A click listener on `#doc` scrolls `#x` links to `user-content-x`, falling back to `x` (plan 01).
@@ -180,6 +188,8 @@ mac-utility-studio/
   - When done, posts `webkit.messageHandlers.tegel.postMessage({type:'rendered', ms, headings:[{level,text,id}], mermaidCount, errors:[string]})`.
 - **CSP** (meta in `index.html`): `default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: tegel-doc:; font-src 'self'`. No `connect-src` and no `file:`, so there's no network and no direct file read. Any change runs pipeline stage 4 (`/cso`).
   - **Second network barrier (K6):** `RendererWebView` installs a `WKContentRuleList` that blocks `^https?:`, `^wss?:` and `^ftp:` (three rules; WebKit's `url-filter` has no `|`) before the first load, so a CSP gap still can't reach the network.
+  - **Navigation:** `RendererWebView` cancels every navigation whose `navigationType == .linkActivated`, whatever its URL, and counts it in `blockedNavigations`; any other navigation passes only when its URL without the fragment equals `indexURL`, so only the renderer's own loads of `indexURL` pass. A URL check alone isn't enough: a relative `index.html`, `index.html#x` or `[x]()` link resolves to `indexURL`, and following it reloads the page and blanks the document in the window and in Quick Look (plan 01 Task 5).
+    - **Links (plan 02 Task 6):** in App 1's window only, a cancelled `http`, `https` or `mailto` link goes to `RendererWebView.openLink` (`NSWorkspace.shared.open`); every other scheme (`file:`, `smb:`, `javascript:`, `x-apple…`) is dropped. A same-document `#frag` link is scrolled in JS to `user-content-<frag>`, because `SANITIZE_NAMED_PROPS` prefixes ids but not hrefs. Quick Look leaves `openLink` nil and opens nothing. The user's browser opening after a click is not a network call by the app (rule 1).
   - **Conditional (K6):** a WebKit test injects a document-folder `.js` as `<script src>`. If it runs under `script-src 'self'` on the `file:` origin, the renderer moves to a `tegel-renderer://` scheme handler (plan 01's fallback).
 - **Local images (K4; plan 02 Task 8):**
   - A `WKURLSchemeHandler` for `tegel-doc:` serves only `UTType.image` files.
@@ -210,6 +220,7 @@ public struct RenderResult: Sendable, Decodable { public let ms: Double; public 
     public var readAccessURL: URL?                        // plan 02; the grant root that contains the document; tegel-doc: serves images only under it
                                                           // (nil → the document's folder; no baseURL → nothing)
     public func loadedImages(outside folder: URL) -> [URL]  // plan 02; the export's confirmation list (K4)
+    public var openLink: ((URL) -> Void)?                 // plan 02; gets only http/https/mailto link clicks; the window sets NSWorkspace.shared.open, Quick Look nil (§3.2)
     public init()
     public func render(_ markdown: String, options: RenderOptions) async throws -> RenderResult
     public func scroll(toHeading id: String) async
@@ -307,8 +318,8 @@ Location: `Fixtures/markdown/`.
 |---|---|---|---|
 | H1 | ~~Add the SSH key to GitHub~~ **done 27 Oct** | | |
 | — | **User decisions, 27 Oct:** H2 = a **new individual Apple membership in the user's name** (budget Case B; see §9). H3 = **marketing@snelverhuizen.nl** for the studio accounts (in `.env` as `STUDIO_EMAIL`). H6 = **Scaleway M1 rental** (the user adds the card; Claude asks before each lease). Studio name = **Tegel**, pending the W1 trademark check | | |
-| H2-status | **27 Oct 2026:**<br>• Apple Account `marketing@snelverhuizen.nl` created (by the user in Safari; the automated browser was blocked by Apple's fraud check).<br>• Enrolment as **Individual / Sole Proprietor, Mohammed Haroen Baksh**, done through every step up to payment: Developer Agreement and Program License Agreement accepted. Enrollment ID `7KFB34BTYH`.<br>• **€99 paid on 27 Oct** (by a colleague; invoice to invoice@bakshlogistics.com). At 08:12 the account still said "Pending, purchase may take up to 48 hours to process", and the team didn't exist yet.<br>• Ready: the Developer ID private key and CSR in `~/.tegel-signing/` (chmod 700, outside the repo).<br>• Still to do once the team is active: upload the existing CSR on developer.apple.com (not through Xcode ▸ Manage Certificates, which would orphan this key) as a **Developer ID Application (G2 Sub-CA)** certificate, import it, create the ASC API key, `notarytool store-credentials tegel-notary`, and run a test notarisation.<br>• **Keys at rest (K3):** after the one-time Keychain import, the Developer ID private key, the Sparkle EdDSA private key and the ASC `.p8` move into encrypted offline storage. Where they go is the user's choice (USER item). The plaintext files are then deleted, and `.env` carries no `SPARKLE_PRIVATE_KEY_BACKUP_PATH`. Stage-4 check: `find ~/.tegel-signing ~/.tegel-secrets -type f \( -name '*.key' -o -name '*.p8' -o -name '*.p12' \)` prints nothing (watch it list the files before the move) | | |
-| H2 | **Apple Developer membership** (BUSINESS-PLAN Q1): whose membership, is it current, may it sign commercial apps? If a new one is needed, enrol as an *individual* (sole proprietors enrol as individuals; Gatekeeper then shows the personal legal name). **27 Oct:** the seller turns out to be **Baksh Logistics B.V.** (H7), but the membership stays **individual** for launch, because an organisation enrolment needs a D-U-N-S number and Apple review, which would put the 16 Nov certificate at risk. Gatekeeper shows "Mohammed Haroen Baksh" while the imprint shows the BV. User decision before the MAS edition (plan 07 B, Apr 2027): ask Apple Developer Support to move the membership to the BV, if the MAS seller name should be the BV. Then, as Account Holder: create the **Developer ID Application** certificate and an **App Store Connect API key** (for notarytool) | Enrol by **Fri 6 Nov** (enrolment can take days); certificate and key by **Mon 16 Nov** | Plan 03, so the launch date |
+| H2-status | **27 Oct 2026:**<br>• Apple Account `marketing@snelverhuizen.nl` created (by the user in Safari; the automated browser was blocked by Apple's fraud check).<br>• Enrolment as **Individual / Sole Proprietor, Mohammed Haroen Baksh**, done through every step up to payment: Developer Agreement and Program License Agreement accepted. Enrollment ID `7KFB34BTYH`.<br>• **€99 paid on 27 Oct** (by a colleague; invoice to invoice@bakshlogistics.com). At 08:12 the account still said "Pending, purchase may take up to 48 hours to process", and the team didn't exist yet.<br>• **Done 27 Oct** (team `23N7947PKX` active; plan 03 Task 3 Steps 1–4 now only verify): the existing CSR uploaded on developer.apple.com as a **Developer ID Application (G2 Sub-CA)** certificate, expiring **Fri 26 Nov 2027** (renewal: plan 03 Task 3 Step 6), and imported into the login Keychain; the ASC Team API key created; `notarytool store-credentials tegel-notary` stored; the first test notarisation submitted, **still pending** (a new team's first submission is slow). The private key, CSR and `.cer` sit in `~/.tegel-signing/` (chmod 700, outside the repo) until K3.<br>• **Keys at rest (K3), still open** (plan 03 Task 3 Step 5, Tue 17 Nov): after the one-time Keychain import, the Developer ID private key, the Sparkle EdDSA private key and the ASC `.p8` move into encrypted offline storage. Where they go is the user's choice (USER item). The plaintext files are then deleted, and `.env` carries no `SPARKLE_PRIVATE_KEY_BACKUP_PATH`. Stage-4 check: `find ~/.tegel-signing ~/.tegel-secrets -type f \( -name '*.key' -o -name '*.p8' -o -name '*.p12' \)` prints nothing (watch it list the files before the move) | | |
+| H2 | **Apple Developer membership** (BUSINESS-PLAN Q1): whose membership, is it current, may it sign commercial apps? If a new one is needed, enrol as an *individual* (sole proprietors enrol as individuals; Gatekeeper then shows the personal legal name). **27 Oct:** the seller turns out to be **Baksh Logistics B.V.** (H7), but the membership stays **individual** for launch, because an organisation enrolment needs a D-U-N-S number and Apple review, which would put the 16 Nov certificate at risk. Gatekeeper shows "Mohammed Haroen Baksh" while the imprint shows the BV. User decision before the MAS edition (plan 07 B, Apr 2027): ask Apple Developer Support to move the membership to the BV, if the MAS seller name should be the BV. Then, as Account Holder: create the **Developer ID Application** certificate and an **App Store Connect API key** (for notarytool) | ~~Enrol by Fri 6 Nov; certificate and key by Mon 16 Nov~~ **done 27 Oct** (H2-status) | Plan 03, so the launch date |
 | H3 | **Studio email.** Which inbox do studio accounts use until `hello@tegelapps.com` forwards (H4)? | W1, before account creation | Every account |
 | H4 | **Cloudflare:** create the account (Claude can drive the sign-up; the user does 2FA). Add a card. **Approve buying `tegelapps.com`** (~$10.46) **after** the trademark check comes back clean | Wed 28 Oct (account), Fri 30 Oct (domain) | Site, R2, email routing |
 | H5 | **Polar:** create the sandbox org now (plan 03 Task 1). Then the **production** org, with payouts and Stripe identity verification (plan 05 Task 2 Step 0) | Sandbox: W1; production live: **Fri 20 Nov** | Plan 03 sandbox; plan 05 production products (Tue 24 Nov) |
@@ -318,6 +329,7 @@ Location: `Fixtures/markdown/`.
 | H9 | **Launch identity:** r/macapps transparency path vs megathread; the PH/HN/IH accounts to post from (no face photo, product rule 3) | Tue 1 Dec | Launch posts |
 | H10 | **Tax adviser** questions (§15, now for a **BV**: VAT treatment of Polar MoR payouts to the BV, booking app revenue next to the existing activities, MAS/Setapp VAT). KOR is likely moot given the BV's existing turnover. Ask the fee up front | Send by **Fri 13 Nov** | Bookkeeping; the btw-id on the imprint |
 | H11 | **Approve each outward-facing action** listed in CLAUDE.md | As they come up | |
+| H12 | **macOS 14 coverage** (D11). If neither a GitHub macOS 14 runner nor a Scaleway macOS 14 image exists before launch, Claude asks the user: keep the 14.0 deployment target untested, or raise the minimum to macOS 15 (then `project.yml`, `Package.swift`, the site's "macOS 14 or later" copy and the FAQ change with it) | **Fri 27 Nov**, at the end of lease L2 | The 1.0.0 deployment target |
 
 ## 6. Accounts register
 

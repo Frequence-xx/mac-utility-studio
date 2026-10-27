@@ -31,6 +31,7 @@ Master §2/§3 and `CLAUDE.md` apply (platform and universal binary, build Mac a
   `curl -s 'https://data-api.ecb.europa.eu/service/data/EXR/D.USD.EUR.SP00.A?lastNObservations=1&format=csvdata' | python3 -c "import csv,sys; r=list(csv.DictReader(sys.stdin))[-1]; print(r['TIME_PERIOD'], r['OBS_VALUE'])"`
 - **Hours:** ≤ 20 h/week; ≤ 10 h/week if G3 lands in €100–300; ≤ 2 h/week under a G2 freeze (BUSINESS-PLAN §11–12).
 - **Commits:** "Commit: `<paths>`, `<msg>` + trailer" means `git add <paths> && git commit -m "<msg>" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`.
+- **WebKit tests** (every test that renders through `RendererWebView`) live under `Packages/TegelKit/Tests/TegelKitTests/WebView/` and run on plan 01's established runner. Under plan 01 Branch A, use the `swift test --package-path Packages/TegelKit --filter <Class>` lines as written below. Under Branch B (its commit message records which), use `xcodebuild test -project Tegel.xcodeproj -scheme TegelKitHostTests -derivedDataPath build -only-testing:TegelKitHostTests/<Class>` instead, once per class.
 
 ## Review Focus
 
@@ -72,7 +73,7 @@ Each section's last task runs **Procedure P (master §11)** with its id (`m07-ga
   . scripts/lib/env.sh
   curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $(envget POLAR_ACCESS_TOKEN)" "https://api.polar.sh/v1/orders/?organization_id=$(envget POLAR_ORGANIZATION_ID)&limit=1"
   ```
-  Expected `200` (scope `orders:read`, polar.sh/docs/api-reference/orders/list). On 401/403 the user issues a token with `orders:read` + `products:read`.
+  Expected `200` (scope `orders:read`, polar.sh/docs/api-reference/orders/list). Repeat with `https://api.polar.sh/v1/refunds/?organization_id=…&limit=1` → `200` (scope `refunds:read`, polar.sh/docs/api-reference/refunds/list; G1's refund pass). On 401/403 the user issues a token with `orders:read` + `products:read` + `refunds:read`.
 - [ ] **Step 3: Product ids.** From `GET https://api.polar.sh/v1/products/?organization_id=<id>&limit=100` (same headers as Step 2), write `scripts/gates/products.json` = `{"markdown":[…],"data":[…],"bundle":[…],"select":[]}`. Product ids aren't secret.
 - [ ] **Step 4: Reuse check.** One Polar counter only (X22). Record the shipped signatures of `scripts/polar_sales.py` (plan 05's `fetch_orders`, `count_sales`, `window`, CLI entry; plan 08's `summarise`, B8) and of plan 08's `kpi.gsc_totals(f, start, end)`, plus the column names of the GSC dates CSV that `kpi.py` reads. G1 adds only the CLI flags. Also record how Polar pays out EUR orders (converted into the USD balance, or a separate EUR balance); G3 Step 4 uses it.
 - [ ] **Step 5: Other inputs.** Record the support-log path and row format from plan 05 (expected `docs/ops/support-log.md`, rows `| date | minutes | mails | refunds | licence | bug/feature | notes |`) and the Google login that opens Search Console for `tegelapps.com`.
@@ -86,9 +87,10 @@ One counter for every gate (X22, B8): plan 05's `scripts/polar_sales.py` counts,
 - Modify: `scripts/polar_sales.py`, `scripts/test_polar_sales.py` (already in `make check` through `test-scripts`)
 
 **Interfaces:**
-- Consumes: plan 05's `fetch_orders`, `count_sales`, `window` and CLI entry; plan 08's `summarise(orders, product_ids) -> {"count": int, "gross": {currency: float}, "net": {currency: float}}`; `scripts/gates/products.json` (G0); plan 08's `kpi.gsc_totals(f, start, end) -> {"clicks", "impressions"}` (`end` exclusive).
+- Consumes: plan 05's `fetch_orders`, `count_sales`, `window` and CLI entry; plan 08's `summarise(orders, product_ids) -> {"count": int, "gross": {currency: float}, "net": {currency: float}}`; `scripts/gates/products.json` (G0); plan 08's `kpi.gsc_totals(f, start, end) -> {"clicks", "impressions"}` (`end` exclusive); Polar `GET /v1/refunds/` (scope `refunds:read`; before Step 1, check the field names `order_id`, `amount`, `tax_amount`, `currency`, `created_at` and the succeeded `status` value against polar.sh/docs/api-reference/refunds/list, and use what it says).
 - Produces:
-  - CLI `main(argv=None, products=None)`: `--from YYYY-MM-DD --to YYYY-MM-DD --summary [--products markdown,bundle]` prints `count=<n> gross=<cur>:<x>[,<cur>:<x>] net=<cur>:<y>[,…] from=<date> to=<date>`. `--products` maps names through `products.json` (or `products`); without it, `--summary` covers every product there. With `--summary`, `POLAR_PRODUCT_ID_MARKDOWN` isn't needed. The window is `window(from, to)`. It never prints the token.
+  - CLI `main(argv=None, products=None)`: `--from YYYY-MM-DD --to YYYY-MM-DD --summary [--products markdown,bundle]` prints `count=<n> gross=<cur>:<x>[,<cur>:<x>] net=<cur>:<y>[,…] refunds_older=<cur>:<z>[,…] from=<date> to=<date>`. `--products` maps names through `products.json` (or `products`); without it, `--summary` covers every product there. With `--summary`, `POLAR_PRODUCT_ID_MARKDOWN` isn't needed. The window is `window(from, to)`. It never prints the token.
+  - `count`, `gross` and `net` cover the orders created in the window (the sales cohort; `net` already subtracts their own refunds). `refunds_older` is kept apart from that cohort: a new `fetch_refunds(token, org, after, before)` returns the succeeded refunds created in the window, and `refunds_older` sums `amount − tax_amount` per currency over those whose `order_id` isn't one of the window's orders, i.e. refunds of earlier purchases (`refunds_older=0` when there are none; it covers every product, and G3/G4 run without `--products`).
   - The **gate sales command**, used by G2–G4:
 
     ```bash
@@ -102,18 +104,22 @@ def test_summary_cli_maps_names_and_needs_no_markdown_id(self):
     seen = []
     def fake(token, org, pid, after, before):
         seen.append(pid)
-        return [{"currency": "usd", "status": "paid", "product_id": pid, "total_amount": 1900, "net_amount": 1900,
+        return [{"id": "o-" + pid, "currency": "usd", "status": "paid", "product_id": pid, "total_amount": 1900, "net_amount": 1900,
                  "platform_fee_amount": 145, "refunded_amount": 0, "refunded_tax_amount": 0}]
+    def fake_refunds(token, org, after, before):   # one refund of a window order (already in net), one of an older order
+        return [{"order_id": "o-p1", "currency": "usd", "amount": 1900, "tax_amount": 0},
+                {"order_id": "o-old", "currency": "usd", "amount": 1500, "tax_amount": 0}]
     with mock.patch.object(polar_sales, "fetch_orders", fake), \
+         mock.patch.object(polar_sales, "fetch_refunds", fake_refunds), \
          mock.patch.dict(os.environ, {"POLAR_ACCESS_TOKEN": "t", "POLAR_ORGANIZATION_ID": "o"}, clear=True), \
          mock.patch("sys.stdout", new_callable=io.StringIO) as out:
         polar_sales.main(["--from", "2027-02-06", "--to", "2027-03-08", "--summary", "--products", "markdown,bundle"],
                          products={"markdown": ["p1"], "bundle": ["p3"]})
     self.assertEqual(seen, ["p1", "p3"])
-    self.assertTrue(out.getvalue().startswith("count=2 gross=usd:38.00 net=usd:35.10 "), out.getvalue())
+    self.assertTrue(out.getvalue().startswith("count=2 gross=usd:38.00 net=usd:35.10 refunds_older=usd:15.00 "), out.getvalue())
 ```
-- [ ] **Step 2: Run and watch it fail.** `python3 -m unittest discover -s scripts -p 'test_polar_sales.py' -v` → FAIL (`main()` takes no `products`, or `--summary` is unrecognised).
-- [ ] **Step 3: Implement.** If plan 05's argparse block isn't already `main(argv=None)`, wrap it first. `--summary` calls `fetch_orders` once per mapped product id in the window, then `summarise` over the union, and prints the line above (currencies sorted, two decimals).
+- [ ] **Step 2: Run and watch it fail.** `python3 -m unittest discover -s scripts -p 'test_polar_sales.py' -v` → FAIL (`polar_sales` has no attribute `fetch_refunds`, `main()` takes no `products`, or `--summary` is unrecognised).
+- [ ] **Step 3: Implement.** If plan 05's argparse block isn't already `main(argv=None)`, wrap it first. `--summary` calls `fetch_orders` once per mapped product id in the window, then `summarise` over the union, then `fetch_refunds` once for the window (a paginated `GET /v1/refunds/` filtered to `created_at` in the window), and prints the line above (currencies sorted, two decimals).
 - [ ] **Step 4: Run and watch it pass.** The Step 2 command → `OK` (plan 05's and plan 08's tests plus this one); `make check` → all pass.
 - [ ] **Step 5: Commit:** `scripts/polar_sales.py scripts/test_polar_sales.py`, `feat(gates): --summary and --products in polar_sales.py` + trailer.
 
@@ -131,10 +137,10 @@ def test_summary_cli_maps_names_and_needs_no_markdown_id(self):
 
 **Thresholds (verbatim):** continue if "Combined net ≥ **€300/month** → build app 3". Kill / change if "€100–300 → no new app, ≤ 10 h/week. **< €100 → stop development**; keep the apps on sale". **Window:** `2027-03-31T00:00:00+02:00` → `2027-04-30T00:00:00+02:00`.
 
-- [ ] **Step 1: Polar, all products.** The gate sales command with `--from 2027-03-31 --to 2027-04-30` (no `--products`). Record `count` and `gross`/`net` per currency.
+- [ ] **Step 1: Polar, all products.** The gate sales command with `--from 2027-03-31 --to 2027-04-30` (no `--products`). Record `count`, and `gross`/`net`/`refunds_older` per currency.
 - [ ] **Step 2: Payout ratio `r` from actual payout data.** Polar dashboard → Finance → Payouts: the USD withdrawn in the last 3 payouts; the user reads the EUR credited for each on the bank statement. `r = Σ EUR credited ÷ Σ USD withdrawn`. With fewer than 3 payouts: `r = 0.995 ÷ ECB USD-per-EUR` (§9's "about 0.5% payout/FX").
 - [ ] **Step 3: Other channels.** MAS: App Store Connect → Sales and Trends → Proceeds for the window, converted at the ECB rate. Setapp: the developer-account statistics, if live.
-- [ ] **Step 4: Compute.** Decision value **net = net.usd × r + net.eur × r_eur + MAS + Setapp**, where `r_eur` = 0.995 if Polar pays EUR orders out in EUR (§9's payout/FX), or `r` × the ECB USD-per-EUR rate if it converts them into the USD balance (G0 Step 4 records which): €1 becomes ECB dollars, and each dollar pays out `r` euros. Sanity check: with Step 2's fallback `r` (0.995 ÷ ECB), `r_eur` is 0.995 at any rate; at ECB 1.08 and `r` = 0.921, `r_eur` ≈ 0.995, never ≈ 0.85. Plan cross-check **net_§9 = (gross.usd + gross.eur × ECB USD-per-EUR) × 0.744** (§9: "€0.744 per $1 gross"). If the two Polar figures differ by > 15%, record the Polar country split (the §9 test) and propose updating the factor.
+- [ ] **Step 4: Compute.** Decision value **net = (net.usd − refunds_older.usd) × r + (net.eur − refunds_older.eur) × r_eur + MAS + Setapp** (a refund paid out this month for an earlier purchase counts this month), where `r_eur` = 0.995 if Polar pays EUR orders out in EUR (§9's payout/FX), or `r` × the ECB USD-per-EUR rate if it converts them into the USD balance (G0 Step 4 records which): €1 becomes ECB dollars, and each dollar pays out `r` euros. Sanity check: with Step 2's fallback `r` (0.995 ÷ ECB), `r_eur` is 0.995 at any rate; at ECB 1.08 and `r` = 0.921, `r_eur` ≈ 0.995, never ≈ 0.85. Plan cross-check **net_§9 = (gross.usd + gross.eur × ECB USD-per-EUR) × 0.744** (§9: "€0.744 per $1 gross"). If the two Polar figures differ by > 15%, record the Polar country split (the §9 test) and propose updating the factor.
 - [ ] **Step 5: Write `docs/gates/G3.md`:** thresholds, window, all inputs, stretch ≥ €760, `Decision: APP3 | NO-NEW-APP | STOP`, the cancellation list, sign-off.
 - [ ] **Step 6: Apply.** **STOP cancels** C, D, F and Homebrew. The apps stay on sale (BUSINESS-PLAN §12), with "Maintenance only: no new features." on each product page (plan 04's deploy). Task G7 runs when maintenance ends, or now if the user chooses to stop sales at sign-off (open question 6). **NO-NEW-APP cancels** D (≤ 10 h/week). **APP3** starts D.
 - [ ] **Step 7: Commit to `main` and push.**
@@ -170,19 +176,22 @@ def test_summary_cli_maps_names_and_needs_no_markdown_id(self):
 - Modify: TegelStore's `PolarConfig` and `LicenseManager` (plan 03's files); `Packages/TegelKit/Tests/TegelStoreTests/FinalBuildTests.swift`; `project.yml` (on every direct app target, Info.plist `TGFinalBuild = $(TG_FINAL_BUILD)`, and plan 03's `SUEnableAutomaticChecks = YES` becomes `$(TG_SU_AUTOMATIC_CHECKS)`); `Config/Release.xcconfig` (`TG_FINAL_BUILD = YES` and `TG_SU_AUTOMATIC_CHECKS = NO`; elsewhere `TG_FINAL_BUILD` empty and `TG_SU_AUTOMATIC_CHECKS = YES`); each direct app's entry file (`MarkdownApp.swift`, `DataApp.swift`, App 3's if shipped); `site/config.json` and the product pages; `docs/gates/STOP.md`.
 
 **Interfaces:**
-- `PolarConfig.finalBuild: Bool` (Info.plist `TGFinalBuild` == `YES`). When true, `LicenseManager.refresh()` returns before any network call, and `isPro` is true for any stored licence, whatever its last validation date. Activating a new Mac still calls Polar while the organisation exists.
+- `PolarConfig.finalBuild: Bool` (Info.plist `TGFinalBuild` == `YES`). When true, `LicenseManager.refresh()` returns before any network call, and wherever the manager applies `LicensePolicy` (the designated init and `refresh`) a stored licence maps to `.pro(stored)`, whatever its last validation date. So `state` never reads `.lapsed`, `isPro` (true only for `.pro`) follows, the Licence tab never shows plan 03's lapsed row with **Check Again** and **Remove Licence…**, and the manager never removes the stored key. Activating a new Mac still calls Polar, which is why Step 1 keeps the Polar organisation.
 - **No update checks in a final build** (it must not keep contacting `downloads.tegelapps.com` after the studio stops, or after the domain lapses and someone else holds it): Info.plist `SUEnableAutomaticChecks` is `NO`; the app creates `SPUStandardUpdaterController(startingUpdater: !finalBuild, …)`, so Sparkle never schedules a check, even when a stored user default turned automatic checks on; "Check for Updates…" and the Updates tab are hidden.
 
-- [ ] **Step 1 🔒 Stop new sales** (**user approval**: live Polar products). Archive every live product (Markdown, Data, Bundle, App 3 if live). Check each: `curl … /v1/products/<id>` (G0 Step 2 headers) → `"is_archived": true`; each `POLAR_CHECKOUT_URL_*` no longer completes a purchase (screenshot to `docs/gates/stop/`). Set every `checkoutURL` in `site/config.json` to `""`, put "No longer sold. Existing licences keep working." on each product page, and deploy (plan 04's command). Check: `. scripts/lib/env.sh; curl -s https://tegelapps.com/markdown/ | grep -cF "$(envget POLAR_CHECKOUT_URL_MARKDOWN)"` → `0`, and the same for Data and the bundle. MAS and Setapp editions: remove from sale in their consoles (approval each); they never check a licence.
-- [ ] **Step 2: Write the failing test.** `testFinalBuildKeepsStoredLicenceWithoutNetwork`: `PolarConfig` with `finalBuild: true`; a stored licence last validated at `t0`; plan 03's URLProtocol stub recording every request; the manager built through plan 03's designated `LicenseManager(client:keychain:now:)` (its `makeManager` helper) with `now: t0 + 400 * 86_400`, so the test never reads the real clock. `await m.refresh(now: t0 + 400 * 86_400)` → `isPro == true` and the stub saw 0 requests. Run `swift test --package-path Packages/TegelKit --filter FinalBuildTests` → FAIL to compile (`finalBuild` missing).
-- [ ] **Step 3: Implement** one guard at the top of `refresh()` and one in `isPro`; then the updater lines above in each app entry file and the two `project.yml`/xcconfig settings.
-- [ ] **Step 4: Watch it pass, then watch each guard fail.** Re-run → PASS. Comment out the `refresh()` guard → FAIL (the stub records 1 request; `isPro` still holds through its own guard); restore. Comment out the `isPro` guard → FAIL (`isPro == false`: 400 days is past plan 03's grace); restore → PASS. `swift test --package-path Packages/TegelKit` → all pass, plan 03's grace tests included.
+- [ ] **Step 1 🔒 Stop new sales** (**user approval**: live Polar products). Archive every live product (Markdown, Data, Bundle, App 3 if live). **Archive only: never delete the Polar organisation, a product, its licence-key benefits or any licence key.** Copies that never install the final build keep validating against them, and a final build activates a new Mac through them. Check each: `curl … /v1/products/<id>` (G0 Step 2 headers) → `"is_archived": true`; each `POLAR_CHECKOUT_URL_*` no longer completes a purchase (screenshot to `docs/gates/stop/`).
+  - **Site.** Plan 04's `fill` throws on a `{{checkout:<app>}}` whose URL is empty, and its deploy runs only after `bun test` passes, so the copy and the tests change together. First replace the site tests that assume an open sale with one test: no built page contains `reference_id=`, and every product page contains "No longer sold. Existing licences keep working." Those tests are plan 04 Task 14's `product and pricing pages link the checkout from config`, the price-sentence tests on product pages (plan 04 Tasks 7 and 11), and plan 06 Task 13's `reference_id=site-data`/`site-bundle` and price assertions. `(cd site && bun test)` → the new test fails on the current pages (watched).
+  - Then, on every language's product, pricing and bundle pages, replace each buy block (`{{pricing:<app>}}` or `{{price:<app>}}` and its `{{checkout:<app>}}` link) with "No longer sold. Existing licences keep working.", and set every `checkoutURL` in `site/config.json` to `""`. `(cd site && bun test)` → 0 fail. If another test still asserts a price or a checkout link on a product page, fold it into the new test in this same commit.
+  - Commit: `site docs/gates/stop`, `chore(stop): sales stopped, the site says no longer sold` + trailer. Deploy (plan 04's command). Check: `. scripts/lib/env.sh; curl -s https://tegelapps.com/markdown/ | grep -cF "$(envget POLAR_CHECKOUT_URL_MARKDOWN)"` → `0`, and the same for Data and the bundle. MAS and Setapp editions: remove from sale in their consoles (approval each); they never check a licence.
+- [ ] **Step 2: Write the failing test.** `testFinalBuildKeepsStoredLicenceWithoutNetwork`: `PolarConfig` with `finalBuild: true`; a stored licence last validated at `t0`; plan 03's URLProtocol stub recording every request; the manager built through plan 03's designated `LicenseManager(client:keychain:now:)` (its `makeManager` helper) with `now: t0 + 400 * 86_400`, so the test never reads the real clock. `await m.refresh(now: t0 + 400 * 86_400)` → `state == .pro(lic)`, `isPro == true`, `keychain.load() == lic` (the key is kept), and the stub saw 0 requests. Run `swift test --package-path Packages/TegelKit --filter FinalBuildTests` → FAIL to compile (`finalBuild` missing).
+- [ ] **Step 3: Implement** one guard at the top of `refresh()` and one where the manager applies `LicensePolicy` (`finalBuild` with a stored licence → `.pro(stored)`); then the updater lines above in each app entry file and the two `project.yml`/xcconfig settings. Build-setting expansion turns `SUEnableAutomaticChecks` into a string (`NO`/`YES`), so first read Sparkle 2.10.1's source to confirm it reads that Info.plist key through `boolValue`, making the string `NO` off and `YES` on; note the file and line for Step 6. If Sparkle accepts only a boolean there, keep plan 03's boolean `SUEnableAutomaticChecks: true`, rely on `startingUpdater: !finalBuild` (Step 5 watches it), and drop Step 5's `SUEnableAutomaticChecks` print.
+- [ ] **Step 4: Watch it pass, then watch each guard fail.** Re-run → PASS. Comment out the `refresh()` guard → FAIL (the stub records 1 request; `state` still holds `.pro` through the policy guard); restore. Comment out the policy guard → FAIL (`state == .lapsed(lic)`, `isPro == false`: 400 days is past plan 03's grace); restore → PASS. `swift test --package-path Packages/TegelKit` → all pass, plan 03's grace tests included. Commit: `Packages/TegelKit Apps project.yml Config`, `feat(stop): final build keeps Pro without licence calls or update checks` + trailer (Step 5's `release.sh` needs a clean tree).
 - [ ] **Step 5: Final builds** (**user approval** per release). For each direct app:
-  - `scripts/release.sh <app> <v> --no-upload`; `PlistBuddy -c 'Print TGFinalBuild'` → `YES` and `-c 'Print SUEnableAutomaticChecks'` → `false`.
+  - `scripts/release.sh <app> <v> --no-upload`; `PlistBuddy -c 'Print TGFinalBuild'` → `YES` and `-c 'Print SUEnableAutomaticChecks'` → `NO` (a string, which Step 3 confirmed Sparkle reads as off).
   - **Watch the update guard fail on the shipped build.** On the build Mac's activated copy, with `D=~/Library/Containers/<bundle id>/Data/Library/Preferences/<bundle id>` (App 3, unsandboxed: `~/Library/Preferences/<bundle id>`): `defaults write "$D" SUEnableAutomaticChecks -bool YES; defaults write "$D" SULastCheckTime -date "2000-01-01 00:00:00 +0000"` (a user who turned checks on, with a check long overdue). Launch, wait 60 s, quit. `defaults read "$D" SULastCheckTime` → today's date: it checked.
   - Install the final build over that copy and repeat the two writes, the launch and the read → still `2000-01-01 …`, and the app menu has no "Check for Updates…". Turn Wi-Fi off, relaunch → Pro.
-  - Then `scripts/release.sh <app> <v> --from-dmg <path>`, so every install's Sparkle check offers the final build, its last one.
-- [ ] **Step 6: Record.** `docs/gates/STOP.md`: the trigger, the date, what stopped, the final versions, "existing licences keep working; support by email until <date the user sets>". Commit: `docs/gates/STOP.md docs/gates/stop Packages/TegelKit Apps project.yml Config site`, `chore(stop): Procedure S, sales stopped, final builds` + trailer; merge and push.
+  - Then `scripts/release.sh <app> <v> --yes --from-dmg <path>` (`--yes` only after this release's approval: without a terminal the confirmation prompt aborts with `aborted: nothing uploaded`), so every install's Sparkle check offers the final build, its last one.
+- [ ] **Step 6: Record.** `docs/gates/STOP.md`: the trigger, the date, what stopped, the final versions, the Sparkle source line from Step 3, "the Polar organisation, its benefits and its licence keys are kept, never deleted: copies that never installed the final build still validate against them", "existing licences keep working; support by email until <date the user sets>". Commit: `docs/gates/STOP.md`, `docs(stop): Procedure S record` + trailer; merge and push.
 
 ---
 
@@ -203,7 +212,7 @@ def test_summary_cli_maps_names_and_needs_no_markdown_id(self):
 ### Task A1: KaTeX math, lazy-loaded like Mermaid
 
 **Files:**
-- Create: `Renderer/src/math.js`, `Renderer/test/math.test.js`, `Packages/TegelKit/Tests/TegelKitTests/RendererMathTests.swift`
+- Create: `Renderer/src/math.js`, `Renderer/test/math.test.js`, `Packages/TegelKit/Tests/TegelKitTests/WebView/RendererMathTests.swift`
 - Modify: `Renderer/src/{markdown.js,page.js,css/base.css}`, `Renderer/build.js`, `Renderer/package.json`, `Renderer/bun.lock`, `Fixtures/markdown/hostile.md`, the third-party notices file, `docs/design/decisions.md` (records KaTeX's `fonts/*.woff2` as the one exception to DESIGN.md's "No bundled font files": math glyphs need them)
 - Regenerated: `Packages/TegelKit/Sources/TegelKit/Resources/Renderer/**` (adds `katex/katex.min.js`, `katex/katex.min.css`, `katex/fonts/*.woff2`)
 
@@ -310,7 +319,7 @@ test('footnotes take their direction at the section, never per item', () => {
 ### Task A3: Custom CSS (Pro), a read-only bookmarked file injected after the theme
 
 **Files:**
-- Create: `Apps/Markdown/App/CustomStylesheet.swift`, `Apps/Markdown/AppTests/CustomStylesheetTests.swift`, `Packages/TegelKit/Tests/TegelKitTests/UserCSSTests.swift`
+- Create: `Apps/Markdown/App/CustomStylesheet.swift`, `Apps/Markdown/AppTests/CustomStylesheetTests.swift`, `Packages/TegelKit/Tests/TegelKitTests/WebView/UserCSSTests.swift`
 - Modify: `Packages/TegelKit/Sources/TegelKit/RendererWebView.swift` and the file defining `RenderOptions`; `Renderer/src/page.js`; the settings view (A0 name: a "Custom stylesheet…" row under Appearance, Pro-gated, layout from `DESIGN.md`); `Localizable.xcstrings` (EN/NL/FR/AR); the FAQ (Quick Look ignores custom CSS; remote URLs are blocked)
 
 **Interfaces:**
@@ -350,7 +359,7 @@ test('footnotes take their direction at the section, never per item', () => {
 - **Decision:** stamp the exported PDF with PDFKit and Core Graphics (public APIs).
 
 **Files:**
-- Create: `Packages/TegelKit/Sources/TegelKit/PDFStamper.swift`, `Packages/TegelKit/Tests/TegelKitTests/PDFStamperTests.swift`
+- Create: `Packages/TegelKit/Sources/TegelKit/PDFStamper.swift`, `Packages/TegelKit/Tests/TegelKitTests/WebView/PDFStamperTests.swift` (its end-to-end test renders)
 - Modify: the PDF export call site (A0; plan 02's `ReaderController.swift`) — `stamp` runs on the `makePDFData` result before its one `data.write(to:)`, so no new write appears; a "Page numbers" toggle, `@AppStorage("TGPDFPageNumbers")`, default on; its accessory view (`DESIGN.md`); `Localizable.xcstrings`
 
 **Interfaces:**
@@ -421,15 +430,22 @@ func testRejectsNonPDF() { XCTAssertThrowsError(try PDFStamper.stamp(Data("no".u
 ### Task A6: v1.1 QA matrix → `docs/qa/v1.1-matrix.md`
 
 - [ ] **Step 1: Local (macOS 15, Intel, the build Mac).** `make check`, then the plan 05 matrix rows plus the new rows: math (inline, block, Arabic); footnotes (scroll, RTL); custom CSS (apply, delete the file, oversize); PDF header and numbers (A4, Letter, RTL document); both Shortcuts. Record pass/fail per row and the machine.
-- [ ] **Step 2: macOS 26 arm64.** `gh workflow run ci.yml --ref m07a-v1.1`, then `gh run watch --exit-status "$(gh run list --workflow ci.yml --branch m07a-v1.1 -L1 --json databaseId -q '.[0].databaseId')"` (a non-interactive `gh` needs the run id) → the macOS jobs are green; link the run URL. (Needs the user's `gh auth login`.)
-- [ ] **Step 3: macOS 27 arm64 on Scaleway** (M1, ≈ €2.64 for 24 h [F9]; purchase approval first). Install a notarised release candidate from `scripts/release.sh markdown 1.1.0-rc1 --no-upload`. Run the new rows plus the G0 timing for `g0-1mb.md` and a math-heavy file (< 1 s).
+- [ ] **Step 2: macOS 26 arm64.** (Needs the user's `gh auth login`.) `gh workflow run` creates the run asynchronously, so wait for a run id other than the newest one before the dispatch (plan 09 Task 11 Step 9's pattern; a non-interactive `gh run watch` needs the id):
+  ```bash
+  OLD=$(gh run list --workflow ci.yml --branch m07a-v1.1 -L1 --json databaseId -q '.[0].databaseId')
+  gh workflow run ci.yml --ref m07a-v1.1
+  for i in $(seq 30); do ID=$(gh run list --workflow ci.yml --branch m07a-v1.1 -L1 --json databaseId -q '.[0].databaseId'); [ -n "$ID" ] && [ "$ID" != "$OLD" ] && break; sleep 2; done
+  [ "$ID" != "$OLD" ] && gh run watch --exit-status "$ID"
+  ```
+  Expected: the macOS jobs are green; link the run URL.
+- [ ] **Step 3: macOS 27 arm64 on Scaleway** (M1, €3.19 incl. VAT for 24 h [F9], master H6; purchase approval first). Install a notarised release candidate from `scripts/release.sh markdown 1.1.0-rc1 --no-upload`. Run the new rows plus the G0 timing for `g0-1mb.md` and a math-heavy file (< 1 s).
 - [ ] **Step 4: Commit** the matrix.
 
 ### Task A7: Pipeline P, then release v1.1.0
 
 - [ ] **Step 1: Run Procedure P (master §11) for `m07a`.** `/cso` scope: KaTeX insertion and sanitisation, the `trust: false` options; user CSS (CSP, `textContent`, size cap, read-only bookmark); App Intents file input and temp files; the `readonly-gate` allowlist entry. Design review: the custom-CSS row, the export accessory, stamped pages.
 - [ ] **Step 2: Merge and push** (P step 11).
-- [ ] **Step 3: Release** (approval of this release). On `main`: `scripts/release.sh markdown 1.1.0 --no-upload`, then `--from-dmg <path>` after the A6 rows pass on that DMG (K7) → `spctl -a -vv` shows `accepted … source=Notarized Developer ID`. `curl -s https://downloads.tegelapps.com/<appcast path from A0> | grep -c '1.1.0'` ≥ 1. A Sparkle update from 1.0.x on the build Mac shows 1.1.0 in About.
+- [ ] **Step 3: Release** (approval of this release). On `main`: `scripts/release.sh markdown 1.1.0 --no-upload`, then `scripts/release.sh markdown 1.1.0 --yes --from-dmg <path>` after the A6 rows pass on that DMG (K7; `--yes` only after this release's approval, since without a terminal the prompt aborts) → `spctl -a -vv` shows `accepted … source=Notarized Developer ID`. `curl -s https://downloads.tegelapps.com/<appcast path from A0> | grep -c '1.1.0'` ≥ 1. A Sparkle update from 1.0.x on the build Mac shows 1.1.0 in About.
 - [ ] **Step 4: Release notes.** Update the release notes and site changelog (plan 04 path) and deploy (not a first deploy, so no approval). `curl -sI https://tegelapps.com/<changelog path>` → 200.
 
 ---
@@ -502,11 +518,11 @@ func testRejectsNonPDF() { XCTAssertThrowsError(try PDFStamper.stamp(Data("no".u
               CODE_SIGN_ENTITLEMENTS: Apps/Markdown/MAS/Markdown.entitlements, ENABLE_HARDENED_RUNTIME: YES }
       configs:
         Debug: { CODE_SIGN_STYLE: Manual, CODE_SIGN_IDENTITY: "-" }   # ad hoc, as the direct target: B0 creates no development certificate (CR-P2-10)
-        Release: { CODE_SIGN_STYLE: Automatic }                      # archive and export only
+        Release: { CODE_SIGN_STYLE: Automatic, CODE_SIGN_IDENTITY: "Apple Distribution" }   # archive and export only; overrides Release.xcconfig's Developer ID selector; mas.sh passes DEVELOPMENT_TEAM
   MarkdownMASQuickLook:   # app-extension; sources Apps/Markdown/QuickLook; bundle id com.tegelapps.markdown.quicklook; CODE_SIGN_ENTITLEMENTS Apps/Markdown/MAS/QuickLook.entitlements; same Debug/Release signing split
   MarkdownMASTests:       # bundle.unit-test; sources Apps/Markdown/MASTests; depends on MarkdownMAS; TEST_HOST = the MarkdownMAS app
 ```
-  Entitlements — app: `app-sandbox`, `files.user-selected.read-write`, `files.bookmarks.app-scope`, `network.client` (WebKit in a sandbox, FB6993802 [F5]). Quick Look: `app-sandbox` and `network.client` only. Without `temporary-exception.files.absolute-path.read-only`, Quick Look shows image placeholders [F5].
+  Entitlements — app: `app-sandbox`, `files.user-selected.read-write`, `files.bookmarks.app-scope`, `network.client` (WebKit in a sandbox, FB6993802 [F5]). Quick Look: `app-sandbox` and `network.client` only. As in the Developer ID build (master D5, K4), Quick Look has no `temporary-exception.files.absolute-path.read-only` and shows no local images [F5].
 - [ ] **Step 5: Implement.** `ProGate`: `#if UNLOCKED` → `isPro` is the constant `true` and `isProNow()` returns `true`. `DistributionChannel.current`: `#if MAS .mas #elseif SETAPP .setapp #else .direct`. The menu and app entry wrap the updater and licence items in `#if !UNLOCKED`. `ProUpsellView.swift` (which declares `UpsellFeature` and, after plan 08 Task 12, `UpsellContext` and calls `checkoutURL(ref:)`) matches the B0 Step 4 grep and moves to `Direct/`, so the `pro` `WindowGroup`, the `UpsellContext` environment value and every `openWindow(id: "pro", …)` call site (Open Folder…, folder drops, licence lapse, Export as PDF, the theme picker) also sit in `#if !UNLOCKED`; with `isPro == true` they never run there anyway (CR-P2-11). Step 6's MAS build is the check: a missed call site fails it with `cannot find 'UpsellFeature' in scope`.
 - [ ] **Step 6: Watch it pass.**
   ```bash
@@ -519,11 +535,11 @@ func testRejectsNonPDF() { XCTAssertThrowsError(try PDFStamper.stamp(Data("no".u
 
 ### Task B2: Quick Look image placeholder (only if A0 found none)
 
-**Files:** Modify `Renderer/src/page.js`, `Renderer/src/css/base.css`. Test: `UserCSSTests.swift` (adds `testBrokenImageBecomesPlaceholder`).
+**Files:** Modify `Renderer/src/page.js`, `Renderer/src/css/base.css`. Test: `WebView/UserCSSTests.swift` (adds `testBrokenImageBecomesPlaceholder`).
 
 **Interfaces:** Produces: a failed `<img>` is replaced by `<span class="img-placeholder" role="img" aria-label="<alt>"><alt></span>`.
 
-- [ ] **Step 1: Write the failing test.** Render `![Flow diagram](file:///nonexistent/x.png)`, wait for `rendered` + 300 ms → `document.querySelector('.img-placeholder').textContent == "Flow diagram"`.
+- [ ] **Step 1: Write the failing test.** Use a relative `src`, the real case: plan 01's sanitiser drops every `file:` URL, so a `file:` image has no `src`, never fires `error` and can't test this. Render `![Flow diagram](images/x.png)` twice: with `baseURL: nil` (Quick Look: the `src` stays relative and can't load), and with `baseURL` = a temp folder's `doc.md` that has no `images/` (the window: plan 02 rewrites the `src` to `tegel-doc:` and the handler answers 404). Each time, wait for `rendered` + 300 ms → `document.querySelector('img') == null` and `document.querySelector('.img-placeholder').textContent == "Flow diagram"`.
 - [ ] **Step 2: Watch it fail.** `swift test --package-path Packages/TegelKit --filter testBrokenImageBecomesPlaceholder` → FAIL (null).
 - [ ] **Step 3: Implement.** `page.js` adds an `error` listener per `img` that builds the span with `textContent` from `alt` (never `innerHTML`) and calls `replaceWith`.
 - [ ] **Step 4: Watch it pass.** `make renderer`, then re-run Step 2's command → PASS.
@@ -542,12 +558,13 @@ func testRejectsNonPDF() { XCTAssertThrowsError(try PDFStamper.stamp(Data("no".u
 - [ ] **Step 1: `ExportOptions-MAS.plist`:** `method` = `app-store-connect`; `signingStyle` = `automatic`; `teamID` = `__TEAM__` (filled by the script); `destination` = `export`; `uploadSymbols` = true; `manageAppVersionAndBuildNumber` = false.
 - [ ] **Step 2: `scripts/mas.sh`** (`set -euo pipefail`):
   - `[[ $1 =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ && $2 =~ ^[0-9]+$ ]] || { echo "usage: mas.sh <X.Y[.Z]> <build> [--upload]" >&2; exit 2; }`
+  - `: "${APPLE_TEAM_ID:?APPLE_TEAM_ID is empty}"` (Release.xcconfig leaves `DEVELOPMENT_TEAM` empty, and automatic signing can't archive without a team)
   - `xcodegen generate`
-  - `xcodebuild archive -scheme MarkdownMAS -configuration Release -archivePath build/MAS.xcarchive MARKETING_VERSION=$1 CURRENT_PROJECT_VERSION=$2 -allowProvisioningUpdates -authenticationKeyPath "$ASC_CI_API_KEY_PATH" -authenticationKeyID "$ASC_CI_API_KEY_ID" -authenticationKeyIssuerID "$ASC_CI_API_ISSUER_ID"`
+  - `xcodebuild archive -scheme MarkdownMAS -configuration Release -archivePath build/MAS.xcarchive MARKETING_VERSION=$1 CURRENT_PROJECT_VERSION=$2 DEVELOPMENT_TEAM="$APPLE_TEAM_ID" -allowProvisioningUpdates -authenticationKeyPath "$ASC_CI_API_KEY_PATH" -authenticationKeyID "$ASC_CI_API_KEY_ID" -authenticationKeyIssuerID "$ASC_CI_API_ISSUER_ID"`
   - `scripts/verify-store-build.sh "build/MAS.xcarchive/Products/Applications/Tegel Markdown.app" mas`
   - Copy the plist to `build/ExportOptions.plist`; `plutil -replace teamID -string "$APPLE_TEAM_ID"`; with `--upload`, also `plutil -replace destination -string upload`.
   - `xcodebuild -exportArchive -archivePath build/MAS.xcarchive -exportPath build/MAS-export -exportOptionsPlist build/ExportOptions.plist` plus the same auth flags.
-- [ ] **Step 3: Local dry run** (only if B0 allows Xcode 26.3). `. scripts/lib/env.sh && APPLE_TEAM_ID="$(envget APPLE_TEAM_ID)" ASC_CI_API_KEY_PATH="$(envget ASC_CI_API_KEY_PATH)" ASC_CI_API_KEY_ID="$(envget ASC_CI_API_KEY_ID)" ASC_CI_API_ISSUER_ID="$(envget ASC_CI_API_ISSUER_ID)" scripts/mas.sh 1.1.0 110`, then `pkgutil --check-signature build/MAS-export/*.pkg | grep -E "Mac Installer Distribution|3rd Party Mac Developer Installer"` → one match.
+- [ ] **Step 3: Local dry run** (only if B0 allows Xcode 26.3). `. scripts/lib/env.sh && APPLE_TEAM_ID="$(envget APPLE_TEAM_ID)" ASC_CI_API_KEY_PATH="$(envget ASC_CI_API_KEY_PATH)" ASC_CI_API_KEY_ID="$(envget ASC_CI_API_KEY_ID)" ASC_CI_API_ISSUER_ID="$(envget ASC_CI_API_ISSUER_ID)" scripts/mas.sh 1.1.0 110`, then `codesign -dv --verbose=2 "build/MAS.xcarchive/Products/Applications/Tegel Markdown.app" 2>&1 | grep -c "Authority=Apple Distribution"` → `1` (if `xcodebuild` rejects the `Apple Distribution` identity under automatic signing, record its error in the B0 doc and fix the MAS Release signing before Step 8's CI run), and `pkgutil --check-signature build/MAS-export/*.pkg | grep -E "Mac Installer Distribution|3rd Party Mac Developer Installer"` → one match.
 - [ ] **Step 4: Add the inputs guard to `check-guards.sh` and watch it fail (S24).** Plan 01's script already fails `make check` on an unpinned `uses:` (S25); this adds one rule: `${{ inputs.* }}` reaches a workflow only as a `NAME: ${{ inputs.x }}` env entry, never inline in `run:`. Plant first:
 ```bash
 mkdir -p .github/workflows && printf '      - run: echo ${{ inputs.version }}\n      VERSION: ${{ inputs.version }}\n      - env: { TAG: "${{ inputs.tag }}" }\n' > .github/workflows/planted.yml
@@ -610,7 +627,7 @@ jobs:
         run: security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" || true; rm -f "$RUNNER_TEMP/AuthKey.p8"
 ```
   Then `make test-shell` → exit 0 (the `VERSION: ${{ inputs.version }}` lines are the allowed form).
-- [ ] **Step 6: Secrets (human checkpoint H-M2).** The user exports both identities from Keychain Access as `.p12` files outside the repo and runs `gh auth login`. Then `gh secret set <NAME> < <file>` for `APPLE_TEAM_ID`, `MAS_DIST_CERT_P12_BASE64`, `MAS_INSTALLER_CERT_P12_BASE64`, `MAS_P12_PASSWORD`, `KEYCHAIN_PASSWORD`, `ASC_CI_API_KEY_ID`, `ASC_CI_API_ISSUER_ID`, `ASC_CI_KEY_P8_BASE64`. Check: `gh secret list` shows all 8 names.
+- [ ] **Step 6: Secrets (human checkpoint H-M2).** The user exports both identities from Keychain Access as `.p12` files outside the repo and runs `gh auth login`. The workflow runs `base64 --decode` on the three `*_BASE64` secrets, so encode those files first: `base64 -i <file> | gh secret set <NAME>` for `MAS_DIST_CERT_P12_BASE64` (the distribution `.p12`), `MAS_INSTALLER_CERT_P12_BASE64` (the installer `.p12`) and `ASC_CI_KEY_P8_BASE64` (the `.p8` at `ASC_CI_API_KEY_PATH`). The other five are stored raw: `gh secret set <NAME> < <file>` for `APPLE_TEAM_ID`, `MAS_P12_PASSWORD`, `KEYCHAIN_PASSWORD`, `ASC_CI_API_KEY_ID`, `ASC_CI_API_ISSUER_ID`. Check: `gh secret list` shows all 8 names.
 - [ ] **Step 7: Commit:** `scripts/mas.sh scripts/ExportOptions-MAS.plist scripts/check-guards.sh .github/workflows .env.example`, `build(mas): archive/export script, macos-26 CI with a temporary keychain, pinned actions` + trailer.
 - [ ] **Step 8: Land `mas.yml` on `main` (K13), then the CI dry run.** GitHub dispatches only workflows that exist on the default branch. As plan 09 Task 11 Step 9 lands `design-shots.yml`:
 
@@ -623,19 +640,20 @@ git commit -m "ci: MAS archive workflow, dispatch only" -m "Co-Authored-By: Clau
 
 ```bash
 git push origin main && git switch m07b-mas && git push -u origin m07b-mas
+OLD=$(gh run list --workflow mas.yml --branch m07b-mas -L1 --json databaseId -q '.[0].databaseId')
 gh workflow run mas.yml --ref m07b-mas -f version=1.1.0 -f build=110 -f xcode=<B0> -f upload=false
-ID=$(gh run list --workflow mas.yml --branch m07b-mas -L1 --json databaseId -q '.[0].databaseId')
-gh run watch --exit-status "$ID" && gh run view "$ID" --log | grep -c "verify-store-build: PASS"
+for i in $(seq 30); do ID=$(gh run list --workflow mas.yml --branch m07b-mas -L1 --json databaseId -q '.[0].databaseId'); [ -n "$ID" ] && [ "$ID" != "$OLD" ] && break; sleep 2; done
+[ "$ID" != "$OLD" ] && gh run watch --exit-status "$ID" && gh run view "$ID" --log | grep -c "verify-store-build: PASS"
 ```
 
-  Expected: success, then `1`. (About 20 macOS minutes [F7].)
+  `gh workflow run` creates the run asynchronously, so the loop waits up to 60 s for a run id other than the newest one before the dispatch (plan 09 Task 11 Step 9's pattern). Expected: success, then `1`. (About 20 macOS minutes [F7].)
 
 ### Task B4: App Store Connect record and listing
 
 **Files:** Create `docs/mas/listing.md`, `docs/mas/screenshots/0{1..5}.png`
 
 - [ ] **Step 1: Write `docs/mas/listing.md`.**
-  - **Text fields:** Name "Tegel Markdown" (≤ 30 chars; availability is checked when the record is created); subtitle ≤ 30; promotional text ≤ 170; description ≤ 4,000, stating honestly "Quick Look previews in this edition show placeholders for local images"; keywords ≤ 100.
+  - **Text fields:** Name "Tegel Markdown" (≤ 30 chars; availability is checked when the record is created); subtitle ≤ 30; promotional text ≤ 170; description ≤ 4,000, stating honestly "Quick Look previews show placeholders for local images" (true of every edition: master D5, K4); keywords ≤ 100.
   - **URLs:** support `https://tegelapps.com/faq/` (plan 04's FAQ, with plan 05's known issues); privacy `https://tegelapps.com/privacy`.
   - **Category:** Developer Tools (secondary: Productivity).
   - **Price:** USD base storefront at **$19.00**. Apple's grid offers rounded `.00` endings (developer.apple.com/news/?id=qzex35ch); if $19.00 isn't offered, use the nearest point ≤ $19. Record Apple's generated NL price.
@@ -709,7 +727,7 @@ Plan 06 creates the $29 bundle (Polar product, BNPL check, site copy at `site/co
 
 ### Task C3: `MarkdownSetapp` targets
 
-**Files:** Create `Apps/Markdown/Setapp/Markdown.entitlements`, `Apps/Markdown/Setapp/setappPublicKey.pem` (downloaded from the developer account; it's a public key), `Apps/Markdown/App/SetappStart.swift`. Modify `project.yml`.
+**Files:** Create `Apps/Markdown/Setapp/Markdown.entitlements`, `Apps/Markdown/Setapp/setappPublicKey.pem` (downloaded from the developer account; it's a public key), `Apps/Markdown/App/SetappStart.swift`. Modify `project.yml`, `.gitignore` (Step 2).
 
 **Interfaces:**
 - Consumes: `UNLOCKED`/`SETAPP` (B1); `verify-store-build.sh … setapp` (B1).
@@ -717,13 +735,14 @@ Plan 06 creates the $29 bundle (Polar product, BNPL check, site copy at `site/co
 
 - [ ] **Step 1: Watch the guard fail.** On the MarkdownMAS Debug build from B1: `scripts/verify-store-build.sh <path> setapp` → exit 1 with `FAIL: bundle id lacks -setapp`, `FAIL: no NSUpdateSecurityPolicy`, `FAIL: no setappPublicKey.pem`.
 - [ ] **Step 2: Add the targets.**
+  - **Un-ignore the public key first.** `.gitignore`'s `*.pem` line would make `git add` skip `setappPublicKey.pem` without a warning, and clean checkouts would then fail `verify-store-build.sh`. `git check-ignore -v Apps/Markdown/Setapp/setappPublicKey.pem; echo "exit=$?"` → `.gitignore:<n>:*.pem …` and `exit=0` (watched). Add `!Apps/Markdown/Setapp/setappPublicKey.pem` on a line below `*.pem`, then `git check-ignore Apps/Markdown/Setapp/setappPublicKey.pem; echo "exit=$?"` (no `-v`: verbose mode prints the matching `!` line and exits 0) → no output and `exit=1`.
   - `packages.Setapp: { url: https://github.com/MacPaw/Setapp-framework.git, exactVersion: <C0> }`; sources exclude the same three patterns as `MarkdownMAS`; `SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) SETAPP UNLOCKED"`; Developer ID signing and Hardened Runtime.
   - Info.plist adds `NSUpdateSecurityPolicy = { AllowProcesses = { MEHY5QF425 = [com.setapp.DesktopClient.SetappAgent] } }`.
   - App entitlements: the B1 MAS set plus `com.apple.security.temporary-exception.mach-lookup.global-name = [com.setapp.ProvisioningService]` (framework README). Quick Look reuses the **direct** Quick Look entitlements, since the Setapp edition is Developer ID [F5].
 - [ ] **Step 3: Implement `SetappStart.run()`.** `SetappManager.shared.start(with: .default)` if C0 confirms macOS still needs it (the README's "Start" section shows it for iOS), then `SetappManager.shared.showReleaseNotesWindowIfNeeded()`. No "Rate on App Store" or store links (Review Guidelines §5.5).
 - [ ] **Step 4: Watch it pass.** `xcodegen generate && xcodebuild build -scheme MarkdownSetapp -configuration Release -destination 'platform=macOS'`, then `scripts/verify-store-build.sh <path> setapp` → PASS. `nm -m <executable> | grep -c SetappManager` ≥ 1; if 0, add `OTHER_LDFLAGS: -force_load "$(BUILT_PRODUCTS_DIR)/libSetapp.a"` (docs.setapp.com/docs/setting-up-the-framework-1).
 - [ ] **Step 5: Setapp test flow** (docs.setapp.com/docs/testing-your-application). Install the Setapp desktop app and sign in with the developer test member account; launch the build → it activates with no licence UI. Record the result in `docs/qa/setapp.md`.
-- [ ] **Step 6: Commit:** `project.yml Apps/Markdown docs/qa/setapp.md`, `feat(setapp): MarkdownSetapp targets with the Setapp framework, no Sparkle or licensing` + trailer.
+- [ ] **Step 6: Commit:** `project.yml .gitignore Apps/Markdown docs/qa/setapp.md`, `feat(setapp): MarkdownSetapp targets with the Setapp framework, no Sparkle or licensing` + trailer.
 
 ### Task C4: Setapp packaging and upload
 
@@ -851,8 +870,8 @@ extension KeyboardShortcuts.Name { static let showActionBar = Self("showActionBa
 ### Task D3: Scaffold and `TextTools`
 
 **Files:**
-- Create: `Apps/Select/App/{SelectApp.swift,TextTools.swift}`, `Apps/Select/Tests/TextToolsTests.swift`
-- Modify: `project.yml` — targets `Select` and `SelectTests`; packages `KeyboardShortcuts` (`exactVersion: 3.1.0` or the D0 value), `TegelKit` (product `TegelStore`) and Sparkle; `ENABLE_APP_SANDBOX: NO`, `ENABLE_HARDENED_RUNTIME: YES`, `LSUIElement: true`, the bundle id from D1.
+- Create: `Apps/Select/App/{SelectApp.swift,TextTools.swift}`, `Apps/Select/App/AppIcon.icon/` (Step 4b), `Apps/Select/Tests/TextToolsTests.swift`
+- Modify: `project.yml` — targets `Select` and `SelectTests`; packages `KeyboardShortcuts` (`exactVersion: 3.1.0` or the D0 value), `TegelKit` (product `TegelStore`) and Sparkle; `ENABLE_APP_SANDBOX: NO`, `ENABLE_HARDENED_RUNTIME: YES`, `LSUIElement: true`, `ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon`, the bundle id from D1.
 
 **Interfaces:** `TextTools` and `CaseStyle`, as in the contract.
 
@@ -892,7 +911,8 @@ func testSearchURLEncodesQueryAndAcceptsOnlyHTTPS() {
   - `markdown`: escapes `\ * _ [ ] ` #` in plain text; wraps bold and italic runs; emits links only for `http`, `https` and `mailto`.
   - `searchURL`: `query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&#+=?")))`, substituted for `%s`; return the `URL` only if its `scheme == "https"`.
 - [ ] **Step 4: Watch it pass.** Re-run Step 2's command → 4 pass.
-- [ ] **Step 5: Commit** `project.yml` and `Apps/Select` (`feat(select): scaffold and text tools`, plus the co-author line).
+- [ ] **Step 4b: App icon.** Plan 09's guard `every app icon compiles to all ten macOS sizes` (in `make check`) requires an `AppIcon.icon` in every `Apps/*/App`. Watch it fail first: `(cd Renderer && bun test test/design.test.js)` → FAIL on `["Select", false]`. Create `Apps/Select/App/AppIcon.icon/` (`icon.json` + `Assets/*.svg`): a plain geometric tile (rule 3: no face, figure, animal or mascot) built to plan 09 Task 9's icon rules (1024 canvas of square, unmasked layers; strokes ≥ 136 and gaps ≥ 168; filled shapes with radius ≥ 24) and `DESIGN.md`'s icon section and colours. The user approves the concept before this commit. Re-run → PASS; `xcodegen generate && make build`, then `/usr/libexec/PlistBuddy -c 'Print CFBundleIconName'` on the built `Select` app → `AppIcon`.
+- [ ] **Step 5: Commit** `project.yml` and `Apps/Select` (`feat(select): scaffold, text tools and app icon`, plus the co-author line).
 
 ### Task D4: `SelectionReader` and the permission
 
@@ -945,14 +965,15 @@ func testDismissMonitorWatchesNoKeys() { XCTAssertTrue(ActionPanel.dismissMask.i
 
 ### Task D6: Onboarding, settings, licence, updates, localisation
 
-**Files:** Create `Apps/Select/App/{OnboardingView.swift,SettingsView.swift,MenuBar.swift}`, `Apps/Select/App/Localizable.xcstrings` (EN/NL/FR/AR), `Config/Select-{Debug,Release}.xcconfig` (D16 keys for App 3's Polar product)
+**Files:** Create `Apps/Select/App/{OnboardingView.swift,SettingsView.swift,MenuBar.swift}`, `Apps/Select/App/Localizable.xcstrings` (EN/NL/FR/AR), `Config/Select-{Debug,Release}.xcconfig` (D16 keys for App 3's Polar product), `scripts/entitlements/select.plist`. Modify `scripts/release.sh`, `scripts/release_test.sh` (Step 3b)
 
 - [ ] **Step 1: Write the failing test.** `testOnboardingShowsWhenUntrusted`: with `OnboardingModel(isTrusted: { false })`, `MenuBarModel(onboarding:).showsOnboarding == true`; with `{ true }`, false. Then `xcodebuild test -scheme Select -destination 'platform=macOS' -only-testing:SelectTests` → FAIL (`MenuBarModel` missing).
 - [ ] **Step 2: Implement.**
   - Onboarding explains in one sentence why Accessibility is needed ("to read the text you select, only when you press your shortcut"); one button calls `request()` and opens `settingsURL`.
   - Settings: the shortcut recorder, the search URL template (refused with an inline message when `searchURL(template:query: "test")` is nil), the licence pane (TegelStore), Sparkle "Check for Updates". The menu-bar item: Settings and Quit.
 - [ ] **Step 3: Watch it pass.** `xcodebuild test -scheme Select -destination 'platform=macOS'` → all SelectTests pass.
-- [ ] **Step 4: Manual QA → `docs/qa/app3.md`:** the D1 spike apps; a password field shows "Nothing selected"; revoking the permission brings onboarding back; a Sparkle update 1.0.0-b1 → b2 keeps the Accessibility permission (same Team ID and designated requirement); an Option-only shortcut is refused or warned about on macOS 15.
+- [ ] **Step 3b: Add App 3 to `release.sh`** (Step 4's b1 and b2 come from it), as plan 06 Task 14 Step 1 adds `data`: a `release_test.sh` `print-config` case for `select`, watched failing (`unknown app: select`); the row `select) SLUG=select SCHEME=Select NAME=TegelSelect VOL="Tegel Select";;`; `scripts/entitlements/select.plist` holding the Release build's signed set as D2 reviewed it; `release_test.sh` → `0 failed`; commit the three files (`release.sh` needs a clean tree).
+- [ ] **Step 4: Manual QA → `docs/qa/app3.md`:** the D1 spike apps; a password field shows "Nothing selected"; revoking the permission brings onboarding back; a Sparkle update 1.0.0-b1 → b2 (both built by Step 3b's `release.sh select`) keeps the Accessibility permission (same Team ID and designated requirement); an Option-only shortcut is refused or warned about on macOS 15.
 - [ ] **Step 5: Commit.**
 
 ### Task D7: Polar product, site page, release, launch (outward-facing)
@@ -961,7 +982,7 @@ func testDismissMonitorWatchesNoKeys() { XCTAssertTrue(ActionPanel.dismissMask.i
   - **BNPL check** (rule 7): run plan 05 Task 2 Step 11's procedure, unchanged, on the live App 3 checkout link before it goes public; screenshots to `docs/reviews/m07d-polar/checkout-{safari,chrome}-{nl,us}.png`. Its stop rule applies (B17).
   - The product carries plan 05's opt-in field (`marketing_opt_in`, unticked) and a EUR price set by the user (K10).
 - [ ] **Step 2: Site.** `site/content/<slug from D1>.md`: a permission explanation, a privacy statement (what is read, and when), a silent captioned demo (rules 2 and 4). Deploy; URL → 200.
-- [ ] **Step 3: Release.** First add App 3 to `release.sh` as plan 06 Task 14 Step 1 adds `data`: a `release_test.sh` `print-config` case for `select`, watched failing (`unknown app: select`); the row `select) SLUG=select SCHEME=Select NAME=TegelSelect VOL="Tegel Select";;`; `scripts/entitlements/select.plist` holding the Release build's signed set as D2 reviewed it; `release_test.sh` → `0 failed`; commit the three files (`release.sh` needs a clean tree). Then `scripts/release.sh select 1.0.0 --no-upload`, QA on that DMG, then `--from-dmg <path>` (approval) → `spctl -a -vv` shows `accepted`.
+- [ ] **Step 3: Release.** `select` joined `release.sh` in D6 Step 3b. `scripts/release.sh select 1.0.0 --no-upload`, QA on that DMG, then `scripts/release.sh select 1.0.0 --yes --from-dmg <path>` (approval; `--yes` only after it, since without a terminal the prompt aborts) → `spctl -a -vv` shows `accepted`.
 - [ ] **Step 4: Launch Tue 20 Jul** with plan 08's playbook: PH, r/macapps (≥ 30 days after our last post), Show HN, IH, and a cross-sell email to App 1/2 buyers who ticked the checkout opt-in (`marketing_opt_in`, K9), sent by plan 08 (it owns MailerLite) under the segment rule from plan 06 Task 15. Each post and email is approved first.
 
 ### Task D8: Pipeline P for `m07d`
@@ -986,7 +1007,7 @@ func testDismissMonitorWatchesNoKeys() { XCTAssertTrue(ActionPanel.dismissMask.i
 
 ### Task E2: Beta matrix on Scaleway → `docs/qa/macos28-beta.md`
 
-- [ ] **Step 1: Lease** (purchase approval: M1, 24 h, ≈ €2.64 [F9]). Install the macOS 28 beta (E0 route) and record `sw_vers`.
+- [ ] **Step 1: Lease** (purchase approval: M1, 24 h, €3.19 incl. VAT [F9], master H6). Install the macOS 28 beta (E0 route) and record `sw_vers`.
 - [ ] **Step 2: Run the matrix.** Install the latest notarised DMGs of App 1, App 2 (and App 3 if shipped). Run every plan 05 row plus the A6 and D6 rows, and the G0 timing for `g0-1mb.md` in the window and in `qlmanage -p`. With our extension disabled (`pluginkit -e ignore -i com.tegelapps.markdown.quicklook`), record whether the system now previews `.md` itself (risk 4 evidence), then re-enable it.
 - [ ] **Step 3: Record and commit.** One row per check: pass/fail, the machine (Scaleway M1, macOS 28 beta N), and a screenshot path for failures.
 
@@ -1000,7 +1021,7 @@ func testDismissMonitorWatchesNoKeys() { XCTAssertTrue(ActionPanel.dismissMask.i
 ### Task E4: Pipeline P, release by Tue 31 Aug 2027
 
 - [ ] **Step 1: Run Procedure P (master §11) for `m07e`.** `/cso` scope: whatever the fixes touched. Design review if any UI changed.
-- [ ] **Step 2: Merge, push, release.** `scripts/release.sh markdown <v>` (and `data`, `select`); the MAS update via `mas.yml upload=true`; the Setapp build via C4 — each with approval.
+- [ ] **Step 2: Merge, push, release.** `scripts/release.sh markdown <v> --yes` (and `data`, `select`; `--yes` only after that release's approval, since without a terminal the prompt aborts); the MAS update via `mas.yml upload=true`; the Setapp build via C4 — each with approval.
 - [ ] **Step 3: September RC.** Re-run only the previously failing rows on the release candidate (reuse the lease within 24 h, otherwise a new lease with approval) → `docs/qa/macos28-rc.md`.
 
 ---
@@ -1036,23 +1057,24 @@ Plan 03 already binds each key to one benefit (D1): `PolarConfig.benefitID: Stri
 **Interfaces (contract changes, listed at the end):**
 - `public struct ValidatedLicense: Sendable, Equatable { public let expiresAt: Date?; public let benefitID: String }`
 - `public struct Activation: Sendable, Equatable { public let id: String; public let benefitID: String }`; `PolarClient.activate(key:label:) async throws -> Activation`, read from the response's `license_key.benefit_id`. `LicenseManager` stores `benefitID` in the `StoredLicense` **at activation** (CX16), so a new v2 key has `hasV2` before its first validate.
-- `PolarClient.validate(key:activationID:) async throws -> ValidatedLicense`. It sends the stored licence's `benefitID` as `benefit_id`. Only a legacy item (nil, written before F1 by a build that accepted only the v1 benefit) sends the v1 id.
+- `PolarClient.validate(key:activationID:benefitID:) async throws -> ValidatedLicense`. It sends its `benefitID` argument as `benefit_id`; the client holds no stored licence, so `LicenseManager.refresh` chooses the id: the stored licence's `benefitID`, or for a legacy item (nil, written before F1 by a build that accepted only the v1 benefit) the v1 id, the single member of `benefitIDs.subtracting(v2BenefitIDs)` (plan 03 binds one v1 benefit per app; F0 Step 2).
 - `StoredLicense` gains `public var benefitID: String?` (decoded with `decodeIfPresent`, so v1.x Keychain items read as nil and fill on the next 200).
 - `PolarConfig.benefitID: String` becomes `public let benefitIDs: Set<String>`, plus `public let v2BenefitIDs: Set<String>`. `LicenseManager` gains `public var hasV2: Bool`. `PolarError.wrongProduct` and its copy are plan 03's, unchanged.
 
 - [ ] **Step 1: Write the failing tests** (reusing plan 03's URLProtocol stub and its `makeManager(…, now:)` helper over the designated `LicenseManager(client:keychain:now:)`; every stamped date is relative to plan 03's `t0`, and every `refresh` passes `now:`, so no test reads the real clock):
-  - `testValidateReturnsBenefitID`: a stubbed 200 `{"benefit_id":"b-v2","expires_at":null,…}` → `ValidatedLicense(expiresAt: nil, benefitID: "b-v2")`.
+  - `testValidateReturnsBenefitID`: `validate(key:activationID:benefitID: "b-v2")` against a stubbed 200 `{"benefit_id":"b-v2","expires_at":null,…}` → the request body's `benefit_id == "b-v2"`, and it returns `ValidatedLicense(expiresAt: nil, benefitID: "b-v2")`.
   - `testActivateAcceptsAnyBenefitInTheSets`: activate → `{"id":"act1","license_key":{"benefit_id":"b-v2"}}` with `"b-v2"` ∈ `v2BenefitIDs` → returns `Activation(id: "act1", benefitID: "b-v2")`, no deactivate.
   - `testActivateStoresBenefitIDAtOnce` (CX16): after that activate, `keychain.load()?.benefitID == "b-v2"` and `hasV2 == true` with no validate call; the next `refresh()` sends `benefit_id == "b-v2"`, never the v1 id.
   - `testActivateRejectsBenefitOutsideBothSets`: `{"id":"act1","license_key":{"benefit_id":"b-data"}}` → throws `.wrongProduct`; the stub recorded `deactivate` with `activation_id == "act1"`; `keychain.load() == nil` (plan 03's behaviour, now against the sets).
   - `testV1KeyIsProNotV2`: benefit `"b-v1"` ∈ `benefitIDs` → `isPro`, `!hasV2`.
   - `testV2KeyIsProAndV2`: benefit `"b-v2"` ∈ `v2BenefitIDs` → both true.
   - `testLapsedV2KeyHasNoV2`: `lastValidatedAt = t0`, the manager at `now: t0 + 31 * 86_400`, network down, `refresh(now: t0 + 31 * 86_400)` → `hasV2 == false`.
-  - `testLegacyStoredLicenseDecodes`: JSON without `benefitID` decodes with `benefitID == nil`; `isPro` unchanged within grace.
+  - `testLegacyStoredLicenseDecodes`: JSON without `benefitID` decodes with `benefitID == nil`; `isPro` unchanged within grace; its next `refresh` sends `benefit_id == "b-v1"`.
   - `test404StillFallsIntoGrace`: the [F3d] invariant is unchanged.
 - [ ] **Step 2: Watch it fail.** `swift test --package-path Packages/TegelKit --filter BenefitTests` → FAIL to compile (`ValidatedLicense` undefined).
 - [ ] **Step 3: Implement.**
   - Decode `benefit_id` from validate, and `license_key.benefit_id` from activate; `LicenseManager.activate` writes it into the new `StoredLicense`.
+  - `validate` takes `benefitID:` and `refresh` passes it as the Interfaces say; plan 03's `validate` tests (`validateSendsExactBodyAndReturnsExpiry` and the rest) pass `benefitID: "ben-1"`, so their expected bodies are unchanged.
   - `activate`: plan 03's check against `license_key.benefit_id`, widened to `benefitIDs ∪ v2BenefitIDs`; on a miss it still deactivates and throws `.wrongProduct`.
   - `refresh` stores `benefitID` on each 200. `hasV2`: `state` is `.pro(l)` with `l.benefitID ∈ v2BenefitIDs`. `PolarConfig.fromInfoPlist` splits `TGPolarBenefitIDs` and `TGPolarV2BenefitIDs` on spaces.
 - [ ] **Step 4: Watch it pass.** `swift test --package-path Packages/TegelKit` → all pass, including plan 03's binding and grace tests. Watch the CX16 guard fail: make `LicenseManager.activate` store `benefitID: nil` → `testActivateStoresBenefitIDAtOnce` fails; restore. `xcodegen generate && make build`, then `/usr/libexec/PlistBuddy -c 'Print TGPolarBenefitIDs'` on each built app → its own benefit id(s), never empty.
@@ -1072,13 +1094,14 @@ Plan 03 already binds each key to one benefit (D1): `PolarConfig.benefitID: Stri
 **Files:** Create `scripts/v2/upgrade-codes.js`, `scripts/v2/upgrade-codes.test.js`
 
 **Interfaces:**
-- `planDiscounts(orders, { v2ProductId: string, amountCents: number, existingCodes: Set<string> }) -> Array<{ customerId, email, code, body }>`, where `body = { name, type: 'fixed', amounts: { usd: amountCents }, duration: 'once', code, max_redemptions: 1, products: [v2ProductId] }`.
-- CLI `bun scripts/v2/upgrade-codes.js --v2-product <id> --amount <cents> [--apply]` (dry run by default). Orders are read with `POLAR_ACCESS_TOKEN`; `--apply` posts discounts with `POLAR_DISCOUNTS_TOKEN`, a one-off token with scope `discounts:write` only, created for this run and deleted after it (K8, S18). Both are passed one at a time (K1).
+- `upgradeBasisPoints({ usd: [fullCents, upgradeCents], eur: [fullCents, upgradeCents] }) -> number`: `Math.round(10000 × (full − upgrade) / full)` from the USD pair. It throws unless the EUR pair gives the same upgrade price to the cent (`Math.round(fullEUR × (10000 − bp) / 10000) === upgradeEUR`). Every Polar product carries a EUR price beside the USD one (master), and a percentage discount applies in either checkout currency, where a USD-only fixed amount would fail or not apply on a EUR checkout.
+- `planDiscounts(orders, { v2ProductId: string, basisPoints: number, existingCodes: Set<string> }) -> Array<{ customerId, email, code, body }>`, where `body = { name, type: 'percentage', basis_points: basisPoints, duration: 'once', code, max_redemptions: 1, products: [v2ProductId] }`. Before Step 1, check every body field name against Polar's create-discount API docs (polar.sh/docs/api-reference/discounts/create) and use the names they give.
+- CLI `bun scripts/v2/upgrade-codes.js --v2-product <id> --full <usd cents>,<eur cents> --upgrade <usd cents>,<eur cents> [--apply]` (dry run by default): the v2 prices and upgrade prices the user set in F0, in both currencies. Orders are read with `POLAR_ACCESS_TOKEN`; `--apply` posts discounts with `POLAR_DISCOUNTS_TOKEN`, a one-off token with scope `discounts:write` only, created for this run and deleted after it (K8, S18). Both are passed one at a time (K1).
 
-- [ ] **Step 1: Write the failing tests.** Three v1 orders from two customers (one a bundle order) → 2 plans. Codes are unique and match `^[A-HJ-NP-Z2-9]{10}$`. Each `body.products` equals `[v2ProductId]` and `max_redemptions` is 1. A customer whose name already appears in `existingCodes` is skipped (idempotent re-run). Refunded orders are excluded.
+- [ ] **Step 1: Write the failing tests.** Three v1 orders from two customers (one a bundle order) → 2 plans. Codes are unique and match `^[A-HJ-NP-Z2-9]{10}$`. Each `body` equals `{ name, type: 'percentage', basis_points: bp, duration: 'once', code, max_redemptions: 1, products: [v2ProductId] }` exactly (no `amounts`). `upgradeBasisPoints({ usd: [2900, 1500], eur: [2900, 1500] })` → `4828`; `{ usd: [2900, 1500], eur: [2700, 1500] }` throws (the EUR checkout would charge €13.96, not the stated €15). A customer whose name already appears in `existingCodes` is skipped (idempotent re-run). Refunded orders are excluded.
 - [ ] **Step 2: Watch it fail.** `bun test scripts/v2` → FAIL (module missing).
 - [ ] **Step 3: Implement.** Codes come from `crypto.getRandomValues`. `--apply` calls `POST /v1/discounts/` and writes `local-docs/v2/codes.csv` (gitignored; it holds emails).
-- [ ] **Step 4: Watch it pass, then a sandbox run.** `bun test scripts/v2` → PASS. A sandbox `--apply` against a sandbox v2 product: one code checks out at the upgrade price, and a second use is refused.
+- [ ] **Step 4: Watch it pass, then a sandbox run.** `bun test scripts/v2` → PASS. A sandbox `--apply` against a sandbox v2 product with both prices: one code checks out at the USD upgrade price from a USD checkout (record how that currency was reached: Polar picks it by geolocation), another at the EUR upgrade price from a EUR checkout (the build Mac's Dutch IP, as in plan 04 Task 14 Step 3), and a second use of either is refused. If a total differs from the stated upgrade price, stop: the site would state a price Polar doesn't charge.
 - [ ] **Step 5: Live.** The user creates `POLAR_DISCOUNTS_TOKEN` (`discounts:write` only) and it goes into `.env` with `envset`. The live run (approval of the live discounts); the owner email through plan 08's MailerLite buyer groups to opted-in owners only (K9; approval), stating the v2 price, the upgrade price, and that v1 keeps working. Owners who didn't opt in get their code on request through `hello@tegelapps.com`, which the v2 page says.
 - [ ] **Step 5b 🔒: Delete the one-off token.** Revoke it in the Polar dashboard, then `. scripts/lib/env.sh; envset POLAR_DISCOUNTS_TOKEN ''; [ -z "$(envget POLAR_DISCOUNTS_TOKEN)" ] && echo gone`. Expected: `gone`.
 - [ ] **Step 6: Commit** `scripts/v2`.
@@ -1100,13 +1123,13 @@ Row 14 accepted and applied to plan 08 Task 4 Step 8 and Task G1 (27 Oct); histo
 | 2 | §3.2/§3.3: `RenderOptions.userCSS: String?` and JS `opts.userCSS`, injected as the last `<style id="tegel-user-css">` under the unchanged CSP | Custom CSS | A3 |
 | 3 | App seam: `ProGate.isProNow()` (static, `@MainActor`) beside `EnvironmentValues.isPro`, plus `EnvironmentValues.hasV2` | App Intents run outside the SwiftUI environment; v2 gating | A5, F2 |
 | 4 | §3.1 layout: `Apps/Markdown/App/Direct/`, `Apps/Markdown/{MAS,MASTests,Setapp}/`, `Apps/Select/`, `scripts/gates/products.json`, `scripts/v2/`, `scripts/{mas.sh,verify-store-build.sh,verify-no-keylogging.sh}`, `.github/workflows/mas.yml`. Gate counting extends plan 05's `polar_sales.py` (no second counter, no Makefile change; X22) | Store editions, App 3, gate tooling | G0, G1, B1, B3, C3, D3 |
-| 5 | D5 entitlements gain two variants: MAS (no temporary exceptions; the Quick Look extension loses the absolute-path read-only exception) and Setapp (adds `mach-lookup` `com.setapp.ProvisioningService`) | Guideline 2.4.5; Setapp README | B1, C3 |
+| 5 | D5 entitlements gain two variants: MAS (no temporary exceptions; the Quick Look extension keeps D5's set, which has had no absolute-path read-only exception since K4) and Setapp (adds `mach-lookup` `com.setapp.ProvisioningService`) | Guideline 2.4.5; Setapp README | B1, C3 |
 | 6 | Swift compilation conditions `UNLOCKED`, `MAS`, `SETAPP` | Drop TegelStore and Sparkle at compile time | B1, C3 |
-| 7 | TegelStore: `ValidatedLicense`; `validate` returns it; `StoredLicense.benefitID: String?`; plan 03's `PolarConfig.benefitID` generalised to `benefitIDs`/`v2BenefitIDs`; `LicenseManager.hasV2`. D16: `TGPolarBenefitID` → `TGPolarBenefitIDs`, plus `TGPolarV2BenefitIDs`; build settings `TG_POLAR_BENEFIT_IDS_<APP>`, `TG_POLAR_V2_BENEFIT_IDS_MARKDOWN`. `PolarError.wrongProduct` already exists (plan 03) | v2 (wrong-app keys are already rejected by plan 03) | F1 |
+| 7 | TegelStore: `ValidatedLicense`; `validate(key:activationID:benefitID:)` returns it, with the benefit id chosen by `LicenseManager`; `StoredLicense.benefitID: String?`; plan 03's `PolarConfig.benefitID` generalised to `benefitIDs`/`v2BenefitIDs`; `LicenseManager.hasV2`. D16: `TGPolarBenefitID` → `TGPolarBenefitIDs`, plus `TGPolarV2BenefitIDs`; build settings `TG_POLAR_BENEFIT_IDS_<APP>`, `TG_POLAR_V2_BENEFIT_IDS_MARKDOWN`. `PolarError.wrongProduct` already exists (plan 03) | v2 (wrong-app keys are already rejected by plan 03) | F1 |
 | 8 | Global constraint "No Accessibility…" scoped to Apps 1–2. App 3 may use Accessibility only: no event tap, no Input Monitoring, no key monitor. **NO-GO until the user signs it off explicitly** (D2) | BUSINESS-PLAN §7.2, §14 backlog #1 | D |
 | 9 | Product rule 1 ("No telemetry") gains a Setapp-edition exception, **only if the user signs C2**; NO-GO until then | The Setapp framework collects usage, performance and device data | C2 |
-| 10 | `scripts/release.sh` accepts the apps `markdown-setapp` (zip; no DMG, appcast or R2) and `select` | Setapp packaging; App 3 | C4, D7 |
-| 11 | TegelStore: `PolarConfig.finalBuild` (Info.plist `TGFinalBuild`, build setting `TG_FINAL_BUILD`); `refresh()` makes no call and `isPro` holds for any stored licence when it's set. Master: every stop path runs Procedure S | K14: a stop never strands a buyer | G7 |
+| 10 | `scripts/release.sh` accepts the apps `markdown-setapp` (zip; no DMG, appcast or R2) and `select` | Setapp packaging; App 3 | C4, D6 |
+| 11 | TegelStore: `PolarConfig.finalBuild` (Info.plist `TGFinalBuild`, build setting `TG_FINAL_BUILD`); `refresh()` makes no call and any stored licence reads `.pro` when it's set (never `.lapsed`, so the Licence tab offers no Check Again or Remove Licence…, and the key is kept). Master: every stop path runs Procedure S | K14: a stop never strands a buyer | G7 |
 | 12 | `PDFStamper.stamp(_:header:) -> Data`, in memory, applied between plan 02's `makePDFData` and its one write | No new file write; `readonly-gate` unchanged | A4 |
 | 15 | `PolarClient.activate` returns `Activation { id, benefitID }` and the benefit id is stored at activation | CX16 | F1 |
 
@@ -1114,7 +1137,7 @@ Row 14 accepted and applied to plan 08 Task 4 Step 8 and Task G1 (27 Oct); histo
 
 1. **Setapp:** accept the Setapp edition's usage reporting as a disclosed exception to rule 1, or skip Setapp? (C2; default no.)
 2. **MAS price:** $19.00 in the USD storefront, and is Apple's auto-generated euro price acceptable? (B4)
-3. **v2 prices:** the v2 list price and the v1-owner upgrade price. (F0)
+3. **v2 prices:** the v2 list price and the v1-owner upgrade price, each in USD and EUR, with the same upgrade percentage in both (F0, F3).
 4. **App 3:** name, price ($15?), trigger, and whether a clipboard fallback is acceptable (D1); and the Accessibility-API exception (CR-8, D2; default NO-GO until you sign it off).
 5. **G2 counting:** do bundle sales count as "App 1 sales"? (G2; the plan counts them and flags it when it decides the outcome.)
 6. **G3 STOP:** the plan follows BUSINESS-PLAN §12 and keeps the apps on sale with a "Maintenance only" note; Task G7 (stop sales, then final builds) runs when maintenance ends. Or stop sales at G3 itself? (Default: keep on sale.)

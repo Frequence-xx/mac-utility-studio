@@ -50,7 +50,7 @@ Master §2/§3 and `CLAUDE.md` apply (product rules 1–9, design standard, appr
 - **New `.env` keys:**
   - `MAILERLITE_API_TOKEN` (local scripts only) and `MAILERLITE_API_TOKEN_PAGES` (the Pages secret only): two tokens, so either can be revoked alone (K8, S18);
   - `MAILERLITE_GROUP_WAITLIST`, `MAILERLITE_GROUP_BUYERS_MARKDOWN`, `MAILERLITE_GROUP_BUYERS_DATA`;
-  - `CLOUDFLARE_KV_WAITLIST_ID` (the waitlist's KV namespace id; not secret).
+  - `CLOUDFLARE_KV_WAITLIST_ID` and `CLOUDFLARE_KV_WAITLIST_PREVIEW_ID` (the production and preview KV namespace ids; not secret).
 - **Evidence honesty:** every number in `docs/growth/` names its source and date. Counts that include bots or updates say so.
 - **Owners:** **C** = Claude, **U** = the user.
 - **Commits:** "Commit: `<paths>`, `<msg>` + trailer" means `git add <paths> && git commit -m "<msg>" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`. Explicit paths, never `-A` (B2).
@@ -60,13 +60,15 @@ Master §2/§3 and `CLAUDE.md` apply (product rules 1–9, design standard, appr
 1. **Subscription bombing through the waitlist.** A script posts strangers' addresses, and each one gets a confirmation mail. Expected:
    - a foreign `Host` (anything but `tegelapps.com`/`www.tegelapps.com` in production, so `*.pages.dev` too) or `Origin` gets 403;
    - a filled honeypot sends nothing;
-   - past the global daily cap (KV), or for an address already posted in the last 24 h (KV cooldown), the function returns its "try later" or "check your email" page **without calling MailerLite**; a KV error fails closed;
+   - past 3 sign-ups a day from one client IP (KV, hashed), past the global daily cap (KV), or for an address already posted in the last 24 h (KV cooldown), the function returns its "try later" or "check your email" page **without calling MailerLite**; a KV error fails closed;
+   - a body over 2,048 bytes gets 413 before it is read in full, with or without `Content-Length`;
    - more than 5 POSTs in 10 s from one IP get 429 (the Cloudflare Free rate-limiting rule: 1 rule, counted by IP, 10 s period, path matching, per developers.cloudflare.com/waf/rate-limiting-rules).
 
    *(Task 7 tests; Task 8 Step 6.)*
 2. **Consent leakage.** A buyer who didn't tick the opt-in, was refunded, or unsubscribed still gets a lifecycle email. Expected: never.
    - The sync adds only `marketing_opt_in == true` (K9).
    - The sync reconciles every order since launch each day, so a refund on day 13 still removes the buyer, and the removal cancels queued sends.
+   - A buyer whose data was erased on request is never re-created by the next sync (K10).
    - The sync never sends `resubscribe: true`. MailerLite: unsubscribed subscribers "can only be reactivated through the app, a form, or a landing page" (developers.mailerlite.com/docs/subscribers).
 
    *(Task 14 tests.)*
@@ -92,7 +94,7 @@ Master §2/§3 and `CLAUDE.md` apply (product rules 1–9, design standard, appr
 | Waitlist | confirmed subscribers in `waitlist` | ≥ 150 (central ≈ 60, see Task 10) | Mon 7 Dec | MailerLite API |
 | Launch | App 1 paid sales 8 Dec–7 Jan | ≥ 47 (G1 passes at 30) | Thu 7 Jan | `polar_sales.py` |
 | In-app | share of sales with an `app-*` ref | ≥ 30% | Thu 7 Jan | `kpi.py` by-ref |
-| Free tool | GSC impressions on the tool page / 30 d | ≥ 500 | Mon 8 Mar | GSC CSV |
+| Free tool | GSC impressions on the tool page / 30 d | ≥ 500 | Mon 8 Mar | GSC `Pages.csv` (`kpi.py`, `TOOL_PAGES`) |
 | SEO | GSC impressions / 30 d | ≥ 10,000 | Mon 8 Mar (G2) | GSC CSV |
 | AI search | prompts where Tegel is cited at least once in n runs | ≥ 2 of 6 by G2; ≥ 4 of 6 by G4 | 8 Mar / 29 Oct 2027 | `docs/growth/ai-visibility.md` |
 | Directories | accepted listings | ≥ 6 | Mon 8 Mar | `docs/growth/directories.md` |
@@ -251,21 +253,23 @@ lint() { grep -niE 'was \$|~~\$|black friday|cyber monday|christmas|xmas|holiday
 
 **Deviation, by choice:** the brief named `kpi.ts`. Plan 05's counter is `scripts/polar_sales.py`, so importing `fetch_orders`, `count_sales` and `window` (ladder rung 2) beats porting the Polar paging and the CET windows to TypeScript. One scripts language, one test runner.
 
-**Files:** Create `scripts/kpi.py`, `scripts/test_kpi.py`, `docs/growth/kpi/gsc/.gitkeep`. Step 8 (after plan 05 Task 6 merges): modify `scripts/polar_sales.py` and `scripts/test_polar_sales.py`.
+**Files:** Create `scripts/kpi.py`, `scripts/test_kpi.py`, `docs/growth/kpi/gsc/.gitkeep`. Step 8 (on a branch cut from `m05-launch`, K11): modify `scripts/polar_sales.py`, `scripts/test_polar_sales.py`, `scripts/kpi.py` and `scripts/test_kpi.py`.
 
 **Interfaces:**
-- **Consumes:** `polar_sales.fetch_orders(token, org_id, product_id, after, before) -> list[dict]`, `count_sales(orders, product_id) -> dict`, `window(start, end) -> (str, str)` (plan 05 Task 6). Before 1 Dec, plan 05 Task 6 may not have merged. Until then the Polar rows print `n/a (polar_sales.py not merged)`.
+- **Consumes:** `polar_sales.fetch_orders(token, org_id, product_id, after, before) -> list[dict]`, `count_sales(orders, product_id) -> dict`, `window(start, end) -> (str, str)` (plan 05 Task 6).
+- **Order (K11):** plan 05 Task 6 writes `polar_sales.py` on `m05-launch` on Tue 1 Dec, and `m05-launch` reaches `main` only on Mon 7 Dec (plan 05 Task 10 Step 3). So Steps 1–7 (November, branched from `main`) never import it, and its counting rule is never copied here: the Polar rows print `n/a (polar_sales.py not merged)`. Everything that calls it (`sales_by_ref`, the Polar rows, `summarise`) is Step 8, on a branch cut from `m05-launch` after Task 6's commit.
 - **Produces:**
   - `REF_KEY = "reference_id"`: the Order `metadata` key, confirmed in Step 1.
   - `iso_week(d: date) -> str`, e.g. `"2026-W46"`.
   - `week_bounds(week: str) -> tuple[date, date]`: Monday to the next Monday.
   - `gsc_totals(f: TextIO, start: date, end: date) -> dict[str, int]`: keys `clicks`, `impressions`; reads GSC `Chart.csv` columns `Date`, `Clicks`, `Impressions`; `end` is exclusive.
-  - `sales_by_ref(orders: list[dict], product_id: str) -> dict[str, int]`: same inclusion rule as `count_sales["sales"]`, keyed by `metadata[REF_KEY]` or `"none"`.
-  - `summarise(orders, product_ids: set[str]) -> {"count": int, "gross": {currency: float}, "net": {currency: float}}`, added to **`polar_sales.py`** in Step 8 (B8: one net formula, which plan 07's gates also use). It counts exactly what `count_sales` counts as sales; `gross = Σ(total_amount − refunded_amount)/100` and `net = Σ(net_amount − platform_fee_amount − (refunded_amount − refunded_tax_amount))/100`, per order currency (K10), rounded to cents.
+  - `gsc_pages(f: TextIO, paths: set[str]) -> dict[str, int]` (K9): keys `clicks`, `impressions`, summed over the rows of the same export's `Pages.csv` (first column the page URL, then `Clicks`, `Impressions`) whose URL path is in `paths`. `TOOL_PAGES = {"/tools/rtl-markdown-check/", "/ar/tools/rtl-markdown-check/"}`; `RTL_PAGES` = plan 04's W5 RTL landing pages (`/arabic-markdown-pdf-mac/`, `/nl/rtl-markdown-naar-pdf/`, `/fr/markdown-rtl-en-pdf/`, `/ar/arabic-markdown-pdf/`).
+  - `sales_by_ref(orders: list[dict], product_id: str) -> dict[str, int]` (Step 8): same inclusion rule as `count_sales["sales"]`, keyed by `metadata[REF_KEY]` or `"none"`. It groups the orders by ref and calls `count_sales` on each group, so the rule lives only in `polar_sales.py`.
+  - `summarise(orders, product_ids: set[str]) -> {"count": int, "gross": {currency: float}, "net": {currency: float}}`, added to **`polar_sales.py`** in Step 8 (B8: one net formula, which plan 07's gates also use). It counts exactly what `count_sales` counts as sales; `gross = Σ(total_amount − refunded_amount)/100` and `net = Σ(net_amount − (refunded_amount − refunded_tax_amount))/100` under the order's `currency` (K10), minus each `platform_fee_amount/100` under that order's `platform_fee_currency` (K21: a separate Order field, polar.sh/docs/api-reference/orders/get.md; a fee in another currency becomes a negative entry in that currency, converted at the ECB rate with the rest), rounded to cents.
   - `pace(actual: int, elapsed_days: int, window_days: int) -> int`
   - `status(actual: float, target: float, pass_mark: float | None) -> str` ∈ `"stretch met"`, `"pass, below stretch"`, `"below pass"`, `"below stretch"`.
   - `render_report(week: str, rows: list[tuple[str, str, str]], targets: list[tuple[str, str, str]]) -> str`
-  - CLI: `python3 scripts/kpi.py --week 2026-W46 [--gsc docs/growth/kpi/gsc/2026-W46/Chart.csv] [--visits <n>]` writes `docs/growth/kpi/2026-W46.md` and prints its path. `--visits` is the week's qualified visits, read from the Cloudflare Web Analytics dashboard (B4: no second visit counter).
+  - CLI: `python3 scripts/kpi.py --week 2026-W46 [--gsc docs/growth/kpi/gsc/2026-W46/Chart.csv] [--visits <n>]` (`Pages.csv` is read from the same folder) writes `docs/growth/kpi/2026-W46.md` and prints its path. `--visits` is the week's qualified visits, read from the Cloudflare Web Analytics dashboard (B4: no second visit counter).
   - The **KPI command** (K1; Task 5 reuses it):
 
     ```bash
@@ -287,10 +291,6 @@ lint() { grep -niE 'was \$|~~\$|black friday|cyber monday|christmas|xmas|holiday
 - [ ] **Step 2: Write failing tests** (`scripts/test_kpi.py`, unittest):
 
 ```python
-def o(status, net, pid="prod-md", meta=None, total=None):
-    return {"status": status, "net_amount": net, "total_amount": net if total is None else total,
-            "product_id": pid, "metadata": meta or {}}
-
 class KpiTests(unittest.TestCase):
     def test_iso_week_handles_2026_week_53(self):
         self.assertEqual(iso_week(date(2026, 12, 29)), "2026-W53")
@@ -298,11 +298,10 @@ class KpiTests(unittest.TestCase):
     def test_gsc_totals_window_is_end_exclusive(self):
         csv = "Date,Clicks,Impressions,CTR,Position\n2026-11-09,3,120,2.5%,14.1\n2026-11-15,1,80,1.3%,12.0\n2026-11-16,9,900,1%,9\n"
         self.assertEqual(gsc_totals(io.StringIO(csv), date(2026, 11, 9), date(2026, 11, 16)), {"clicks": 4, "impressions": 200})
-    def test_sales_by_ref_matches_count_sales_rules(self):
-        orders = [o("paid", 1400, meta={"reference_id": "app-pdf"}), o("paid", 1900),
-                  o("refunded", 1400, meta={"reference_id": "app-pdf"}), o("paid", 0, meta={"reference_id": "app-pdf"}),
-                  o("paid", 1500, pid="other", meta={"reference_id": "app-pdf"})]
-        self.assertEqual(sales_by_ref(orders, "prod-md"), {"app-pdf": 1, "none": 1})
+    def test_gsc_pages_sums_only_the_tracked_paths(self):
+        csv = ("Top pages,Clicks,Impressions,CTR,Position\nhttps://tegelapps.com/tools/rtl-markdown-check/,5,300,1.7%,9\n"
+               "https://tegelapps.com/ar/tools/rtl-markdown-check/,1,90,1.1%,12\nhttps://tegelapps.com/markdown/,7,800,0.9%,15\n")
+        self.assertEqual(gsc_pages(io.StringIO(csv), TOOL_PAGES), {"clicks": 6, "impressions": 390})
     def test_pace_and_status(self):
         self.assertEqual(pace(actual=10, elapsed_days=10, window_days=30), 30)
         self.assertEqual(status(31, 47, 30), "pass, below stretch")
@@ -316,36 +315,54 @@ class KpiTests(unittest.TestCase):
 - [ ] **Step 3: Run them.** `python3 -m unittest discover -s scripts -p 'test_kpi.py' -v`. Expected: FAIL (`ModuleNotFoundError: No module named 'kpi'`).
 - [ ] **Step 4: Implement `scripts/kpi.py`** with the signatures above.
   - **Report rows**, each with its source:
-    - GSC impressions; GSC clicks;
+    - GSC impressions and clicks for the week and for the 30 days (`gsc_totals`); impressions / 30 d on `TOOL_PAGES` and on `RTL_PAGES` (`gsc_pages`, K9);
     - qualified visits (`--visits`, Web Analytics) against the Channel-mix pace (K16);
     - waitlist active count (`GET https://connect.mailerlite.com/api/groups?filter[name]=waitlist` → the item whose `id` is `MAILERLITE_GROUP_WAITLIST` → `active_count`; MailerLite has no single-group GET; check the field name on the first run);
-    - sales, refunded, free; sales by ref; net per currency (`summarise`, from Step 8; until then `n/a (summarise not merged)`);
+    - sales, refunded, free; sales by ref; net per currency (all from Step 8; until then `n/a (polar_sales.py not merged)`);
     - visit → sale, as sales ÷ qualified visits and sales ÷ GSC clicks;
     - refund rate.
   - **Targets table:** the Scoreboard rows, each with `pace` and `status`, and the re-plan checkpoint's verdict.
 - [ ] **Step 5: Run the tests.** Same command. Expected: `OK` (5 tests).
 - [ ] **Step 6: Live run.** The KPI command with `--week 2026-W45 --visits 0` and no `--gsc`. Expected: the file exists, every `n/a` row names a source that isn't live yet (before launch: Polar production, and GSC until the first export), and `grep -ciE 'polar_(pat|oat)_|Bearer ' docs/growth/kpi/2026-W45.md` → `0`.
 - [ ] **Step 7: Commit** (`git add scripts/kpi.py scripts/test_kpi.py docs/growth/kpi`, `feat(growth): weekly KPI report from Polar, GSC and Web Analytics visits` + trailer). Run Task 23 for `m08-kpi`, then merge.
-- [ ] **Step 8: `summarise` in `polar_sales.py`** (Tue 1 Dec, after plan 05 Task 6 merges; branch `m08-kpi-net`; B8). Append to `scripts/test_polar_sales.py`, inside its `unittest.TestCase`:
+- [ ] **Step 8: Polar rows, `sales_by_ref` and `summarise`** (Tue 1 Dec, B8, K11). Branch `m08-kpi-net` from `m05-launch` right after plan 05 Task 6 Step 7's commit: `git switch -c m08-kpi-net m05-launch`. Check: `git cat-file -e HEAD:scripts/polar_sales.py && git cat-file -e HEAD:scripts/kpi.py` exits 0 (`m05-launch` was cut from `main` after `m08-kpi` merged). Confirm `platform_fee_currency` is on Step 1's sandbox order. Append to `scripts/test_polar_sales.py`, inside its `unittest.TestCase`:
 
 ```python
 def g(**x):
     return {"currency": "usd", "status": "paid", "product_id": "p1", "total_amount": 1900, "net_amount": 1900,
-            "platform_fee_amount": 145, "refunded_amount": 0, "refunded_tax_amount": 0, **x}
+            "platform_fee_amount": 145, "platform_fee_currency": "usd", "refunded_amount": 0, "refunded_tax_amount": 0, **x}
 
 def test_summarise_gross_and_net_per_currency(self):
     self.assertEqual(summarise([
         g(),                                                    # US: 1900 - 145
         g(net_amount=1570, platform_fee_amount=174),            # EU buyer, USD price, 21% VAT inside: 1570 - 174
         g(status="partially_refunded", refunded_amount=950),    # 1900 - 145 - 950
-        g(currency="eur", net_amount=1570, platform_fee_amount=150),  # EUR price (K10): 1570 - 150
+        g(currency="eur", net_amount=1570, platform_fee_amount=150, platform_fee_currency="eur"),  # EUR price (K10): 1570 - 150
         g(status="refunded", refunded_amount=1900),             # excluded
         g(product_id="p2"),                                     # other product
         g(total_amount=0, net_amount=0, platform_fee_amount=0), # $0 order excluded
     ], {"p1"}), {"count": 4, "gross": {"usd": 47.5, "eur": 19.0}, "net": {"usd": 39.56, "eur": 14.2}})
+
+def test_summarise_takes_the_fee_in_its_own_currency(self):   # K21
+    self.assertEqual(summarise([g(currency="eur", net_amount=1570, platform_fee_amount=160)], {"p1"}),
+                     {"count": 1, "gross": {"eur": 19.0}, "net": {"eur": 15.7, "usd": -1.6}})
 ```
 
-  Run `python3 -m unittest discover -s scripts -p 'test_polar_sales.py' -v` → FAIL (`cannot import name 'summarise'`). Implement it to the interface; re-run → `OK`. Switch kpi.py's net row to it. Commit (`git add scripts/polar_sales.py scripts/test_polar_sales.py scripts/kpi.py`, `feat(growth): per-currency gross and net in polar_sales.summarise` + trailer); run Task 23 for `m08-kpi-net`, then merge. Plan 07 G1 adds only the CLI flags on top.
+  And to `scripts/test_kpi.py`, inside `KpiTests` (with the `o` helper at module level):
+
+```python
+def o(status, net, pid="prod-md", meta=None, total=None):
+    return {"status": status, "net_amount": net, "total_amount": net if total is None else total,
+            "product_id": pid, "metadata": meta or {}}
+
+    def test_sales_by_ref_matches_count_sales_rules(self):
+        orders = [o("paid", 1400, meta={"reference_id": "app-pdf"}), o("paid", 1900),
+                  o("refunded", 1400, meta={"reference_id": "app-pdf"}), o("paid", 0, meta={"reference_id": "app-pdf"}),
+                  o("paid", 1500, pid="other", meta={"reference_id": "app-pdf"})]
+        self.assertEqual(sales_by_ref(orders, "prod-md"), {"app-pdf": 1, "none": 1})
+```
+
+  Run `python3 -m unittest discover -s scripts -p 'test_polar_sales.py' -v` → FAIL (`cannot import name 'summarise'`), and the same for `test_kpi.py` → FAIL (`sales_by_ref` not defined). Implement both to the interfaces, and switch kpi.py's Polar rows (sales, refunded, free, by ref, net) from `n/a` to `polar_sales`; re-run → `OK` (4 and 6 tests). Watch the K21 guard fail: subtract the fee under the order's `currency` → `test_summarise_takes_the_fee_in_its_own_currency` fails; restore → `OK`. Commit (`git add scripts/polar_sales.py scripts/test_polar_sales.py scripts/kpi.py scripts/test_kpi.py`, `feat(growth): Polar rows, sales by ref and per-currency net via polar_sales` + trailer). Run Task 23 for `m08-kpi-net` with `BASE=$(git merge-base HEAD m05-launch)`, so plan 05's commits stay out of scope, then merge to `main` only after plan 05 Task 10 Step 3 has merged `m05-launch` (Mon 7 Dec). Plan 07 G1 adds only the CLI flags on top.
 
 ### Task 5: Weekly growth review and triggers (C + U; Mon 9 Nov; first review Tue 10 Nov)
 
@@ -360,7 +377,7 @@ def test_summarise_gross_and_net_per_currency(self):
   - The ids carry no personal data.
 - [ ] **Step 2: The ritual.** Every **Tuesday 10:30–11:00 CET**, after plan 05's 10:00 support routine.
   - **C, before 10:30:**
-    - export GSC (Performance → last 28 days → Export → CSV) into `docs/growth/kpi/gsc/<week>/` (U does the export if Claude can't log in);
+    - export GSC (Performance → Date → Custom: the 30 days ending last Sunday → Export → Download CSV) and unzip it into `docs/growth/kpi/gsc/<week>/` (U does the export if Claude can't log in). One export holds the daily site totals (`Chart.csv`) and the per-page totals for the same 30 days (`Pages.csv`), so the 30-day and per-page triggers below read real 30-day figures (K9; "last 28 days" can't);
     - read the week's qualified visits from the Web Analytics dashboard, then run the KPI command (Task 4) for the last ISO week.
   - **Agenda:**
     1. Funnel vs last week, and the targets table (5 min).
@@ -378,7 +395,7 @@ def test_summarise_gross_and_net_per_currency(self):
 | Sales < 10 on Tue 22 Dec (day 14) | G1 pace | Write the G1 "< 10" branch for plan 05 Task 14 now: App 1 SEO stops after G1 and App 2 ships | G1 |
 | Visit → sale (÷ GSC clicks) < 0.5% with ≥ 1,000 clicks / 30 d | rolling | Positioning review (Task 3 Step 2) before any traffic work | §4 test (≥ 1%) |
 | Refund rate > 5% with ≥ 20 sales | rolling | Read every refund reason, fix the product or the copy, and log it in `reviews.md` | quality |
-| RTL page < 1,000 GSC impressions / 30 d on Sat 6 Feb (day 60) | day 60 | RTL thesis weak: shift article slots from RTL to agent-files topics (plan 04) | §4 gap 1, G2 |
+| RTL pages (`RTL_PAGES`, `Pages.csv`) < 1,000 GSC impressions / 30 d on Sat 6 Feb (day 60) | day 60 | RTL thesis weak: shift article slots from RTL to agent-files topics (plan 04) | §4 gap 1, G2 |
 | GSC impressions / 30 d < 4,000 on Sat 6 Feb | day 60 | G2 at risk: prepare the maintenance-only branch | G2 |
 | Cited 0/n on all 6 prompts for 3 monthly runs | AI | Rewrite answer blocks (Task 13 Step 2) | G2 input |
 | Support > 20 min/day (plan 05 Task 4) | 14 d | Plan 05's gate wins: docs before growth work | Support |
@@ -407,11 +424,15 @@ def test_summarise_gross_and_net_per_currency(self):
 - [ ] **Step 1 🔒 Create the account** with `STUDIO_EMAIL` on the Free plan (the user approves account creation).
   - Expected: the dashboard shows the Free plan. Record "250 subscribers / 2,500 emails / 3 automations × 5 steps" as seen on the plan page that day.
   - Check step: MailerLite may review a new account before it can send (duration unverified). If it asks for a website, use the live `tegelapps.com`; the domain exists from W2 (plan 04).
+  - Check step (K2): do **unconfirmed** subscribers count toward Free's 250? Read MailerLite's pricing page and its help article on subscriber limits, and record the answer with URL and date here. If they do, unconfirmed sign-ups (including abusive ones) use up the plan: tell the user, and the weekly review (Task 5) reads the account's total subscriber count, not only `waitlist` actives.
 - [ ] **Step 2: Accept the DPA.** It is MailerLite's data processing terms, from the account's legal/settings page. Record the date. Plan 04's privacy page cites it.
 - [ ] **Step 3 🔒 Sender domain.** Authenticate `tegelapps.com` (DKIM/SPF TXT records in Cloudflare DNS: a DNS change on a live domain). Sender = `hello@tegelapps.com`, name `Tegel`.
   - **SPF stays one record.** Email Routing already publishes `v=spf1 include:_spf.mx.cloudflare.net ~all` at the apex (plan 04 Task 3), and two `v=spf1` records are an SPF permerror for forwarding and MailerLite alike. Cloudflare's Email Routing DNS page says to merge includes and keep only one SPF record. So don't add MailerLite's SPF record: unlock Email Routing's SPF record (Email Routing → Settings → DNS records → Unlock) and add MailerLite's `include:` to it, before `~all`.
   - Watch the SPF check catch two records first: `printf '"v=spf1 include:_spf.mx.cloudflare.net ~all"\n"v=spf1 include:_spf.example.net ~all"\n' | grep -c v=spf1` → `2`. On the live zone, before and after the change: `dig +short TXT tegelapps.com | grep -c v=spf1` → `1`. After the change, `dig +short TXT tegelapps.com | grep v=spf1` shows that one line holding both `include:_spf.mx.cloudflare.net` and MailerLite's include.
   - Expected: MailerLite shows the domain as verified, and `dig +short TXT <selector>._domainkey.tegelapps.com` returns the key.
+- [ ] **Step 3b 🔒 DMARC** (K5; a DNS change on a live domain, so U approves "add TXT `_dmarc.tegelapps.com` = `v=DMARC1; p=quarantine`"). Plan 04 Task 3 Step 4 left DMARC out until something sends as `@tegelapps.com`; from this task MailerLite does.
+  - **Before the record:** send a MailerLite test email to `STUDIO_EMAIL` and read its `Authentication-Results` header: `dkim=pass` with `header.d=tegelapps.com`. If support replies go out as `hello@tegelapps.com` through anything else (plan 05 Task 4), send one that way too and expect `dmarc=pass` or an aligned `dkim=pass`. If either fails, the record waits and the user is told: `p=quarantine` would put those mails in spam.
+  - Add the TXT record in Cloudflare DNS. Expected: `dig +short TXT _dmarc.tegelapps.com` → `"v=DMARC1; p=quarantine"`, and a second MailerLite test email shows `dmarc=pass`.
 - [ ] **Step 4: Settings.**
   - **Subscribe settings:** "Double opt-in for API and integrations" **on**. That setting is under Account settings → Subscribe settings; MailerLite: "The same double opt-in for API email is sent to all subscribers added via API" (mailerlite.com/help/how-to-use-double-opt-in-when-collecting-subscribers, 27 Oct).
   - **Confirmed-subscriber redirect:** `https://tegelapps.com/waitlist/confirmed/`.
@@ -419,7 +440,7 @@ def test_summarise_gross_and_net_per_currency(self):
   - **Footer:** identity + postal address/number (Tw 11.7 lid 7). Waits on open question 1.
 - [ ] **Step 5: Groups and tokens.** Groups `waitlist`, `buyers-markdown`, `buyers-data`. Create **two** API tokens, "local scripts" and "Pages waitlist" (K8, S18). Save each with `envset` (K1): `MAILERLITE_API_TOKEN`, `MAILERLITE_API_TOKEN_PAGES` and the three `MAILERLITE_GROUP_*` ids.
   - Expected: `. scripts/lib/env.sh; for k in MAILERLITE_API_TOKEN MAILERLITE_API_TOKEN_PAGES MAILERLITE_GROUP_WAITLIST MAILERLITE_GROUP_BUYERS_MARKDOWN MAILERLITE_GROUP_BUYERS_DATA; do [ -n "$(envget $k)" ] && echo "$k set"; done` → 5 lines.
-  - Add these names and `CLOUDFLARE_KV_WAITLIST_ID` (contract change request 9) to `.env.example`.
+  - Add these names, `CLOUDFLARE_KV_WAITLIST_ID` and `CLOUDFLARE_KV_WAITLIST_PREVIEW_ID` (contract change request 9) to `.env.example`.
 - [ ] **Step 6: Check both tokens without writing.** `. scripts/lib/env.sh; for k in MAILERLITE_API_TOKEN MAILERLITE_API_TOKEN_PAGES; do curl -s -o /dev/null -w "$k %{http_code}\n" -H "Authorization: Bearer $(envget $k)" https://connect.mailerlite.com/api/groups; done` → `200` twice.
 
 ### Task 7: Waitlist form handler (C; Wed 4 – Tue 10 Nov; branch `m08-waitlist`)
@@ -446,7 +467,7 @@ def test_summarise_gross_and_net_per_currency(self):
     - `website` (the honeypot, must be empty);
     - `lang` (`en`|`ar`; anything else counts as `en`).
   - **Allowed hosts:** `new URL(SITE_ORIGIN).host` and `www.` + that host. Production therefore rejects `*.pages.dev`, and the preview accepts only its alias.
-  - **Abuse limits (KV, before any MailerLite call):** global key `day:<UTC yyyy-mm-dd>` (a count, TTL 2 days); at or over `WAITLIST_DAILY_CAP` → `later`. Per-address key `addr:<SHA-256 hex of the lowercased address>` (TTL 24 h; the address itself is never stored); present → `check-email` without a call. Any KV error → `later` (fail closed).
+  - **Abuse limits (KV, before any MailerLite call):** first the per-client key `ip:<SHA-256 hex of CF-Connecting-IP + UTC yyyy-mm-dd>` (a count, TTL 24 h; the IP itself is never stored); at 3 or more → `later`, and a missing `CF-Connecting-IP` → `later`. Without it, one client posting 100 strangers' addresses (≈ 200 s at the rate limit) closes the list for the day and mails 100 people who never asked. Then the global key `day:<UTC yyyy-mm-dd>` (a count, TTL 2 days); at or over `WAITLIST_DAILY_CAP` → `later`. Per-address key `addr:<SHA-256 hex of the lowercased address>` (TTL 24 h; the address itself is never stored); present → `check-email` without a call. Any KV error → `later` (fail closed).
   - **Redirects:** `303` to `<prefix>/waitlist/{check-email,invalid,error,later}/`, where prefix is `''` for en and `'/ar'` for ar. Check this against plan 04's URL scheme at Step 6.
   - **MailerLite call:** `POST https://connect.mailerlite.com/api/subscribers`, body `{email, groups:[MAILERLITE_GROUP_WAITLIST], status:"unconfirmed"}` (the field list is from developers.mailerlite.com/docs/subscribers). No IP address and no name are sent.
 
@@ -460,7 +481,7 @@ const kv = () => { const m = new Map(); return { m, get: async k => m.get(k) ?? 
 let env;
 const post = (fields, headers = {}, body, url = 'https://tegelapps.com/api/waitlist') => new Request(url, {
   method: 'POST',
-  headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: 'https://tegelapps.com', ...headers },
+  headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: 'https://tegelapps.com', 'CF-Connecting-IP': '192.0.2.1', ...headers },
   body: body ?? new URLSearchParams(fields).toString(),
 });
 let calls, reply;
@@ -495,21 +516,24 @@ test('valid sign-up creates an unconfirmed subscriber and redirects', async () =
   - `foreign host is forbidden`: the same valid POST to `https://tegel.pages.dev/api/waitlist` (Origin `https://tegelapps.com`) → 403, no call.
   - `daily cap reached returns the try-later page without calling MailerLite` (S17): `env.WAITLIST_KV.m.set('day:' + new Date().toISOString().slice(0, 10), '100')` → 303 `/waitlist/later/`, `calls.length === 0`.
   - `same address twice in 24 h calls MailerLite once`: three valid POSTs (`a@example.com` twice, then `A@Example.com`) → three 303s to `/waitlist/check-email/`, `calls.length === 1`, and no KV key contains `example.com`.
+  - `a fourth sign-up from one IP in a day gets the try-later page` (K2): four valid POSTs with different addresses from `192.0.2.1` → the first three 303 `/waitlist/check-email/`, the fourth 303 `/waitlist/later/`, `calls.length === 3`, and no KV key contains `192.0.2.1`. Then one POST with `'CF-Connecting-IP'` removed → 303 `/waitlist/later/`, still 3 calls.
+  - `a streamed body without Content-Length is cut off at 2,049 bytes` (K22): a `ReadableStream` of 100 chunks of 1,024 bytes as the body (`duplex: 'half'`, no `Content-Length`), counting each `pull` → 413, no call, and fewer than 10 chunks pulled.
   - `KV failure fails closed`: `env.WAITLIST_KV.put = async () => { throw new Error('429') }` → 303 `/waitlist/later/`, no call.
   - `missing KV binding fails closed`: `delete env.WAITLIST_KV` → 303 `/waitlist/later/`, no call. Step 6's preview check relies on this.
 - [ ] **Step 2: Run them.** `(cd site && bun test test/functions)`. Expected: FAIL (`Cannot find module '../../functions/api/waitlist.js'`).
 - [ ] **Step 3: Implement `onRequestPost`.**
-  - Check order: Host (allowed hosts), Origin (exact match with `SITE_ORIGIN`), Content-Type, size (`Content-Length` and the actual text length ≤ 2048), fields, honeypot, then the KV cap and cooldown, then MailerLite. The KV writes happen before the call, so a failing provider can't be used to retry an address in a loop.
+  - Check order: Host (allowed hosts), Origin (exact match with `SITE_ORIGIN`), Content-Type, size, fields, honeypot, then the KV per-IP limit, cap and cooldown, then MailerLite. The KV writes happen before the call, so a failing provider can't be used to retry an address in a loop.
+  - Size: a `Content-Length` over 2048 → 413 at once. Otherwise read `request.body` with `getReader()`, counting bytes, and at 2,049 cancel the reader and return the same 413 (K22). Never `request.text()` or `formData()` first: a streamed body without `Content-Length` would be buffered whole. Decode the kept bytes with `TextDecoder`, then `URLSearchParams`.
   - Hash with `crypto.subtle.digest('SHA-256', …)`.
   - Email check: trim; length ≤ 254; one `@`; a dot in the domain; no whitespace or control characters (`/^[^\s@]+@[^\s@]+\.[^\s@]+$/`).
   - Never `console.log` request data.
-- [ ] **Step 4: Run them.** `(cd site && bun test test/functions)`. Expected: all pass (15 tests). Then `make test-site`: its output includes these 15 (plan 04's `cd site && bun test` discovers `test/` and `tools/`). If it doesn't, add `bun test site/test site/tools` to `test-site` and commit the `Makefile` with this task (X21).
-- [ ] **Step 4b: Watch the new guards fail.** Comment out the Host check → `foreign host is forbidden` fails. Restore; comment out the cap read → `daily cap reached…` fails (one call made). Restore; make the KV calls optional (`env.WAITLIST_KV?.get(…)`, `?.put(…)`) → `missing KV binding fails closed` fails (one call made). Restore → 15 pass.
+- [ ] **Step 4: Run them.** `(cd site && bun test test/functions)`. Expected: all pass (17 tests). Then `make test-site`: its output includes these 17 (plan 04's `cd site && bun test` discovers `test/` and `tools/`). If it doesn't, add `bun test site/test site/tools` to `test-site` and commit the `Makefile` with this task (X21).
+- [ ] **Step 4b: Watch the new guards fail.** Comment out the Host check → `foreign host is forbidden` fails. Restore; comment out the cap read → `daily cap reached…` fails (one call made). Restore; make the KV calls optional (`env.WAITLIST_KV?.get(…)`, `?.put(…)`) → `missing KV binding fails closed` fails (one call made). Restore; comment out the per-IP read → the fourth-sign-up test fails (four calls). Restore; replace the byte counter with `await request.text()` → the streamed-body test fails (100 chunks pulled). Restore → 17 pass.
 - [ ] **Step 5: Commit** (`git add site/functions/api site/test/functions`, `feat(site): same-origin waitlist handler with double opt-in, host check and KV limits` + trailer).
 - [ ] **Step 6: KV and preview deploy.** `H` below is plan 04's real pages.dev host, saved as `CLOUDFLARE_PAGES_HOST` (plan 04 Task 8 Step 5; it may carry a suffix, so it is never typed in). Every command that uses `H` starts with `. scripts/lib/env.sh && H="$(envget CLOUDFLARE_PAGES_HOST)" &&`.
-  - **KV 🔒 (dashboard, by hand):** the deploy token is Pages-only (plan 04 K2) and has no Workers KV permission. U approves "create the Workers KV namespace `tegel-waitlist` and bind it as `WAITLIST_KV` to the `tegel` Pages project, Production and Preview". Then, with Playwright:
-    - Storage & Databases → KV → Create → `tegel-waitlist`. Save its ID with `. scripts/lib/env.sh && envset CLOUDFLARE_KV_WAITLIST_ID <id>` (not a secret).
-    - Workers & Pages → tegel → Settings → Bindings → KV namespace `WAITLIST_KV` → `tegel-waitlist`, for **both** Production and Preview. It is one namespace, so preview tests count toward the day cap, which is harmless.
+  - **KV 🔒 (dashboard, by hand):** the deploy token is Pages-only (plan 04 K2) and has no Workers KV permission. U approves "create the Workers KV namespaces `tegel-waitlist` and `tegel-waitlist-preview` and bind them as `WAITLIST_KV` to the `tegel` Pages project: `tegel-waitlist` for Production, `tegel-waitlist-preview` for Preview". Two namespaces, so preview tests never count toward production's day cap or per-IP limit and can't close the live waitlist (K3). Then, with Playwright:
+    - Storage & Databases → KV → Create → `tegel-waitlist`, then `tegel-waitlist-preview`. Save the IDs with `. scripts/lib/env.sh && envset CLOUDFLARE_KV_WAITLIST_ID <id>` and `envset CLOUDFLARE_KV_WAITLIST_PREVIEW_ID <id>` (not secrets).
+    - Workers & Pages → tegel → Settings → Bindings → KV namespace `WAITLIST_KV`: `tegel-waitlist` under Production, `tegel-waitlist-preview` under Preview. **Check step:** Pages bindings are set per environment (developers.cloudflare.com/pages/functions/bindings/, KV namespaces); confirm the dashboard shows a different namespace per environment and record it. If it allows only one, stop and tell the user.
     - No `wrangler kv` command runs in this plan.
   - **Preview secrets** (CR-P2-9: without the environment flag, wrangler targets production). Set each of `MAILERLITE_API_TOKEN` (value from `MAILERLITE_API_TOKEN_PAGES`), `MAILERLITE_GROUP_WAITLIST` and `SITE_ORIGIN` (plan 04's preview alias, `printf 'https://preview.%s' "$H"`). Pipe the value in so it's never echoed: `. scripts/lib/env.sh && need MAILERLITE_API_TOKEN_PAGES && envget MAILERLITE_API_TOKEN_PAGES | CLOUDFLARE_API_TOKEN="$(envget CLOUDFLARE_API_TOKEN)" CLOUDFLARE_ACCOUNT_ID="$(envget CLOUDFLARE_ACCOUNT_ID)" bunx wrangler@4.151.2 pages secret put MAILERLITE_API_TOKEN --project-name tegel --env preview`.
   - **Check step** (`--env preview` is documented only on a third-party mirror of the wrangler docs, 27 Oct): `… bunx wrangler@4.151.2 pages secret list --project-name tegel --env preview` lists the three names. If the flag is rejected, set them in the dashboard under Settings → Variables and Secrets → Preview, and record that.
@@ -518,7 +542,7 @@ test('valid sign-up creates an unconfirmed subscriber and redirects', async () =
     - `curl -s -o /dev/null -w '%{http_code}' -X POST "https://preview.$H/api/waitlist"` → `403` (no Origin);
     - `curl -s -o /dev/null -w '%{http_code} %{redirect_url}' -X POST -H "Origin: https://preview.$H" -H 'Content-Type: application/x-www-form-urlencoded' --data 'email=a@example.com&consent=on&website=bot' "https://preview.$H/api/waitlist"` → `303 https://preview.<H>/waitlist/check-email/`. The honeypot is filled, so the function is proven live without sending mail.
     - **KV binding, checked through the endpoint:** the same POST without `website=bot` and with `email=<STUDIO_EMAIL+preview@…>` → `303 …/waitlist/check-email/`. A missing or failing binding answers `…/waitlist/later/` instead (`missing KV binding fails closed`, `KV failure fails closed`), so `check-email` proves the cap read and both KV writes went through. KV is never read directly: the Pages-only token can't, and wrangler v4's `kv key` commands read local storage unless `--remote`. The unit tests cover "no address in a KV key". Forget the test subscriber in MailerLite.
-    - **Close the preview endpoint.** The zone's rate-limiting rule doesn't cover pages.dev, so take the mail token away: `. scripts/lib/env.sh && CLOUDFLARE_API_TOKEN="$(envget CLOUDFLARE_API_TOKEN)" CLOUDFLARE_ACCOUNT_ID="$(envget CLOUDFLARE_ACCOUNT_ID)" bunx wrangler@4.151.2 pages secret delete MAILERLITE_API_TOKEN --project-name tegel --env preview` (or delete it in the dashboard, as above). Then `pages secret list … --env preview` no longer lists it, and a preview sign-up ends on `/waitlist/error/` with no mail sent. A later task that needs a live preview puts it back with the command above.
+    - **Close the preview endpoint.** The zone's rate-limiting rule doesn't cover pages.dev, so take the mail token away: `. scripts/lib/env.sh && CLOUDFLARE_API_TOKEN="$(envget CLOUDFLARE_API_TOKEN)" CLOUDFLARE_ACCOUNT_ID="$(envget CLOUDFLARE_ACCOUNT_ID)" bunx wrangler@4.151.2 pages secret delete MAILERLITE_API_TOKEN --project-name tegel --env preview` (or delete it in the dashboard, as above). Pages gives each deployment the secrets set when it was made, so the live preview keeps the token until it is redeployed (K6; check this against developers.cloudflare.com/pages/functions/bindings/, environment variables and secrets, and record the wording): redeploy with plan 04's preview command. Then `pages secret list … --env preview` no longer lists it, and a preview sign-up (the KV check POST with a new `+preview2` address) ends on `/waitlist/error/` with no mail sent. A later task that needs a live preview puts the token back with the command above and redeploys.
 
 ### Task 8: Waitlist copy, pages and go-live (C drafts, U approves; Wed 11 – Mon 16 Nov)
 
@@ -566,17 +590,20 @@ Tegel, a one-person studio in the Netherlands · hello@tegelapps.com · <identit
 - [ ] **Step 4: Privacy line.** It goes to plan 04's privacy page, which must be **live before the form**. That is contract change request 5.
 
 ```text
-Waitlist. If you join the waitlist, your email address is stored by MailerLite (our email processor, under its data processing agreement) on the basis of your consent, confirmed by email. We use it for two emails: the launch of Tegel Markdown and the launch of the next Tegel app. After the second, we delete the list. You can unsubscribe at any time from any email, or by writing to hello@tegelapps.com.
-Buyers. If you buy a licence, Polar (our merchant of record) shares your email with us. Only if you ticked "Email me set-up tips and news about Tegel apps" at checkout do we send three short emails in your first month (set-up, tips, a request for a review) and news about Tegel apps. Every email has an unsubscribe link. If you're refunded, we remove you from that list.
+Waitlist. If you join the waitlist, your email address is stored by MailerLite (our email processor, under its data processing agreement) on the basis of your consent, confirmed by email. We use it for two emails: the launch of Tegel Markdown and the launch of the next Tegel app. After the second, we delete the list. You can unsubscribe at any time from any email, or by writing to hello@tegelapps.com. To limit abuse, the sign-up form keeps a hash of your IP address for 24 hours to count sign-ups per connection; the IP address itself isn't stored.
+Buyers. If you buy a licence, Polar (our merchant of record) shares your email with us. Only if you ticked "Email me set-up tips and news about Tegel apps" at checkout do we send three short emails in your first month (set-up, tips, a request for a review) and news about Tegel apps. Every email has an unsubscribe link. If you're refunded, we remove you from that list. If you ask us to delete your data, we do, and keep only a hash of your email address so the daily sync never adds you back.
 ```
 
 - [ ] **Step 5: Checks.** Run Task 1's lint on `site/content/*/waitlist`, `site/templates/partials/waitlist-form.html` and `docs/growth/email-copy.md` → `COPY-LINT: clean`. Then plan 04's site build and tests: no external script. Expected: pass.
-- [ ] **Step 6 🔒 Go live** (U approves "deploy the waitlist form to production"). The approval needs these in place, each checked, not assumed:
+- [ ] **Step 5b: Commit** (`git add site/templates/partials/waitlist-form.html site/content/en/waitlist site/content/ar/waitlist docs/growth/email-copy.md`, `feat(site): waitlist form, result pages and consent copy` + trailer), on `m08-waitlist`, before anything is deployed (K1).
+- [ ] **Step 5c: Preview check.** Deploy with plan 04's preview command (no approval; it deploys the working tree, not `main`). Expected: `. scripts/lib/env.sh && H="$(envget CLOUDFLARE_PAGES_HOST)" && for p in {,ar/}waitlist/{check-email,confirmed,invalid,error,later}; do curl -s -o /dev/null -w "%{http_code} $p\n" "https://preview.$H/$p/"; done` → ten lines, each `200`.
+- [ ] **Step 5d: Review and merge.** Run Task 23 for `m08-waitlist` (its `/cso` scope covers `functions/api/waitlist.js` and this task's pages), fix every P0/P1, then merge to `main`. Nothing public sends mail before this review.
+- [ ] **Step 6 🔒 Go live** (U approves "deploy the waitlist form to production"), from `main` after Step 5d's merge, with plan 04's production deploy command (it starts with `git switch main`, which now holds `functions/api/waitlist.js`). If plan 04 hasn't yet made the site's first public deploy, this one is it: CLAUDE.md lists that separately, so the request says so and the user confirms both. The approval needs these in place, each checked, not assumed:
   - **Live privacy page:** `curl -s https://tegelapps.com/privacy/ | grep -c MailerLite` ≥ 1, and the page lists MailerLite as processor, the waitlist, the buyer sync and the lifecycle emails (the Step 4 text). If Task 6 Step 4 found that tracking can't be turned off, `curl -s https://tegelapps.com/privacy/ | grep -ciE 'open.*click|tracking'` ≥ 1 as well;
   - **Email footer:** the double-opt-in test email (Task 6 settings, sent to `STUDIO_EMAIL`) shows the real identity and a postal address or number (Tw 11.7 lid 7), and `grep -c '<identity and postal address' docs/growth/email-copy.md` → `0`;
   - the Cloudflare rate-limiting rule (Free: 1 rule) is **path equals `/api/waitlist`, 5 requests per 10 s per IP, block 10 s** (🔒 zone change);
-  - the production secrets are set, from `.env`'s `MAILERLITE_API_TOKEN_PAGES` (never the local token), with `--env production` (Task 7 Step 6's pattern), plus `SITE_ORIGIN=https://tegelapps.com` and `WAITLIST_DAILY_CAP=100`; `pages secret list --project-name tegel --env production` shows all four names, and `WAITLIST_KV` is bound to Production;
-  - the form is included on the home page and the RTL landing page (plan 04 coordination).
+  - the production secrets are set, from `.env`'s `MAILERLITE_API_TOKEN_PAGES` (never the local token), with `--env production` (Task 7 Step 6's pattern), plus `SITE_ORIGIN=https://tegelapps.com` and `WAITLIST_DAILY_CAP=100`; `pages secret list --project-name tegel --env production` shows all four names, and `WAITLIST_KV` is bound to `tegel-waitlist` (not the preview namespace) in Production;
+  - the form is included on the home page and the RTL landing page until Tue 8 Dec (plan 04 coordination; Task 15 Step 1b closes it).
 - [ ] **Step 7: End-to-end check on production with `STUDIO_EMAIL`.** Expected:
   - the browser lands on `/waitlist/check-email/`;
   - the confirmation email arrives, lints clean and shows the footer;
@@ -585,7 +612,6 @@ Buyers. If you buy a licence, Polar (our merchant of record) shares your email w
   - Then 7 rapid POSTs in a loop: `for i in $(seq 7); do curl -s -o /dev/null -w '%{http_code} ' -X POST -H 'Origin: https://tegelapps.com' -H 'Content-Type: application/x-www-form-urlencoded' --data 'email=a&consent=on&website=x' https://tegelapps.com/api/waitlist; done` → at least one `429`.
   - Host check on the production deployment: `. scripts/lib/env.sh && curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Origin: https://tegelapps.com' -H 'Content-Type: application/x-www-form-urlencoded' --data 'email=a@example.com&consent=on&website=' "https://$(envget CLOUDFLARE_PAGES_HOST)/api/waitlist"` → `403` (K8).
   - Finally, remove the test subscriber (`POST /api/subscribers/{id}/forget`).
-- [ ] **Step 8: Commit** (`git add site/templates/partials/waitlist-form.html site/content/en/waitlist site/content/ar/waitlist docs/growth/email-copy.md`, `feat(site): waitlist form, result pages and consent copy` + trailer). Run Task 23 for `m08-waitlist`, then merge.
 
 ### Task 9: Free tool, the RTL Markdown checker (C; Tue 10 – Fri 20 Nov; live Mon 23 Nov; branch `m08-rtl-tool`)
 
@@ -615,8 +641,8 @@ Buyers. If you buy a licence, Polar (our merchant of record) shares your email w
 - **Consumes:**
   - `renderToHTML(markdown, {mode:'window'})` from `Renderer/src/markdown.js` (master §3.2), imported by relative path;
   - `SANITIZE_CONFIG` and `addHooks(purify, { fileImages = false } = {})` from `Renderer/src/sanitize.js` (plan 01 Step 7; X8). `fileImages` keeps `tegel-doc:` on `img[src]` for the app only. The tool calls `addHooks(DOMPurify)` without it, so every image source that isn't `data:image/*` is dropped (K15).
-- **Produces:** `analyzeBlocks(markdown: string) -> { blocks: Array<{ index: number, kind: 'heading'|'paragraph'|'list-item'|'quote'|'table-cell', dir: 'rtl'|'ltr'|'neutral', rtlShare: number, warnings: Array<'latin-first'|'rtl-first-mostly-latin'> , text: string }>, summary: { rtl: number, ltr: number, neutral: number, warnings: number } }`.
-  - Blocks follow the renderer's `dir="auto"` elements. Fenced and indented code is skipped (it stays LTR).
+- **Produces:** `analyzeBlocks(markdown: string) -> { blocks: Array<{ index: number, kind: 'heading'|'paragraph'|'list'|'quote'|'table', dir: 'rtl'|'ltr'|'neutral', rtlShare: number, warnings: Array<'latin-first'|'rtl-first-mostly-latin'> , text: string }>, summary: { rtl: number, ltr: number, neutral: number, warnings: number } }`.
+  - Blocks follow the renderer's `dir="auto"` elements, which are top-level blocks only (master §3.2): items and cells inherit, so a whole list or table is one block, directed by its first strong letter (K12). Fenced and indented code is skipped (it stays LTR).
   - `dir` comes from the first strong character: RTL scripts are Arabic, Hebrew, Syriac, Thaana and N'Ko (`\p{Script=…}`), any other `\p{L}` is LTR, and a block with no letters is `neutral`.
   - `latin-first` fires when `dir==='ltr'` and `rtlShare > 0.5`. `rtl-first-mostly-latin` fires when `dir==='rtl'` and `rtlShare < 0.5`.
 
@@ -634,15 +660,16 @@ test('hebrew heading', () => {
   const b = analyzeBlocks('## מדריך התקנה').blocks[0]; expect([b.kind, b.dir]).toEqual(['heading', 'rtl']); });
 test('persian with zero-width non-joiner', () => {
   expect(analyzeBlocks('می‌خواهم فایل را باز کنم.').blocks[0].dir).toBe('rtl'); });
-test('urdu list items', () => {
-  const r = analyzeBlocks('- یہ فائل جدول دکھاتی ہے۔\n- Settings کھولیں اور دیکھیں کہ کیا بدلا۔');
-  expect(r.blocks.map(b => b.dir)).toEqual(['rtl', 'ltr']); expect(r.blocks[1].warnings).toContain('latin-first'); });
+test('a list takes its direction from its first item, like the renderer', () => {
+  expect(analyzeBlocks('- یہ فائل جدول دکھاتی ہے۔\n- Settings کھولیں اور دیکھیں کہ کیا بدلا۔').blocks.map(b => [b.kind, b.dir])).toEqual([['list', 'rtl']]);
+  const b = analyzeBlocks('- Settings کھولیں اور دیکھیں کہ کیا بدلا۔\n- یہ فائل جدول دکھاتی ہے۔').blocks;
+  expect(b.map(x => [x.kind, x.dir])).toEqual([['list', 'ltr']]); expect(b[0].warnings).toContain('latin-first'); });
 test('code fences are skipped and dates are neutral', () => {
   const r = analyzeBlocks('```\nconst x = 1;\n```\n\n2026-12-08');
   expect(r.blocks.length).toBe(1); expect(r.blocks[0].dir).toBe('neutral'); });
-test('table cells are analysed one by one', () => {
-  const r = analyzeBlocks('| الاسم | Name |\n|---|---|\n| ملف | file |');
-  expect(r.blocks.filter(b => b.kind === 'table-cell').map(b => b.dir)).toEqual(['rtl', 'ltr', 'rtl', 'ltr']); });
+test('a table is one block, directed by its first strong letter', () => {
+  expect(analyzeBlocks('| الاسم | Name |\n|---|---|\n| ملف | file |').blocks.map(b => [b.kind, b.dir])).toEqual([['table', 'rtl']]);
+  expect(analyzeBlocks('| Name | الاسم |\n|---|---|\n| file | ملف |').blocks.map(b => [b.kind, b.dir])).toEqual([['table', 'ltr']]); });
 test('summary counts warnings', () => {
   expect(analyzeBlocks('API هي واجهة تربط بين برنامجين مختلفين.').summary.warnings).toBe(1); });
 ```
@@ -664,7 +691,7 @@ test('the tool drops every non-data: image source, same-origin paths included', 
 
 - [ ] **Step 2: Run them.** `bun test site/tools`. Expected: FAIL (`Cannot find module './analyze.js'`).
 - [ ] **Step 3: Implement `analyzeBlocks`.**
-  - Line-based segmentation: blank lines; ATX headings; `-`, `*`, `+` and `1.` items; `>` quotes; pipe-table rows split into cells, with delimiter rows skipped; ``` and `~~~` fences skipped.
+  - Line-based segmentation into top-level blocks: blank lines end paragraphs; ATX headings; consecutive `-`, `*`, `+` or `1.` items, nested ones and blank lines between them included, form one `list`; consecutive `>` lines one `quote`; consecutive pipe rows one `table`, with delimiter rows skipped; ``` and `~~~` fences skipped.
   - Strip inline code spans before counting letters, because code is LTR by contract.
 - [ ] **Step 4: Run them, and watch the privacy guard fail.** `bun test site/tools`. Expected: 9 pass. Then make plan 01's hook keep relative `img[src]` (one line, temporarily) → the privacy test fails on `/private-project/architecture.png`; restore → 9 pass. If the privacy test fails with plan 01's hook as shipped, that's a plan 01 gap: fix it there (K15), not with a second hook here.
 - [ ] **Step 5: Page and glue.** Write `tool.html` and `main.js`, then the page copy:
@@ -817,7 +844,7 @@ test('the tool drops every non-data: image source, same-origin paths included', 
 ```
 
 - [ ] **Step 3: Run them.** `swift test --package-path Packages/TegelKit --filter checkoutURLAddsReference` and `xcodebuild test -scheme markdown -destination 'platform=macOS' -only-testing:MarkdownAppTests/UpsellContextTests`. Expected: FAIL (`checkoutURL(ref:)` and `UpsellContext` not found).
-- [ ] **Step 4: Implement** to the interfaces, run both, expect PASS. Watch the injection guard fail: build the query with `percentEncodedQuery = "reference_id=" + ref.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!`, which leaves `&` and `=` raw → `checkoutURLAddsReference` fails (two query items); restore → PASS. Then watch the preview guards fail: map every page instead of the first two → `preview.count` fails; add `try data.write(to: FileManager.default.temporaryDirectory.appending(path: "p.pdf"))` in `loadPreview` → the file assertion fails (and `make readonly-gate` flags the line). Restore both → PASS. Then `make check`: no regression.
+- [ ] **Step 4: Implement** to the interfaces, run both, expect PASS. Watch the injection guard fail: build the query with `percentEncodedQuery = "reference_id=" + ref.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!`, which leaves `&` and `=` raw → `checkoutURLAddsReference` fails (two query items); restore → PASS. Then watch the preview guards fail: map every page instead of the first two → `preview.count` fails; add `try data.write(to: FileManager.default.temporaryDirectory.appending(path: "p.pdf"))` in `loadPreview` → the file assertion fails. Restore both → PASS. Then `make check`: no regression.
 - [ ] **Step 5: Wire the moments** (free tier only, `!isPro`). Each moment calls `openWindow(id: "pro", value:)`; `ProUpsellView(feature:)` shows the feature's title and body above plan 02's bullets and terms line (`One-time purchase for 2 Macs. No subscription. 14-day refund.`), with these buttons:
   - `Buy Pro…` opens `checkoutURL(ref: "app-<feature>")` (`app-folder`, `app-pdf`, `app-theme`);
   - `Enter Licence Key…` opens Settings on the Licence tab (plan 03; mechanism recorded in Step 1);
@@ -913,16 +940,21 @@ It never changes your files, sends no telemetry and needs no account. The only n
 
 **Interfaces:**
 - **Consumes:** `polar_sales.fetch_orders(token, org_id, product_id, after, before)` and `window(start, end)` (plan 05 Task 6); Order fields `status`, `net_amount`, `product_id`, `custom_field_data`, `customer` (orders/get.md, 27 Oct). Step 1 confirms that `customer.email` exists.
+- **Order (K11, as Task 4 Step 8):** Steps 1, 5 and 6 need no code and start Tue 24 Nov. Steps 2–4 start Tue 1 Dec on `m08-lifecycle`, branched with `git switch -c m08-lifecycle m05-launch` right after plan 05 Task 6's commit, because `polar_sales.py` reaches `main` only on Mon 7 Dec.
 - **Produces:**
-  - `plan_sync(orders: list[dict], product_id: str) -> dict[str, list[str]]` with keys `add`, `remove`, `skipped`. Emails are lowercased and de-duplicated.
+  - `erased_hash(email: str) -> str`: SHA-256 hex of the stripped, lowercased address. `ERASED` = `local-docs/erased-buyers.sha256` (repo-relative; `local-docs/` is already gitignored), one hash per line.
+  - `plan_sync(orders: list[dict], product_id: str, erased: set[str] = frozenset()) -> dict[str, list[str]]` with keys `add`, `remove`, `skipped`. Emails are lowercased and de-duplicated.
     - **add:** emails with a counted sale (plan 05 rule) whose order has `custom_field_data.get("marketing_opt_in") is True`.
     - **remove:** emails of `refunded` orders, unless the same email also has a counted sale.
     - **skipped:** emails with a counted sale but no opt-in (field missing or `False`). All three lists are sorted.
+    - An email whose `erased_hash` is in `erased` is in no list (K10): Polar keeps the order, so without this the next run would re-create an erased buyer and restart DAY 0/7/21.
+  - **Erasure** (K10; a request under the privacy page's deletion promise, handled in plan 05 Task 4's support routine): first append the hash, with the address copied from the request and never typed into a command: `pbpaste | python3 -c 'import sys; sys.path.insert(0, "scripts"); from sync_buyers import erased_hash; print(erased_hash(sys.stdin.read()))' >> local-docs/erased-buyers.sha256`. Then forget the subscriber in MailerLite (`POST /api/subscribers/{id}/forget`). Hash first, so a sync in between can't re-add them. The file holds hashes only; back it up wherever `.env` is backed up.
   - `subscriber_payload(email: str, group_id: str) -> dict` → `{"email": email, "groups": [group_id], "status": "active"}`. It never contains `resubscribe`.
   - `LAUNCH = {"markdown": "2026-12-08", "data": "2027-02-02"}`.
   - CLI: `python3 scripts/sync_buyers.py --product markdown|data [--dry-run]` prints `added=<n> removed=<n> skipped=<n>`. It never prints an email.
     - It reconciles **every** order since launch each day (K9): `after, before = window(LAUNCH[p], <tomorrow, Europe/Amsterdam>)`, then `fetch_orders(token, org, pid, after, before)` called positionally. No `--days`: a missed day, or a refund weeks later, is caught on the next run. Mark it in code: `# ponytail: reads every order since launch each day; page by updated_at once orders pass ~2,000`.
     - Env: `POLAR_ACCESS_TOKEN`, `POLAR_ORGANIZATION_ID`, `POLAR_PRODUCT_ID_<P>`, `MAILERLITE_API_TOKEN`, `MAILERLITE_GROUP_BUYERS_<P>`; exits 2 naming any missing key. `--dry-run` makes no MailerLite call.
+    - Reads `ERASED` before fetching orders and passes it to `plan_sync`. A missing file exits 2 (`missing local-docs/erased-buyers.sha256`), so a lost list can never re-add erased buyers silently; an empty file is fine.
     - **Upsert:** `POST /api/subscribers`, which is idempotent; an existing member doesn't re-trigger the automation.
     - **Remove** (a refund removes the buyer and cancels queued sends, K9): look up the subscriber by email (`GET /api/subscribers/{email}`), then `DELETE /api/subscribers/{id}/groups/{group_id}`, or the Step 1 fallback. A 404 counts as done.
 
@@ -930,16 +962,20 @@ It never changes your files, sends no telemetry and needs no account. The only n
   - In the Polar sandbox (Task 4 Step 1 order, opt-in ticked): the order JSON has `customer.email` and `custom_field_data`. Record the custom-field key exactly as Polar returns it (`marketing_opt_in` expected, value `true`).
   - In MailerLite, with `STUDIO_EMAIL+t1@…` as an **unsubscribed** test subscriber, an upsert with `status:"active"` leaves it unsubscribed.
   - **Account-wide API double opt-in (Task 6 Step 4):** upsert a new `STUDIO_EMAIL+t3@…` with `subscriber_payload`'s body into a scratch group. Expected: status `active`, and no confirmation email arrives within 10 minutes. If the waitlist confirmation arrives instead, buyers would get the waitlist wording and stall unconfirmed: don't activate Step 7; tell the user.
+  - **Waitlist body on an active subscriber** (K4): with `STUDIO_EMAIL+t3@…` now `active`, `POST /api/subscribers` with Task 7's waitlist body (`{email, groups:[<scratch group>], status:"unconfirmed"}`), then `GET /api/subscribers/<email>` and read `status`. Expected: still `active`. If it reads `unconfirmed`, a buyer who joins the waitlist would drop out of the lifecycle emails: on a short branch `m08-waitlist-status`, drop `status` from the waitlist body (Task 7's interface and first test), run Task 7 Steps 2–4, Task 23, merge, redeploy with Task 8 Step 6's approval before Tue 8 Dec, and repeat Task 8 Step 7's end-to-end check to prove a new address still gets the confirmation email.
   - **Queued sends** (unverified on 27 Oct): add `STUDIO_EMAIL+t2@…` to a scratch group whose scratch automation waits 1 day before one email, then remove it with `DELETE /api/subscribers/{id}/groups/{group_id}`. Expected: the automation's subscriber list no longer shows it as queued, and no email arrives the next day. If it's still queued, the sync's remove uses `DELETE /api/subscribers/{id}` instead (the subscriber leaves every group and automation; a buyer of both apps is then re-added to the other group by that product's next sync). Delete the scratch group and automation (Free allows 3 automations).
-  - Record all four results here.
+  - Record all five results here.
 - [ ] **Step 2: Failing tests.**
 
 ```python
-import contextlib, io, os, unittest
+import contextlib, io, os, tempfile, unittest
+from pathlib import Path
 from unittest import mock
 import sync_buyers
-from sync_buyers import plan_sync, subscriber_payload
+from sync_buyers import erased_hash, plan_sync, subscriber_payload
 
+ENV = {"POLAR_ACCESS_TOKEN": "t", "POLAR_ORGANIZATION_ID": "o", "POLAR_PRODUCT_ID_MARKDOWN": "prod-md",
+       "MAILERLITE_API_TOKEN": "m", "MAILERLITE_GROUP_BUYERS_MARKDOWN": "9"}
 def o(status, net, email, opt=None, pid="prod-md"):
     return {"status": status, "net_amount": net, "product_id": pid, "customer": {"email": email},
             "custom_field_data": {} if opt is None else {"marketing_opt_in": opt}}
@@ -953,19 +989,28 @@ class SyncTests(unittest.TestCase):
     def test_payload_never_resubscribes(self):
         p = subscriber_payload("a@x.com", "9")
         self.assertEqual(p, {"email": "a@x.com", "groups": ["9"], "status": "active"}); self.assertNotIn("resubscribe", p)
+    def test_erased_buyer_is_never_re_added(self):   # K10
+        r = plan_sync([o("paid", 1400, "G@x.com", opt=True), o("refunded", 1400, "h@x.com", opt=True)], "prod-md",
+                      erased={erased_hash("g@x.com"), erased_hash(" H@x.com\n")})
+        self.assertEqual(r, {"add": [], "remove": [], "skipped": []})
     def test_cli_reads_every_order_since_launch_and_dry_run_sends_nothing(self):
-        env = {"POLAR_ACCESS_TOKEN": "t", "POLAR_ORGANIZATION_ID": "o", "POLAR_PRODUCT_ID_MARKDOWN": "prod-md",
-               "MAILERLITE_API_TOKEN": "m", "MAILERLITE_GROUP_BUYERS_MARKDOWN": "9"}
+        empty = Path(tempfile.mkdtemp(), "erased"); empty.touch()
         fetch, out = mock.Mock(return_value=[o("paid", 1400, "a@x.com", opt=True)]), io.StringIO()
-        with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(sync_buyers, "fetch_orders", fetch), \
+        with mock.patch.dict(os.environ, ENV, clear=True), mock.patch.object(sync_buyers, "fetch_orders", fetch), \
+             mock.patch.object(sync_buyers, "ERASED", empty), \
              mock.patch("urllib.request.urlopen", side_effect=AssertionError("network in dry run")), contextlib.redirect_stdout(out):
             sync_buyers.main(["--product", "markdown", "--dry-run"])
         self.assertEqual(fetch.call_args.args[3], "2026-12-07T23:00:00Z")   # launch day, 00:00 CET
         self.assertIn("added=1 removed=0 skipped=0", out.getvalue()); self.assertNotIn("a@x.com", out.getvalue())
+    def test_missing_erasure_list_fails_closed(self):   # K10: a lost list must not re-add erased buyers
+        with mock.patch.dict(os.environ, ENV, clear=True), mock.patch.object(sync_buyers, "ERASED", Path(tempfile.mkdtemp(), "missing")), \
+             mock.patch.object(sync_buyers, "fetch_orders", side_effect=AssertionError("orders read")), self.assertRaises(SystemExit) as e:
+            sync_buyers.main(["--product", "markdown", "--dry-run"])
+        self.assertEqual(e.exception.code, 2)
 ```
 
 - [ ] **Step 3: Run them.** `python3 -m unittest discover -s scripts -p 'test_sync_buyers.py' -v`. Expected: FAIL (`No module named 'sync_buyers'`).
-- [ ] **Step 4: Implement** to the interfaces. Run them. Expected: `OK` (3 tests). Then watch the two consent guards fail: make `add` ignore `marketing_opt_in` → the first test fails with `b@x.com`/`f@x.com` in `add`; set `after` to yesterday → the third test fails. Restore both → `OK`.
+- [ ] **Step 4: Implement** to the interfaces. Run them. Expected: `OK` (5 tests). Then watch the consent guards fail: make `add` ignore `marketing_opt_in` → the first test fails with `b@x.com`/`f@x.com` in `add`; set `after` to yesterday → the CLI test fails; drop the `erased` filter → the erasure test fails with `g@x.com` in `add`; treat a missing `ERASED` as empty → the fail-closed test fails. Restore all four → `OK`.
 - [ ] **Step 5: Lifecycle copy** in `email-copy.md`. Every email ends with this footer:
 
 ```text
@@ -999,6 +1044,7 @@ Happy for your words to appear on tegelapps.com? Reply "you may quote me" with t
 - [ ] **Step 6: Automation** (MailerLite, Free: ≤ 3 automations × 5 steps). `buyers-markdown`: trigger "joins group", then email D0, wait 7 days, email D7, wait 14 days, email D21 (5 steps). Links carry `reference_id=email-d0` / `email-d7` only where they point to checkout. Send a test to `STUDIO_EMAIL`. Expected: three test emails render, the footer is complete and the unsubscribe link works.
 - [ ] **Step 7 🔒 Activate the automation** (U approves the copy and the activation). The first live sync runs at the 10:00 support routine on Wed 9 Dec.
   - **Precondition** (K9): open the live production checkout (don't pay) and read the checkbox. Expected: label verbatim `Email me set-up tips and news about Tegel apps`, **unticked** on load. If either differs, don't activate; tell the user, because those buyers didn't give this consent.
+  - **Erasure list:** `mkdir -p local-docs && touch local-docs/erased-buyers.sha256` before the first run (an empty list; the sync exits 2 without it).
   - **Coordination:** plan 05 Task 4's daily routine gains this command (K1), run with `--dry-run` first on 9 Dec:
 
     ```bash
@@ -1008,7 +1054,7 @@ Happy for your words to appear on tegelapps.com? Reply "you may quote me" with t
     ```
 
   - **Expected:** `added=` equals the distinct opted-in buyers since launch (it grows by each day's new opted-in sales); `removed=` equals the distinct fully refunded buyers; `skipped=` equals buyers who didn't tick the box.
-- [ ] **Step 8: Commit** (`git add scripts/sync_buyers.py scripts/test_sync_buyers.py docs/growth/email-copy.md`, `feat(growth): daily buyer sync for opted-in lifecycle email` + trailer). Run Task 23 (stage 4: MailerLite token, PII handling, consent filter, refund removal), then merge.
+- [ ] **Step 8: Commit** (`git add scripts/sync_buyers.py scripts/test_sync_buyers.py docs/growth/email-copy.md`, `feat(growth): daily buyer sync for opted-in lifecycle email` + trailer). Run Task 23 (stage 4: MailerLite token, PII handling, consent filter, refund removal, erasure list) with `BASE=$(git merge-base HEAD m05-launch)`, so plan 05's commits stay out of scope. Merge to `main` only after plan 05 Task 10 Step 3 has merged `m05-launch` (Mon 7 Dec), and before the first sync on Wed 9 Dec (K11).
 - **Success:** ≥ 10 public reviews by Mon 8 Mar, of which at least half within 30 days of a day-21 email (Task 18 log).
 
 ### Task 15: Launch-day and App 2 emails (C drafts, U sends 🔒; Tue 8 Dec, Tue 2 Feb)
@@ -1036,6 +1082,11 @@ This was email 1 of 2. The second comes when the next Tegel app launches; then t
   - a test send to `STUDIO_EMAIL` renders.
 
   🔒 Send. Record the time and recipient count.
+- [ ] **Step 1b 🔒 Close sign-up** (K13; Tue 8 Dec, right after the send). The consent promises an email "when Tegel Markdown launches (8 Dec 2026)", which nobody joining later can get, so the list closes rather than change its promise; everyone on it keeps the two emails they agreed to. U approves "close the waitlist form":
+  - plan 04 drops `partials/waitlist-form.html` from the home and RTL pages (contract change request 4(d));
+  - delete the production mail token: `. scripts/lib/env.sh && CLOUDFLARE_API_TOKEN="$(envget CLOUDFLARE_API_TOKEN)" CLOUDFLARE_ACCOUNT_ID="$(envget CLOUDFLARE_ACCOUNT_ID)" bunx wrangler@4.151.2 pages secret delete MAILERLITE_API_TOKEN --project-name tegel --env production`;
+  - deploy with plan 04's production command (a deployment keeps the secrets it was made with: Task 7 Step 6).
+  - Expected: `curl -s https://tegelapps.com/ | grep -c 'action="/api/waitlist"'` → `0`, the same for the RTL page, and a valid POST with Task 8 Step 7's headers and `email=<STUDIO_EMAIL+closed@…>&consent=on&website=` → `303 https://tegelapps.com/waitlist/error/` with no email sent.
 - [ ] **Step 2: App 2 emails** (Tue 2 Feb 2027, 09:30 CET). The product facts and the price come from plan 06; if plan 06 sets an intro price, use its dated wording verbatim (HR3).
   - **To `waitlist`** (email 2 of 2). Subject `Tegel Data is out (and this list is now closed)`. Body:
     - what Tegel Data reads: JSON, JSONL, YAML, TOML, CSV, `.env` masked;
@@ -1154,7 +1205,7 @@ Rules were read on 27 Oct from each primary source (repo `CONTRIBUTING.md`/READM
   - Name `Tegel Apps`, handle `tegelapps` (or the nearest free one); avatar = the tile; bio `Native, read-only Mac apps. Made in the Netherlands.`
   - No face anywhere (HR6). Credentials go in `.env` (names in `.env.example`).
   - Mastodon instance: one that allows commercial project accounts. Check the instance rules before signing up; Fosstodon is FOSS-only, so not that one.
-- [ ] **Step 4: Silent clips** from plan 05's demo: `"$FF" -ss <start> -t 8 -i site/static/media/tegel-markdown-demo.mp4 -an -vf "fps=24,scale=1080:-2" -c:v libx264 -crf 24 -pix_fmt yuv420p -movflags +faststart docs/growth/clips/<name>.mp4`. Each clip passes the Task 1 `ffprobe` audio check (empty output).
+- [ ] **Step 4: Silent clips** from plan 05's demo: `ffmpeg -ss <start> -t 8 -i site/static/media/tegel-markdown-demo.mp4 -an -vf "fps=24,scale=1080:-2" -c:v libx264 -crf 24 -pix_fmt yuv420p -movflags +faststart docs/growth/clips/<name>.mp4`. Each clip passes the Task 1 `ffprobe` audio check (empty output).
 - [ ] **Step 5: Localised timing** for RTL communities. Post Sunday to Wednesday at 10:00 local time (the weekend is Fri–Sat in most Arabic-speaking countries and in Israel, and Friday in Iran). No tie-in with Ramadan, Eid, Nowruz or Jewish holidays (HR8, HR9). Never frame the apps for inburgering or immigration (HR7).
 - [ ] **Step 6: Commit** the log weekly (`docs(growth): distribution log week N` + trailer).
 
@@ -1229,10 +1280,11 @@ Hi <name>, while testing right-to-left Markdown I found <case> renders <result> 
 
 Run **Procedure P (master §11)** with these deltas (B1):
 - **Id and branch:** `m08`, the branch above.
+- **Base:** P's `git merge-base HEAD main`, except for `m08-kpi-net` and `m08-lifecycle`, which are cut from `m05-launch` (K11): `BASE=$(git merge-base HEAD m05-launch)`, and they merge only after `m05-launch` has.
 - **Stage 2:** `make check` (it runs `test-site` and `test-scripts`, master §2). Until those targets exist, also run `(cd site && bun test)` and `python3 -m unittest discover -s scripts -p 'test_*.py'`. Record the counts.
 - **`/cso` scope (stage 4), per branch:**
-  - **`m08-waitlist`** (public endpoint): the Host check against `SITE_ORIGIN` / `www.` before anything else, then Origin, Content-Type and size; the KV daily cap and per-address cooldown, failing closed to `later`; no PII in logs, responses or KV keys (`addr:<sha256>` only); `MAILERLITE_API_TOKEN_PAGES` in Pages env only, preview and production set with their own `--env`, and never the local `MAILERLITE_API_TOKEN`; the header-injection test case.
-  - **`m08-kpi`, `m08-kpi-net` and `m08-lifecycle`:** tokens read from env (K1) and never printed (`… 2>&1 | grep -ciE 'bearer|polar_(pat|oat)_'` → `0`); HTTPS only; MailerLite writes limited to group membership; emails never printed; `sync_buyers` adds only `marketing_opt_in == true` and reads every order since launch; a refund removes the buyer and its queued sends (Task 14 Step 1 result).
+  - **`m08-waitlist`** (public endpoint): the Host check against `SITE_ORIGIN` / `www.` before anything else, then Origin, Content-Type and size (a streamed body stops at 2,049 bytes); the KV per-IP limit, daily cap and per-address cooldown, failing closed to `later`; no PII in logs, responses or KV keys (`ip:` and `addr:` SHA-256 only); `MAILERLITE_API_TOKEN_PAGES` in Pages env only, preview and production set with their own `--env`, and never the local `MAILERLITE_API_TOKEN`; the header-injection test case.
+  - **`m08-kpi`, `m08-kpi-net` and `m08-lifecycle`:** tokens read from env (K1) and never printed (`… 2>&1 | grep -ciE 'bearer|polar_(pat|oat)_'` → `0`); HTTPS only; MailerLite writes limited to group membership; emails never printed; `sync_buyers` adds only `marketing_opt_in == true` and reads every order since launch; a refund removes the buyer and its queued sends (Task 14 Step 1 result); an erased buyer is never re-added, and a missing erasure list exits 2.
   - **`m08-rtl-tool`:** `SANITIZE_CONFIG` plus `addHooks(DOMPurify)` with no `fileImages`, so every non-`data:image/*` image source is dropped (K15); `RETURN_DOM_FRAGMENT` into `replaceChildren`; plan 04's `/tools/*` and `/:lang/tools/*` CSP blocks (`! Content-Security-Policy`, `img-src data:`, `connect-src 'none'`); the hostile fixture; no `innerHTML` on unsanitised input.
   - **`m08-upsell`** (TegelStore, licensing): `checkoutURL(ref:)` can't be steered to another host; the preview leaves no file after the call and holds at most two page images; no key in logs.
   - **`m08-onboarding`** (only if Task 11 needed a fix): the external URL scheme and any strings change.
@@ -1259,14 +1311,14 @@ Run **Procedure P (master §11)** with these deltas (B1):
   - the MailerLite tracking toggle (T6 S4), lookup by email, unsubscribe-safe upsert, and whether a group removal cancels queued automation sends (T14 S1);
   - the deep link on 14/26/27 (T11 S2);
   - Reddit sidebars, Slant, Mac Apps Library, Hashnode (T17, T19);
-  - the GSC `Chart.csv` headers (first export).
+  - the GSC `Chart.csv` and `Pages.csv` file names and headers (first export).
 
 ## Contract change requests
 
 CR 1–3, 4(a)–(c), 6 and 13 accepted and applied to master §3.1–§3.3, plans 01, 02, 04 and 05, and Task 4 Step 8 (27 Oct); history in `docs/reviews/m00-consolidated.md`. Open:
 
 4. **Plan 04 build/deploy:**
-   - (d) include `partials/waitlist-form.html` on the home and RTL pages until 2 Feb 2027;
+   - (d) include `partials/waitlist-form.html` on the home and RTL pages until the launch email goes out on Tue 8 Dec 2026, then drop it (Task 15 Step 1b, K13);
    - (e) every checkout link carries `?reference_id=site-<slug>`;
    - (f) `robots.txt` allows the AI crawlers in Task 13 Step 3.
 
@@ -1281,10 +1333,10 @@ CR 1–3, 4(a)–(c), 6 and 13 accepted and applied to master §3.1–§3.3, pla
 8. **Master §6 accounts:**
    - MailerLite moves to **W2** (waitlist + lifecycle), not W13;
    - add the Bluesky/Mastodon(/X) brand accounts (U-created, faceless);
-   - add the Workers KV namespace `tegel-waitlist`, bound as `WAITLIST_KV` to the `tegel` Pages project (Production and Preview); no Cloudflare analytics token (visits come from Web Analytics, B4).
-9. **`.env.example`:** add `MAILERLITE_API_TOKEN`, `MAILERLITE_API_TOKEN_PAGES`, `MAILERLITE_GROUP_WAITLIST`, `MAILERLITE_GROUP_BUYERS_MARKDOWN`, `MAILERLITE_GROUP_BUYERS_DATA`, `CLOUDFLARE_KV_WAITLIST_ID` (+ the brand-account keys).
+   - add the Workers KV namespaces `tegel-waitlist` (Production) and `tegel-waitlist-preview` (Preview), each bound as `WAITLIST_KV` to the `tegel` Pages project; no Cloudflare analytics token (visits come from Web Analytics, B4).
+9. **`.env.example`:** add `MAILERLITE_API_TOKEN`, `MAILERLITE_API_TOKEN_PAGES`, `MAILERLITE_GROUP_WAITLIST`, `MAILERLITE_GROUP_BUYERS_MARKDOWN`, `MAILERLITE_GROUP_BUYERS_DATA`, `CLOUDFLARE_KV_WAITLIST_ID`, `CLOUDFLARE_KV_WAITLIST_PREVIEW_ID` (+ the brand-account keys).
 10. **`make check`:** plan 04's `test-site` (`cd site && bun test`) discovers `site/test/functions/` and `site/tools/`; plan 08 changes it only if Task 7 Step 4 shows otherwise. The Python tests (`test_kpi.py`, `test_sync_buyers.py`, plan 05's `test_polar_sales.py`) run under plan 05's `test-scripts` target (X21).
 11. **Brief deviation:** the KPI script is `scripts/kpi.py`, not `kpi.ts`, so it imports plan 05's `polar_sales.py` instead of porting it.
 12. **Plan 06:** its "cross-sell email to App 1 buyers" exit item is delivered by Task 15 Step 2. Plan 06 Task 15 supplies the copy (`docs/launch/data-crosssell-email.md`) and the segment rule; plan 08 owns MailerLite and the send (P1-10).
 <!-- numbers kept, so cross-plan references resolve -->
-14. **Plan 04 deploy:** if the Pages project is configured from a `wrangler.toml`, it carries the `WAITLIST_KV` binding; otherwise Task 7 Step 6's dashboard binding stands. A missing binding fails closed (every sign-up gets `later`), so Task 7 Step 6's KV check is the gate.
+14. **Plan 04 deploy:** if the Pages project is configured from a `wrangler.toml`, it carries the `WAITLIST_KV` binding per environment (production `CLOUDFLARE_KV_WAITLIST_ID`, preview `CLOUDFLARE_KV_WAITLIST_PREVIEW_ID`); otherwise Task 7 Step 6's dashboard binding stands. A missing binding fails closed (every sign-up gets `later`), so Task 7 Step 6's KV check is the gate.

@@ -31,7 +31,7 @@ Master §2/§3 and CLAUDE.md apply (product rules 1–9, outward-facing approval
 - **Launch-price wording, verbatim, wherever a price is shown before 15 Dec:** `Introductory price $14 until Mon 14 Dec 2026 23:59 CET. From 15 Dec: $19.` Pages that show EUR use the same dated sentence with € amounts (plan 04 owns the translations). Never a "was" price, struck-through price, countdown or "only N left" (rule 6, art. 5a Bpp).
 - **Media:** no faces anywhere (avatars, Dock icons of people, browser tabs); videos are encoded with `-an`; demo documents come from `Fixtures/markdown/` (§3.4). No Black Friday (27 Nov) or Cyber Monday (30 Nov) tie-ins.
 - **Key check, by name:** `. scripts/lib/env.sh; [ -n "$(envget KEY)" ] && echo set` → `set`. (A `grep '^KEY=.+'` passes on an empty quoted `KEY=''`, so it isn't used.)
-- **Evidence names:** `m15-intel` = build Mac; `m14-arm`, `m15-arm`, `m26-arm` = GitHub runners; `m27-arm` = Scaleway M1.
+- **Evidence names:** `m15-intel` = build Mac; `m15-arm`, `m26-arm` = GitHub runners; `m27-arm` = Scaleway M1; `m14-arm` = the same M1 reinstalled with macOS 14 at the end of lease L2, if Scaleway offers it (GitHub retires the `macos-14` runner label on 2 Nov 2026, actions/runner-images issue #13518).
 - **Commits (B2):** "message `…` + trailer" means the message ends with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - **Dates (all CET):**
   - H8 scholar email this week (W1); H10 tax adviser by Fri 13 Nov;
@@ -45,7 +45,7 @@ Master §2/§3 and CLAUDE.md apply (product rules 1–9, outward-facing approval
 
 ## Review Focus
 
-1. **Checkout and site disagree around 15 Dec 00:00.** Expected: the checkout never charges more than the site shows, in either currency. Site to $19 / €19 first, then both Polar prices; verify with the price query (EUR and USD both `1900`) and a fresh checkout from NL showing €19.00. *(Task 9 runbook, Task 12.)*
+1. **Checkout and site disagree around 15 Dec 00:00.** Expected: the checkout never charges more than the site shows, in either currency. Site to $19 / €19 first, then both Polar prices; verify with the price query (EUR and USD both `1900`) and a fresh checkout from NL showing €19.00. The NL check covers only a Dutch buyer: what a US buyer and an EU visitor on an English page are charged is checked before launch in plan 04 Task 14 Step 3 (sandbox checkouts), and the site copy follows that result. *(Task 9 runbook, Task 12, plan 04 Task 14.)*
 2. **xcconfig eats `//`.** Writing `TG_POLAR_API_BASE = https://api.polar.sh` in `Release.xcconfig` silently truncates it to `https:`. Every licence call then fails, and the 30-day grace hides it for a month. Expected: the built app's Info.plist says exactly `https://api.polar.sh`. *(Plan 03 `release.sh` pre-notary plist check, Task 2 Step 9.)*
 3. **A false Gatekeeper pass.** Runner downloads carry no quarantine flag, and Gatekeeper may be relaxed on CI images, so "exit 0" proves nothing. Expected: the assessment output contains `source=Notarized Developer ID`, plus a real quarantined first launch on `m15-intel` and `m27-arm`. *(Task 1, Task 3 R1.)*
 4. **Licence edge cases with live keys:**
@@ -63,7 +63,7 @@ Master §2/§3 and CLAUDE.md apply (product rules 1–9, outward-facing approval
 | Path | Task | Responsibility |
 |---|---|---|
 | `scripts/smoke-dmg.sh`, `scripts/test-smoke-dmg.sh` | 1 | Install a DMG, assert Gatekeeper and Quick Look registration; take screenshots |
-| `.github/workflows/smoke.yml` | 1 | `workflow_dispatch`: run the smoke test on `macos-14`, `macos-15`, `macos-26`; lands on `main` first (K13) |
+| `.github/workflows/smoke.yml` | 1 | `workflow_dispatch`: run the smoke test on `macos-15`, `macos-26`; lands on `main` first (K13) |
 | `.env.example`, `Config/Release.xcconfig` | 2 | Production Polar key names; production `TG_POLAR_*` values |
 | `docs/gates/test-matrix-1.0.md`, `docs/gates/evidence/1.0/<machine>/` | 3 | Matrix with evidence per cell |
 | `site/content/en/faq.md` (plan 04's `/faq/`) | 4 | Append the FAQ answers and a `## Known issues` section |
@@ -132,7 +132,7 @@ grep -rniE 'was \$|~~\$|black friday|cyber monday|christmas|xmas|holiday|santa|l
 - [ ] **Step 6: Write `.github/workflows/smoke.yml` on `ci/smoke`, a short branch from `main` (K13).** GitHub dispatches a workflow only when its file is on the default branch, so it lands there before Task 3 needs it: `git switch main && git switch -c ci/smoke`.
   - Pass the tag via `env`, never inline `${{ }}` in `run:`, to avoid script injection.
   - Pin actions to full commit SHAs (S25). These were read on 27 Oct with `git ls-remote --tags https://github.com/actions/<name>`: checkout `v7.0.1`, upload-artifact `v7.0.2`. Re-read them on the day; write the SHA, never the tag.
-  - No `xcode-select` step: this job builds nothing and calls no Xcode tool. The DMG is built on `m15-intel` with the pinned Xcode and handed to every runner, macOS 14 included (K13 artefact hand-off).
+  - No `xcode-select` step: this job builds nothing and calls no Xcode tool. The DMG is built on `m15-intel` with the pinned Xcode and handed to every runner (K13 artefact hand-off). No `macos-14` row: GitHub retires that label on 2 Nov 2026 (actions/runner-images issue #13518, reported by the m00 review and not opened for this plan, so re-read it on the day), and a matrix row that can't run would fail every dispatch. macOS 14 comes from the L2 reinstall (Task 3 Step 5).
 
 ```yaml
 name: smoke
@@ -142,7 +142,7 @@ on:
 permissions: { contents: read }
 jobs:
   smoke:
-    strategy: { fail-fast: false, matrix: { os: [macos-14, macos-15, macos-26] } }
+    strategy: { fail-fast: false, matrix: { os: [macos-15, macos-26] } }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -269,7 +269,7 @@ Each 🔒 step is a live, outward-facing change. Show the user the exact values,
   - Screenshot each payment section to `polar/checkout-{safari,chrome}-{nl,us}.png`.
   - Expected: no Klarna, Afterpay/Clearpay, Affirm, "pay later" or "pay in N instalments". Cash App Pay is a wallet, not BNPL; record it if shown.
   - **If BNPL appears:** stop launch prep, tell the user, and ask Polar support to remove it. Lemon Squeezy is the fallback (§13 risk 7, user decision).
-  - **Dutch checkout (K10):** from the build Mac's own connection in NL, the checkout shows **€14.00** as the total, with VAT included rather than added on top. Polar picks the currency by geolocation, so the billing-country switch doesn't change it; the USD price is covered by the price query. Screenshot `polar/checkout-nl-eur.png`.
+  - **Dutch checkout (K10):** from the build Mac's own connection in NL, the checkout shows **€14.00** as the total, with VAT included rather than added on top. Polar picks the currency by geolocation, so the billing-country switch doesn't change it; the USD price is covered by the price query, and what a US buyer pays with tax by plan 04 Task 14 Step 3's sandbox checkout. Screenshot `polar/checkout-nl-eur.png`.
   - **Opt-in box (K9):** it loads unticked, with the exact label from Step 5 (visible in the same screenshots).
 - [ ] **Step 12 (Tue 1 Dec): Live status.** Confirm the dashboard shows payouts verified (H5 done). The price query (Step 5) prints `[('eur', 1400), ('usd', 1400)]`. Commit the screenshots (`git add docs/gates/evidence/1.0/polar`, message `docs(release): Polar live evidence` + trailer).
 
@@ -288,24 +288,24 @@ Each 🔒 step is a live, outward-facing change. Show the user the exact values,
 - **Cell values:** `PASS <evidence path>`, `FAIL #<issue>`, `auto <evidence>` (scripted on a runner) or `—` (not run there, with the reason in the notes).
 - **Screenshots:** downscaled with `sips -Z 1280` before commit.
 
-| Row | Check | m15-intel (build Mac) | m14-arm (GH) | m15-arm (GH) | m26-arm (GH) | m27-arm (Scaleway) |
+| Row | Check | m15-intel (build Mac) | m14-arm (Scaleway, if offered) | m15-arm (GH) | m26-arm (GH) | m27-arm (Scaleway) |
 |---|---|---|---|---|---|---|
-| R1 | DMG install + Gatekeeper first launch (quarantined) | manual + smoke | smoke | smoke | smoke | manual + smoke |
-| R2 | Enable the Quick Look extension in System Settings | manual | `pluginkit` only | `pluginkit` only | `pluginkit` only | manual |
-| R3 | Quick Look on each fixture (12 committed + `g0-1mb.md`) | manual | auto (12) | auto (12) | auto (12) | manual |
-| R4 | Single-file window | manual | auto | auto | auto | manual |
+| R1 | DMG install + Gatekeeper first launch (quarantined) | manual + smoke | manual + smoke | smoke | smoke | manual + smoke |
+| R2 | Enable the Quick Look extension in System Settings | manual | manual | `pluginkit` only | `pluginkit` only | manual |
+| R3 | Quick Look on each fixture (12 committed + `g0-1mb.md`) | manual | manual | auto (12) | auto (12) | manual |
+| R4 | Single-file window | manual | manual | auto | auto | manual |
 | R5 | Folder mode + live reload + search (Pro) | manual | — | — | — | manual |
 | R6 | PDF A4 and Letter with `rtl-arabic.md` (Pro) | manual | — | — | — | manual |
 | R7 | Themes paper/ink/studio × light/dark (Pro) | manual | — | — | — | manual |
-| R8 | Arabic UI (`-AppleLanguages '(ar)'`) | manual | auto | auto | auto | manual |
-| R9 | Licence activate / offline relaunch / 3rd-Mac 403 / deactivate | manual | — | — | — | manual |
+| R8 | Arabic UI (`-AppleLanguages '(ar)'`) | manual | manual | auto | auto | manual |
+| R9 | Licence activate / offline relaunch / 3rd-Mac 403 / deactivate | manual | manual | — | — | manual |
 | R10 | Sparkle update from the previous build, via plan 03's local RC test feed | manual | — | — | — | manual |
 | R11 | Copy Diagnostics | manual | — | — | — | manual |
 
 Notes the doc must carry:
 - `—` on GitHub runners: no GUI interaction or licence there. R5–R7 on arm64 15/26 are covered only by the `swift test` runs of `ci.yml`; link the run id. Never call that "tested by hand".
-- **macOS 14 manual column:** only if Scaleway's OS list offers macOS 14. Then reinstall the *same* leased M1 as the last item on lease L2, after the macOS 27 work of plans 05, 03, 02 and 08. It costs nothing extra (check step on lease day).
-- **If `macos-14` has been retired** from GitHub's runner images [F7], record `n/a: image retired`.
+- **macOS 14 column, the only macOS 14 coverage:** only if Scaleway's OS list offers macOS 14. Then reinstall the *same* leased M1 as the last item on lease L2, after the macOS 27 work of plans 05, 03, 02 and 08. It costs nothing extra (check step on lease day).
+- **No GitHub runner covers macOS 14:** the `macos-14` label is retired on 2 Nov 2026 (Task 1). If Scaleway doesn't offer macOS 14 either, write `—: no macOS 14 machine` in that column and ask the user to choose: ship 1.0.0 with the 14.0 deployment target untested on macOS 14, or raise the minimum to macOS 15 (master D11). Record the answer here; site and launch copy say "macOS 14 or later" only under the first choice.
 
 **Steps:**
 
@@ -315,10 +315,16 @@ Notes the doc must carry:
   - `gh release create v1.0.0-rc1 "$DMG" --prerelease --title "1.0.0-rc1 (internal)" --notes "internal test build"`. The repo is private, so this is not an outward action.
   - Expected: `gh release view v1.0.0-rc1 --json assets -q '.assets[].name'` lists the DMG.
 - [ ] **Step 3: Runner smoke.**
-  - **CI minutes first** (the repo is private; there is no payment method, so an exhausted quota blocks runs). Read the minutes used: `gh api /users/Frequence-xx/settings/billing/usage --jq '[.usageItems[] | select(.product=="actions")]'` (sum `quantity` for the current month), or the billing page at github.com/settings/billing for the free quota. Record both numbers here. If the remainder can't cover one 3-runner run (about 30 macOS minutes, times the macOS multiplier if one applies), stop and tell the user. Never add a payment method. Each dispatch is one matrix run, never one per push. Repeat this read before every later `gh workflow run smoke.yml` (Task 9 1.0.1, Task 10 Step 6); they cite this step (B20).
-  - `gh workflow run smoke.yml --ref m05-launch -f tag=v1.0.0-rc1`, then `gh run watch`, then `gh run download <run-id> -D docs/gates/evidence/1.0/gh`.
+  - **CI minutes first** (the repo is private; there is no payment method, so an exhausted quota blocks runs). Read the minutes used: `gh api /users/Frequence-xx/settings/billing/usage --jq '[.usageItems[] | select(.product=="actions")]'` (sum `quantity` for the current month), or the billing page at github.com/settings/billing for the free quota. Record both numbers here. If the remainder can't cover one 2-runner run (about 20 macOS minutes, times the macOS multiplier if one applies), stop and tell the user. Never add a payment method. Each dispatch is one matrix run, never one per push. Repeat this read before every later `gh workflow run smoke.yml` (Task 9 1.0.1, Task 10 Step 6); they cite this step (B20).
+  - Dispatch, then watch and download **that** run. `gh run watch` without an id prompts, which fails non-interactively, and `gh workflow run` creates the run asynchronously, so take plan 09's pattern: note the newest run id first and wait up to 60 s for a different one (later dispatches reuse this block with their branch, `--ref` and tag):
+    ```bash
+    OLD=$(gh run list --workflow smoke.yml --branch m05-launch -L1 --json databaseId -q '.[0].databaseId')
+    gh workflow run smoke.yml --ref m05-launch -f tag=v1.0.0-rc1
+    for i in $(seq 30); do ID=$(gh run list --workflow smoke.yml --branch m05-launch -L1 --json databaseId -q '.[0].databaseId'); [ -n "$ID" ] && [ "$ID" != "$OLD" ] && break; sleep 2; done
+    [ "$ID" != "$OLD" ] && gh run watch "$ID" && gh run download "$ID" -D docs/gates/evidence/1.0/gh
+    ```
   - Expected: `smoke.txt` on each runner has 2 `PASS` lines and no `FAIL`.
-  - Move each runner's files into `m14-arm/`, `m15-arm/` and `m26-arm/`.
+  - Move each runner's files into `m15-arm/` and `m26-arm/`.
   - If a Quick Look screenshot is black (headless session), mark R3 `—` for that runner with the reason.
 - [ ] **Step 4: Build Mac, R1–R11 manual pass** (`m15-intel`). Run R10 first, so the update starts from a real b2 install; then R1 (which reinstalls rc1 from the quarantined DMG and runs the smoke script), R2–R9 and R11. Steps per row:
   - **R1:** download the DMG through Safari from the private release, so it gets the quarantine flag. Open it, drag to Applications, first launch. Expected: the standard "downloaded from the Internet" prompt naming Apple-checked software, and the app opens. Also run `bash scripts/smoke-dmg.sh <dmg> docs/gates/evidence/1.0/m15-intel/smoke`: 2 `PASS`.
@@ -340,7 +346,7 @@ Notes the doc must carry:
     3. Leave this Mac activated for the 403 test in Step 5.
   - **R10 (K7, CX13), first:** `--no-upload` writes no appcast, so the production feed never offers an RC.
     1. Install b2: mount `dist-release/markdown/beta-feed/TegelMarkdown-1.0.0-b2.dmg`, drag the app to Applications (replacing any copy) and launch it once. Watch the check fail first: `defaults read "/Applications/Tegel Markdown.app/Contents/Info" CFBundleShortVersionString` → `1.0.0-b2`.
-    2. Copy the RC DMG into that folder, re-run plan 03 Task 13 Step 6's `generate_appcast` and serve the folder as its Step 1 does (plan 03 Hand-off 3).
+    2. Build the RC feed in its **own folder**, so `beta-feed/` keeps only b1 and b2 for plan 03's L2 leg (plan 03 Hand-offs 1 and 3): `cp -R dist-release/markdown/beta-feed dist-release/markdown/rc-feed`, copy the RC DMG into `rc-feed/`, and re-run plan 03 Task 13 Step 6's `generate_appcast` with `F=dist-release/markdown/rc-feed`. Expected: `grep -c '<item>' dist-release/markdown/rc-feed/appcast.xml` → `3` and the same count on `beta-feed/appcast.xml` → `2`. Stop any server on port 8765 (`pkill -f 'http.server 8765'`), then serve `rc-feed/` as plan 03 Task 13 Step 1 serves its folder.
     3. Quit, `open -a "Tegel Markdown" --args -SUFeedURL http://localhost:8765/appcast.xml` (the Sparkle 2.10.1 feed override plan 03 verified), then Check for Updates… → Install and Relaunch. Expected: the same `defaults read` → `1.0.0-rc1`, and About shows `1.0.0-rc1`.
     4. Remove the override afterwards, as plan 03 describes, so Task 10 Step 7 tests the production feed.
   - **R11:** Copy Diagnostics, then `pbpaste > m15-intel/R11.txt`.
@@ -353,7 +359,7 @@ Notes the doc must carry:
   - **Operator:**
     - SSH parts: Claude via `REMOTE_MAC_*`;
     - GUI rows: the user over Screen Sharing, or Claude through the computer-use skill driving Screen Sharing on the build Mac.
-  - **Run:** `scp` the DMG, `Fixtures/` and plan 03's RC test feed folder (with Step 4's rc1 entry) over, and serve the feed on that Mac. Then, in Step 4's order: R10 first (b2 from the copied folder, then the update to rc1), then R1 with `smoke-dmg.sh`, R2–R9 and R11.
+  - **Run:** `scp` the DMG, `Fixtures/` and Step 4's `rc-feed/` over, and serve `rc-feed/` on that Mac. Then, in Step 4's order: R10 first (b2 from the copied folder, then the update to rc1), then R1 with `smoke-dmg.sh`, R2–R9 and R11. Item (2), plan 03's leg, stops this server and serves its own `beta-feed/` (b1 and b2 only, with a sandbox key; plan 03 Hand-off 1).
   - **R9 extra:** with both Macs activated, the call below (run on the build Mac) returns `403` [F3a]. Then deactivate on both Macs. Expected: the customer portal shows 0 activations (screenshot).
 
     ```bash
@@ -364,7 +370,7 @@ Notes the doc must carry:
       -d "{\"key\":\"$(envget POLAR_QA_LICENSE_KEY)\",\"organization_id\":\"$(envget POLAR_ORGANIZATION_ID)\",\"label\":\"qa-third\"}"
     ```
 
-  - **Last, before the lease ends:** after items (2)–(4), if macOS 14 is offered, reinstall and repeat R1–R4, R8 and R9 (`m14-arm` manual cells).
+  - **Last, before the lease ends:** after items (2)–(4), if macOS 14 is offered, reinstall and repeat R1–R4, R8 and R9 (`m14-arm` manual cells). If it isn't, follow the matrix note "No GitHub runner covers macOS 14" (the user chooses).
   - **Release the lease by Fri 27 Nov 09:00 and confirm with the user:** the Scaleway console shows no running server.
 - [ ] **Step 6: Each FAIL becomes a fix.**
   - Open `gh issue create --label bug,1.0.0`.
@@ -808,7 +814,7 @@ Expected: every line starts with `200`. During launch week it can run on `/loop 
     4. Merge and push.
   - **Release** (the 1.0.0 order: smoke the DMG, then publish that same file; K7):
     - `git tag -a v1.0.1 -m "1.0.1" && git push origin v1.0.1`; `scripts/release.sh markdown 1.0.1 --no-upload` → `$DMG`;
-    - `gh release create v1.0.1 "$DMG" --title "1.0.1"` (private), read the CI minutes (Task 3 Step 3), then `gh workflow run smoke.yml --ref main -f tag=v1.0.1` → 3 × 2 `PASS`;
+    - `gh release create v1.0.1 "$DMG" --title "1.0.1"` (private), read the CI minutes (Task 3 Step 3), then dispatch, watch and download with Task 3 Step 3's block (`--branch main`, `--ref main`, `-f tag=v1.0.1`) → 2 × 2 `PASS` (`macos-15`, `macos-26`);
     - 🔒 `scripts/release.sh markdown 1.0.1 --yes --from-dmg "$DMG"` (no rebuild; `--yes` only after the user's yes for 1.0.1);
     - site keys (plan 04 CR-5): on `content/release-1.0.1`, set `apps.markdown.version` → `"1.0.1"` and `downloadURL` → the printed `published …` URL, add the `/changelog/` entry, run review stages 2, 3 and 9, merge, and deploy with plan 04's production deploy command → `curl -s https://tegelapps.com/download/ | grep -cF "<downloadURL>"` ≥ 1;
     - Task 10 Step 7's `same-dmg` comparison with `v1.0.1` and the public 1.0.1 DMG URL → `same-dmg`;
@@ -848,12 +854,13 @@ Expected: every line starts with `200`. During launch week it can run on `/loop 
   - Non-empty: run stages 2, 3, 4 and 9 on that diff, and the full Procedure P if it touches `Apps Packages Renderer scripts Config project.yml`. Append the results under "Release 1.0.0".
   - Commit and push.
 - [ ] **Step 5: Tag and build (Mon 7 Dec).** `git tag -a v1.0.0 -m "Tegel Markdown 1.0.0" && git push origin v1.0.0`, then `scripts/release.sh markdown 1.0.0 --no-upload` → `$DMG`.
-- [ ] **Step 6: Smoke the final build.** `gh release create v1.0.0 "$DMG" --title "1.0.0"` (private), read the CI minutes (Task 3 Step 3), then `gh workflow run smoke.yml --ref main -f tag=v1.0.0`. Expected: 3 runners × 2 `PASS`; `m15-intel` smoke on the same `$DMG` also 2 `PASS`.
+- [ ] **Step 6: Smoke the final build.** `gh release create v1.0.0 "$DMG" --title "1.0.0"` (private), read the CI minutes (Task 3 Step 3), then dispatch, watch and download with Task 3 Step 3's block (`--branch main`, `--ref main`, `-f tag=v1.0.0`). Expected: 2 runners (`macos-15`, `macos-26`) × 2 `PASS`.
+  - `m15-intel` smokes the same `$DMG` into a **scratch folder**, so the installed rc1 that Step 7 updates from stays in `/Applications`: `S=$(mktemp -d); INSTALL_DIR="$S" bash scripts/smoke-dmg.sh "$DMG" docs/gates/evidence/1.0/m15-intel/final; rm -rf "$S"`. Expected: 2 `PASS`.
 - [ ] **Step 7 🔒: Publish the smoked DMG (K7, CR-P2-2).** The user approves "publish Tegel Markdown 1.0.0 (the smoked DMG + appcast) to downloads.tegelapps.com". Then run `scripts/release.sh markdown 1.0.0 --yes --from-dmg "$DMG"` (`--yes` only after that approval, plan 03; without a terminal the prompt aborts; `$DMG` from Step 5, or `gh release download v1.0.0 --pattern '*.dmg'` into an empty folder): it signs the appcast and uploads that file, with no rebuild. Expected:
   - the public DMG URL returns `200`;
   - customers get the bytes the runners smoked, i.e. the private release asset. Watch the comparison fail first, against the RC1 asset: `[ "$(gh release download v1.0.0-rc1 --pattern '*.dmg' --output - | shasum -a 256)" = "$(gh release download v1.0.0 --pattern '*.dmg' --output - | shasum -a 256)" ] || echo differs` → `differs`. Then `[ "$(curl -sL "<public DMG URL>" | shasum -a 256)" = "$(gh release download v1.0.0 --pattern '*.dmg' --output - | shasum -a 256)" ] && echo same-dmg` → `same-dmg`;
   - `curl -s "<SUFeedURL>" | grep -c '<sparkle:shortVersionString>1.0.0<'` → `1`;
-  - on `m15-intel`, the installed `1.0.0-rc1` (test-feed override removed in Task 3) → Check for Updates → About shows 1.0.0. This is R10 against the production feed. The rc build number must be lower than 1.0.0's.
+  - on `m15-intel`, watch the starting point first: `defaults read "/Applications/Tegel Markdown.app/Contents/Info" CFBundleShortVersionString` → `1.0.0-rc1`, and About shows 1.0.0-rc1 (if not, reinstall rc1 from `gh release download v1.0.0-rc1 --pattern '*.dmg'` first; a 1.0.0 already there would pass the next check without any update). Then, with the test-feed override removed in Task 3, Check for Updates → Install and Relaunch → About shows 1.0.0 and the same `defaults read` → `1.0.0`. This is R10 against the production feed. The rc build number must be lower than 1.0.0's.
 - [ ] **Step 8: Site keys (plan 04 CR-5).** On plan 04's `content/w6-launch` branch, set `apps.markdown.version` → `"1.0.0"` and `downloadURL` → the URL on Step 7's `published …` line in `site/config.json`; `(cd site && bun test)` → 0 fail; commit `site/config.json` (`content(site): Tegel Markdown 1.0.0 download` + trailer). Plan 04 Task 14 Step 6 reviews and merges the branch; then deploy with plan 04's production deploy command (plan 04 Task 10 Step 2). Expected: `curl -s https://tegelapps.com/download/ | grep -cF "<downloadURL>"` ≥ 1.
 - [ ] **Step 9: Retire QA access.**
   - Revoke the QA licence key in the dashboard; archive the `QA-INTERNAL` discount and its checkout link (🔒).
@@ -897,7 +904,7 @@ Expected: every line starts with `200`. During launch week it can run on `/loop 
     - **≥ 30 paid sales:** continue.
     - **< 10:** stop the App 1 SEO work; ship App 2 anyway (it shares about 60% of the code). If App 2 also makes < 10 sales by **Thu 4 Mar 2027**, stop the studio.
     - **10–29:** §12 defines no action. Default: continue as scheduled and let G2 (Mon 8 Mar 2027) decide. The user may override; record their call.
-- [ ] **Step 4: Follow-up reminder for Thu 4 Mar 2027.** Calendar entry (user), plus `CronCreate` if the session offers it. The reminder runs `polar_sales.py --from 2027-02-02 --to 2027-03-04` for App 2's product id (plan 07 G1's `--products` if it has merged; otherwise the sales command with `POLAR_PRODUCT_ID_MARKDOWN="$(envget POLAR_PRODUCT_ID_DATA)"`, B7), plus the App 1 figure from G1. Record in G1.md which reminder exists.
+- [ ] **Step 4: Follow-up reminder for Thu 4 Mar 2027.** Calendar entry (user), plus `CronCreate` if the session offers it. The reminder counts App 2 sales as plan 06's `docs/gates/G1b.md` defines them (B7): the sales command `--from 2027-02-02 --to 2027-03-04` run once per product over `POLAR_PRODUCT_ID_DATA` and `POLAR_PRODUCT_ID_BUNDLE` (each passed as `POLAR_PRODUCT_ID_MARKDOWN`), with the two `sales=` values summed; or one plan 07 G1 `--products` call with both ids if it has merged. Counting the Data product alone would miss bundle sales. Add the App 1 figure from G1. Record in G1.md which reminder exists.
 - [ ] **Step 5:** `git add docs/gates/G1.md`, commit `docs(gates): G1 result and decision` + trailer, push.
 
 ---
@@ -920,8 +927,7 @@ Expected: every line starts with `200`. During launch week it can run on `/loop 
   - the Sparkle 2.10.1 feed override behind the RC test feed (plan 03 verifies it first; T3 R10);
   - the PH tag names (T8);
   - the press tips addresses (T8);
-  - whether `macos-14` still exists (T3);
-  - whether Scaleway offers macOS 14 (T3 S5).
+  - whether Scaleway offers macOS 14 (T3 S5), now the only macOS 14 coverage; the `macos-14` runner retirement (actions/runner-images #13518) is re-read before Task 1.
 
 ## Contract change requests
 

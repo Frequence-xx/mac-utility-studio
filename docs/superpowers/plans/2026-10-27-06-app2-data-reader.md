@@ -48,7 +48,7 @@ Master §2/§3 and `CLAUDE.md` apply (platform, machines and evidence naming, pr
 - **Writes:** only a Markdown export to a save-panel URL and the app's own container (rule 1). `readonly-gate` (Task 11) scans all of `Apps/`.
 - **Secrets on screen:**
   - `.env` values are masked by default and revealed per click in the window only. They never appear in any Quick Look DOM.
-  - Quick Look also masks PEM private-key bodies, URL passwords and common token shapes in any file, in every view, and every value in secret dotfiles (`.netrc`, `.npmrc`, `.git-credentials`, `credentials`, `id_rsa`, …), with no reveal.
+  - Quick Look also masks PEM private-key bodies, URL passwords and common token shapes in any file, in every view; the value of every secret-named key or column in tree, row and table views; and every value in secret dotfiles (`.netrc`, `.npmrc`, `.git-credentials`, `credentials`, `id_rsa`, …), with no reveal.
   - The transcript view and its Markdown export mask common token shapes unless the user turns on "Show secrets".
 - **Untrusted input:** every string is escaped by our code **and** the result goes through the page's DOMPurify sanitiser.
 - **Pricing:** $15 once, 2 Macs; the bundle at $29 grants both licences; EUR prices per master K10 (user-confirmed amounts). Free = Quick Look for every format. Pro = window viewer, `.env` viewer, session mode, export (§6.2).
@@ -78,7 +78,7 @@ Renderer/src/data/        labels.js, parse.js, tree.js, jsonl.js, table.js, dote
 Renderer/src/css/data.css
 Renderer/test/            data-tree, data-rows, data-dotenv, data-transcript .test.js
 Packages/TegelKit/Sources/TegelKit/    DataFile.swift (DataFormat, DataFile, RecordIndex), DataRender.swift
-Packages/TegelKit/Tests/TegelKitTests/ DataFileTests.swift, DataRenderTests.swift (+FolderIndexTests)
+Packages/TegelKit/Tests/TegelKitTests/ DataFileTests.swift, WebView/DataRenderTests.swift (+FolderIndexTests)
 Apps/Data/App/AppIcon.icon/            plan 09's Data icon (D-5)
 Fixtures/data/            sample.*, quoted-newline.csv, hostile.*, sessions/…, generate.js (big-* generated)
 scripts/check-data-types.swift, scripts/entitlements/{data,data.quicklook}.plist
@@ -88,7 +88,9 @@ docs/launch/data-*.md, docs/gates/G1b.md, docs/reviews/m06.md
 Modified: project.yml, Config/{Debug,Release}.xcconfig, Makefile, .gitignore, .env.example,
           scripts/{release.sh,release_test.sh} (plan 03), scripts/{smoke-dmg.sh,test-smoke-dmg.sh} (plan 05),
           site/config.json, site/test/pages.test.js,
-          Renderer/{package.json,bun.lock,build.js,src/page.js}, TegelKit Resources/Renderer (generated)
+          Renderer/{package.json,bun.lock,build.js,src/page.js}, TegelKit Resources/Renderer (generated),
+          TegelKit {TextFileLoader,RendererWebView,FolderIndex}.swift (Tasks 5, 6, 10), Apps/Markdown/App/LicenceSettingsView.swift
+          and its call site (Task 8)
 ```
 
 ---
@@ -112,7 +114,7 @@ Modified: project.yml, Config/{Debug,Release}.xcconfig, Makefile, .gitignore, .e
 | 2 | Does `TextFileLoader.load` read only `maxBytes` (a prefix), not the whole file? | `grep -nE 'read\(upToCount\|contentsOf\|mappedIfSafe' Packages/TegelKit/Sources/TegelKit/TextFileLoader.swift` | Task 5 |
 | 3 | `FolderIndex.search`: does it read files through `TextFileLoader`'s 5 MB default? Is `markdownFiles` built on a generic walker? | `sed -n 1,200p Packages/TegelKit/Sources/TegelKit/FolderIndex.swift` | Task 10, CR-2 |
 | 4 | Does `BookmarkStore.resolveAll()` call `startAccessingSecurityScopedResource()`? Is there a remove function? | `grep -n 'startAccessing\|func ' Packages/TegelKit/Sources/TegelKit/BookmarkStore.swift` | Task 10 |
-| 5 | Does `scroll(toHeading:)` use `getElementById` (so `id="L<line>"` works)? Is `RenderOptions` given a public `init(mode:theme:baseURL:)`? | `grep -n 'getElementById\|public init' Packages/TegelKit/Sources/TegelKit/*.swift` | Tasks 6, 10 |
+| 5 | Does `scroll(toHeading:)` take the DOM id and use `getElementById`, and does the data path's sanitise pass set `SANITIZE_NAMED_PROPS` (so `id="L<line>"` lands as `user-content-L<line>`, plan 01 CR 4)? Is `RenderOptions` given a public `init(mode:theme:baseURL:)`? | `grep -n 'getElementById\|public init' Packages/TegelKit/Sources/TegelKit/*.swift; grep -n SANITIZE_NAMED_PROPS Renderer/src/page.js` | Tasks 6, 10 |
 | 6 | Does TegelStore send `benefit_id` on validate and check `license_key.benefit_id` on activate (plan 03, D1)? If not, stop and ask the user: no Data product goes live without it. | `grep -rn benefit Packages/TegelKit/Sources/TegelStore` | Task 12 |
 | 7 | App 1's patterns:<br>• opening a file from Finder (`application(_:open:)` or `WindowGroup(for: URL.self)`);<br>• the `ProGate.swift` and `LicenceSettingsView.swift` paths, and the Debug override;<br>• the localisation format (`.xcstrings`) | `ls Apps/Markdown/App; grep -rn 'onOpenURL\|open urls\|WindowGroup' Apps/Markdown/App` | Tasks 1, 8 |
 | 8 | `page.js`:<br>• the lazy script-loader function (the Mermaid one);<br>• the sanitise function and DOMPurify config;<br>• whether an escape helper is exported;<br>• the content container id;<br>• the test framework (XCTest or Swift Testing) and whether there's a DOM test helper | `grep -nE 'function \|export ' Renderer/src/page.js Renderer/src/markdown.js; ls Packages/TegelKit/Tests/TegelKitTests` | Tasks 2, 6 |
@@ -138,8 +140,8 @@ Modified: project.yml, Config/{Debug,Release}.xcconfig, Makefile, .gitignore, .e
 - Create: `Apps/Data/QuickLook/{Info.plist,DataQuickLook.entitlements,PreviewProvider.swift}`. `PreviewProvider` is a stub that returns the file's first 2 KB as plain text.
 - Create: `Apps/Data/Shared/{DataLabels.swift,Localizable.xcstrings}`, holding `enum DataLabels { static var all: [String: String] }`, the localised strings passed to JS.
 - Create: `scripts/check-data-types.swift`, and `.github/workflows/types.yml` (Step 5; `ci.yml` only runs `make test-swift`/`build`, so the matrix needs its own dispatch-only workflow, K13).
-- Modify: `Config/Debug.xcconfig` and `Config/Release.xcconfig`. Add `TG_POLAR_CHECKOUT_URL_DATA` and `TG_POLAR_BENEFIT_ID_DATA` (sandbox values beside plan 03's sandbox values, production values in Release, filled in Task 12).
-- Modify: `.env.example`. Add `POLAR_PRODUCT_ID_{DATA,BUNDLE}`, `POLAR_BENEFIT_ID_DATA`, `POLAR_CHECKOUT_URL_DATA`, `POLAR_SANDBOX_CHECKOUT_URL_DATA`, `POLAR_CHECKOUT_URL_BUNDLE`, `POLAR_QA_LICENSE_KEY_DATA` (Task 12; emptied in Task 16). The `_MARKDOWN` keys already exist (plan 05), and MailerLite keys are plan 08's.
+- Modify: `Config/Debug.xcconfig` and `Config/Release.xcconfig`. Add `TG_POLAR_CHECKOUT_URL_DATA` and `TG_POLAR_BENEFIT_ID_DATA` (sandbox values beside plan 03's sandbox values, filled in Task 12). In `Release.xcconfig` they hold plan 03's placeholder token until Task 12 Step 3: `TG_POLAR_CHECKOUT_URL_DATA = https:/$()/REPLACE_IN_PLAN_05.invalid` and `TG_POLAR_BENEFIT_ID_DATA = REPLACE_IN_PLAN_05`. `release.sh` greps the whole file for that token, so it refuses a non-sandbox Data build until the production ids are in. The tokens live only on `m06-app2`, so App 1 releases from `main` are unaffected.
+- Modify: `.env.example`. Add `POLAR_PRODUCT_ID_{DATA,BUNDLE}`, `POLAR_BENEFIT_ID_DATA`, `POLAR_CHECKOUT_URL_DATA`, `POLAR_SANDBOX_CHECKOUT_URL_{DATA,BUNDLE}`, `POLAR_CHECKOUT_URL_BUNDLE`, `POLAR_QA_LICENSE_KEY_DATA` (Task 12; emptied in Task 16). The `_MARKDOWN` keys already exist (plan 05), and MailerLite keys are plan 08's.
 
 **Interfaces:**
 - Consumes: `options.bundleIdPrefix: com.tegelapps` (D7), the TG* xcconfig variable names (Task 0 #9), D5 entitlements, and the G0 decision (Task 0 #1).
@@ -155,7 +157,7 @@ Type declarations (App `Info.plist`, `UTImportedTypeDeclarations`, per DF3: thes
 
 The system types are referenced by identifier and never redeclared (DF3): `public.json`, `public.yaml`, `public.comma-separated-values-text`, `public.tab-separated-values-text` (DF1), and `public.ndjson` (DF2).
 
-- **`CFBundleDocumentTypes`:** one entry, role `Viewer`, `LSHandlerRank` `Alternate` (we never take over the default app). `LSItemContentTypes` holds the 4 DF1 types plus `public.ndjson`, `public.toml`, and the 3 imported types.
+- **`CFBundleDocumentTypes`:** one entry, role `Viewer`, `LSHandlerRank` `Alternate` (we never take over the default app). `LSItemContentTypes` holds the 4 DF1 types plus `public.ndjson`, `public.toml`, the 3 imported types, and `public.data`: files named exactly `.env` or `.envrc` are typed `public.data` (DF2), so without it Open With and a drop on the Dock icon never offer Tegel Data. The window routes those files by name (Task 5) and rejects binaries (Task 8). Task 8 Step 4 checks the rank's behaviour on a real `.env`.
 - **`QLSupportedContentTypes`:** the same list plus **`public.data`** (the extension-less text path, DF5). `QLIsDataBasedPreview` follows G0.
 - **Entitlements:**
   - App: exactly D5 (`app-sandbox`, `files.user-selected.read-write`, `files.bookmarks.app-scope`, `network.client`, and the Sparkle mach-lookup exception for `$(PRODUCT_BUNDLE_IDENTIFIER)-spks` and `-spki`).
@@ -194,16 +196,23 @@ git switch main && git pull --ff-only && git checkout m06-app2 -- .github/workfl
 git commit -m "ci: UTType matrix workflow, dispatch only" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-  Before pushing, a cold code-review subagent reviews `git show HEAD` for SHA pins, `permissions: contents: read`, `workflow_dispatch` only, no secrets, the checksum before `unzip`, and no build step in `types`. Fix and amend until it finds no P0/P1. Then run the matrix (needs the user's `gh auth login`):
+  Before pushing, a cold code-review subagent reviews `git show HEAD` for SHA pins, `permissions: contents: read`, `workflow_dispatch` only, no secrets, the checksum before `unzip`, and no build step in `types`. Fix and amend until it finds no P0/P1. Then copy the reviewed file back to the branch, so the final merge neither conflicts nor restores the unreviewed copy, and run the matrix (needs the user's `gh auth login`):
 
 ```bash
-git push origin main && git switch m06-app2 && git push -u origin m06-app2
+git push origin main && git switch m06-app2
+git checkout main -- .github/workflows/types.yml
+git diff --cached --quiet || git commit -m "ci: types.yml as reviewed on main" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git diff --quiet main m06-app2 -- .github/workflows/types.yml; echo "differs=$?"   # differs=0: the copies are identical
+git push -u origin m06-app2
+OLD=$(gh run list --workflow types.yml --branch m06-app2 -L1 --json databaseId -q '.[0].databaseId')
 gh workflow run types.yml --ref m06-app2
-ID=$(gh run list --workflow types.yml --branch m06-app2 -L1 --json databaseId -q '.[0].databaseId')
-gh run watch "$ID" && gh run download "$ID" -D docs/reviews/m06-types
+for i in $(seq 30); do ID=$(gh run list --workflow types.yml --branch m06-app2 -L1 --json databaseId -q '.[0].databaseId'); [ -n "$ID" ] && [ "$ID" != "$OLD" ] && break; sleep 2; done
+[ "$ID" != "$OLD" ] && gh run watch "$ID" && gh run download "$ID" -D docs/reviews/m06-types
 ```
 
-  Expected: `docs/reviews/m06-types/types-macos-{14,15,26}/types.txt`, each with one line per file and an `exit=` line. If the `macos-14` leg gets no runner, record `n/a: image retired`. Record each OS's actual identifiers in `docs/reviews/m06.md` § "UTType matrix", and macOS 27's per Task 14. The open questions are whether macOS 14 has `public.ndjson` and whether 26/27 declare `public.toml`.
+  `gh workflow run` creates the run asynchronously, so the loop waits up to 60 s for a run ID that differs from the one before the dispatch (plan 09 Task 11 Step 9's pattern).
+
+  Expected: `differs=0`; `docs/reviews/m06-types/types-macos-{14,15,26}/types.txt`, each with one line per file and an `exit=` line. If the `macos-14` leg gets no runner, record `n/a: image retired`. Record each OS's actual identifiers in `docs/reviews/m06.md` § "UTType matrix", and macOS 27's per Task 14. The open questions are whether macOS 14 has `public.ndjson` and whether 26/27 declare `public.toml`.
 - [ ] **Step 6: Commit:** `docs/reviews/m06.md docs/reviews/m06-types`, `docs(m06): UTType matrix on macOS 14, 15 and 26` + trailer.
 
 ---
@@ -277,6 +286,7 @@ test('big integers stay exact or are marked', () => {
   const { html } = treeHTML(parseDocument('{"id":12345678901234567891}', 'json').value);
   expect(html.includes('12345678901234567891') || html.includes('≈')).toBe(true);
   expect(treeHTML(parseDocument('id = 9223372036854775807\n', 'toml').value).html).toContain('9223372036854775807');
+  expect(parseDocument('{"n":1e20}', 'json').ok).toBe(true); // integer-valued and unsafe, but not digits: BigInt('1e20') would throw
 });
 test('budget bounds deep nesting and alias bombs; lazy nodes are addressable', () => {
   const deep = JSON.parse('['.repeat(3000) + ']'.repeat(3000));
@@ -296,7 +306,7 @@ test('budget bounds deep nesting and alias bombs; lazy nodes are addressable', (
 - [ ] **Step 2: Run it, expect FAIL.** `cd Renderer && bun test test/data-tree.test.js`. Expected: FAIL, `Cannot find module '../src/data/parse.js'`.
 - [ ] **Step 3: Implement the three files.**
   - **`parseDocument`** strips a leading U+FEFF, then:
-    - **json:** `JSON.parse` with a reviver that returns `BigInt(ctx.source)` for unsafe integers when `ctx?.source` exists [DF7]. JSC errors carry no position, so on failure (if `text.length ≤ 5_000_000`) it gets the line by running js-yaml `load` on the same text (YAML is a JSON superset). If YAML parses, the message is `labels.invalidJSONValidYAML` with no line.
+    - **json:** `JSON.parse` with a reviver that returns `BigInt(ctx.source)` for unsafe integers when `ctx?.source` exists and matches `/^-?\d+$/` [DF7]; any other unsafe number (`1e20`) stays a Number, which the tree marks with `≈`. JSC errors carry no position, so on failure (if `text.length ≤ 5_000_000`) it gets the line by running js-yaml `load` on the same text (YAML is a JSON superset). If YAML parses, the message is `labels.invalidJSONValidYAML` with no line.
     - **yaml:** js-yaml `load`; line = `e.mark.line + 1`. **toml:** smol-toml `parse(text, { integersAsBigInt: 'asNeeded' })`, default `unsafeKeyBehaviour: 'keep'` (show the file truthfully); line from `TomlError`.
   - **`treeHTML`:** objects and arrays become `<details data-path>` + `<summary>` (root open), recursing until `budget` nodes are used, then childless `<details data-lazy>`. Arrays over 1,000 items are chunked into `[0…999]` groups. Strings render as `<span class="s" dir="auto">`; unsafe integers get an `≈` prefix; BigInt renders exactly. Keys come from `Object.keys` with direct reads: never spread or `Object.assign` parsed values [DF8].
 - [ ] **Step 4: Run it, expect PASS.** `cd Renderer && bun test test/data-tree.test.js`. Expected: 7 pass, 0 fail.
@@ -373,6 +383,7 @@ test('table cells are escaped', () => {
 
 **Files:**
 - Create: `Renderer/src/data/dotenv.js`, `Fixtures/data/sample.env` (synthetic values only, e.g. `not-a-real-secret-1`).
+- Modify: `Renderer/src/data/tree.js`, `Renderer/src/data/table.js`, `Renderer/src/data/jsonl.js` (the `maskNames` option).
 - Test: `Renderer/test/data-dotenv.test.js`.
 
 **Interfaces:**
@@ -380,6 +391,14 @@ test('table cells are escaped', () => {
 - Produces:
 
 ```js
+export function isSecretName(name)
+  // -> boolean, any case: name contains KEY, TOKEN, SECRET, PASSWORD, PASSWD or CREDENTIAL, or has AUTH or AUTHORIZATION as a
+  //    whole segment between start, end, '_', '-' or '.' (`auth`, `HTTP_AUTH`, `basic-auth`; `author` stays visible)
+// tree.js, table.js, jsonl.js gain an option, default false, that Quick Look turns on (Task 6):
+//   treeHTML(value, { …, maskNames })         -> the value of a key passing isSecretName renders as '••••••••', with no children
+//   tableRowsHTML(rows, first, header, { maskNames }) -> every cell under a header cell passing isSecretName renders as '••••••••'
+//   jsonlRowHTML(lineNo, text, labels, { maskNames }) -> the preview is JSON.stringify(value, replacer) instead of the raw line;
+//                                                        the replacer returns '••••••••' for a secret-named key and v.toString() for a BigInt
 export function parseDotenv(text)
   // -> { entries: [{ line, key, value, exported: boolean, commented: boolean }], comments: [{ line, text }], errors: [{ line, message }] }
 export function envHTML(parsed, labels = DEFAULT_LABELS)
@@ -388,11 +407,12 @@ export function maskSecrets(text, { wholeFile = false, structured = false } = {}
   // -> text with secrets replaced by '••••••••' (K12). Always:
   //    PEM private-key bodies (BEGIN … PRIVATE KEY … END; each non-space run of the body is replaced, newlines and indentation kept);
   //    the password in scheme://user:password@host (.git-credentials lines, URLs in any text);
-  //    token shapes sk-…, gh[pousr]_…, github_pat_…, glpat-…, xox[abpr]-…, AKIA…, and a 40-char [A-Za-z0-9/+] run on the
-  //    same line as an AKIA id (the secret of an AWS key pair).
-  //    Unless structured: the value of NAME=value / NAME: value when NAME contains KEY, TOKEN, SECRET, PASSWORD or PASSWD (any case).
+  //    token shapes sk-…, sk_live_…, rk_live_…, gh[pousr]_…, github_pat_…, glpat-…, xox[abpr]-…, AKIA…, AIza…, npm_…, hvs.…, hf_…,
+  //    and a 40-char [A-Za-z0-9/+] run on the same line as an AKIA id (the secret of an AWS key pair).
+  //    Unless structured: the value of NAME=value / NAME: value when isSecretName(NAME).
   //    structured (Quick Look's JSON/JSONL/YAML/TOML/CSV/TSV/.env input) skips only that pass: an unquoted replacement can
-  //    break a parser, while the passes above replace key and token characters only, so the file still parses.
+  //    break a parser, while the passes above replace key and token characters only, so the file still parses. The views
+  //    apply the same name rule after parsing instead (maskNames above).
   //    wholeFile (secret dotfiles, Task 5 DataFile.secretFile): then every non-comment line keeps only its first token
   //    (`machine`, `//registry/:_authToken`, `aws_secret_access_key`, the masked credential URL, …). The list is explicit, not a scanner.
 ```
@@ -408,6 +428,9 @@ Parsing rules:
 import { test, expect } from 'bun:test';
 import { parseDotenv, envHTML, maskSecrets } from '../src/data/dotenv.js';
 import { parseDocument } from '../src/data/parse.js';
+import { treeHTML } from '../src/data/tree.js';
+import { tableRowsHTML } from '../src/data/table.js';
+import { jsonlRowHTML } from '../src/data/jsonl.js';
 const SRC = ['# comment line', 'export API_KEY=sk-test-AAAA1111', "SINGLE='lit $HOME'", 'DOUBLE="line1\\nline2"',
   'MULTI="first', 'second"', '# OLD_TOKEN=tok-old-BBBB2222', 'INLINE=val-CCCC3333 # note', 'not a valid line sk-zzz', 'EMPTY='].join('\r\n');
 
@@ -465,15 +488,29 @@ test('structured masking keeps the file parseable and its line numbers', () => {
   expect(v.max_keys).toBe(5); expect(v.private_key).not.toContain('ZmFrZS1ib2R5');
   expect(parseDocument(maskSecrets(JSON.stringify({ private_key: pem }), { structured: true }), 'json').ok).toBe(true);
 });
+test.each([['stripe sk_live_', 'sk' + '_live_' + 'a'.repeat(24)], ['stripe rk_live_', 'rk' + '_live_' + 'b'.repeat(24)],
+  ['google AIza', 'AI' + 'za' + 'C'.repeat(35)], ['npm_', 'np' + 'm_' + 'd'.repeat(36)], ['vault hvs.', 'hv' + 's.' + 'e'.repeat(24)],
+  ['hugging face hf_', 'h' + 'f_' + 'F'.repeat(34)]])('token shape %s is masked in any file', (_, tok) => {
+  expect(maskSecrets(`note ${tok}`, { structured: true })).not.toContain(tok);
+});
+test('secret-named keys and columns are masked in tree, row and table views', () => {
+  const adc = '{"client_id":"visible-id","client_secret":"cs-not-real-1","refresh_token":"rt-not-real-2","auth":"YXV0aC1ub3QtcmVhbA==","author":"Jane"}';
+  const tree = treeHTML(parseDocument(adc, 'json').value, { maskNames: true }).html;
+  for (const s of ['cs-not-real-1', 'rt-not-real-2', 'YXV0aC1ub3QtcmVhbA==']) expect(tree).not.toContain(s);
+  for (const s of ['client_secret', 'visible-id', 'Jane']) expect(tree).toContain(s);
+  expect(jsonlRowHTML(1, adc, undefined, { maskNames: true })).not.toContain('cs-not-real-1');
+  const table = tableRowsHTML([['demo', 'pw-not-real-3']], 1, ['user', 'POSTGRES_PASSWORD'], { maskNames: true });
+  expect(table).not.toContain('pw-not-real-3'); expect(table).toContain('demo');
+});
 ```
 
 - [ ] **Step 2: Run it, expect FAIL.** `cd Renderer && bun test test/data-dotenv.test.js`. Expected: FAIL, `Cannot find module '../src/data/dotenv.js'`.
-- [ ] **Step 3: Implement `parseDotenv`, `envHTML` and `maskSecrets`.** A single line-cursor loop that applies the rules above. `envHTML` emits keys, comments (through `maskSecrets` before escaping) and error rows from `parsed`, and only the index `k` for each value. `maskSecrets` is four regex passes in the interface's order (PEM body, credential URL, token shapes, then the secret-named assignment unless `structured`) plus the `wholeFile` line rule.
-- [ ] **Step 4: Run it, expect PASS.** `cd Renderer && bun test test/data-dotenv.test.js`. Expected: 7 pass.
-- [ ] **Step 5: Watch the two credential rules fail.** One at a time, then restore each and re-run to 7 pass:
+- [ ] **Step 3: Implement `parseDotenv`, `envHTML` and `maskSecrets`.** A single line-cursor loop that applies the rules above. `envHTML` emits keys, comments (through `maskSecrets` before escaping) and error rows from `parsed`, and only the index `k` for each value. `maskSecrets` is four regex passes in the interface's order (PEM body, credential URL, token shapes, then the secret-named assignment unless `structured`) plus the `wholeFile` line rule. `isSecretName` is one case-insensitive regex, shared by that pass and the three `maskNames` options.
+- [ ] **Step 4: Run it, expect PASS.** `cd Renderer && bun test test/data-dotenv.test.js`. Expected: 14 pass.
+- [ ] **Step 5: Watch the two credential rules fail.** One at a time, then restore each and re-run to 14 pass:
   - delete the credential-URL pass. Expected: FAIL in `credential URLs and newer token prefixes…`, the output contains `not-a-real-secret-7`;
   - delete `github_pat_` from the token shapes. Expected: FAIL in the same test, the output contains `DDDDDDDD`.
-- [ ] **Step 6: Commit:** `Renderer/src/data/dotenv.js Renderer/test/data-dotenv.test.js Fixtures/data/sample.env`, `feat(renderer): .env parser and secret masking, values kept out of the HTML` + trailer.
+- [ ] **Step 6: Commit:** `Renderer/src/data/dotenv.js Renderer/src/data/tree.js Renderer/src/data/table.js Renderer/src/data/jsonl.js Renderer/test/data-dotenv.test.js Fixtures/data/sample.env`, `feat(renderer): .env parser and secret masking, values kept out of the HTML` + trailer.
 
 ---
 
@@ -481,6 +518,7 @@ test('structured masking keeps the file parseable and its line numbers', () => {
 
 **Files:**
 - Create: `Packages/TegelKit/Sources/TegelKit/DataFile.swift`.
+- Modify: `Packages/TegelKit/Sources/TegelKit/TextFileLoader.swift` (plan 01's). Extract its byte decoding (UTF-8 → BOM UTF-16 → Windows-1252) into `static func decode(_ data: Data) -> String` (internal), which `load` then calls; no behaviour change.
 - Test: `Packages/TegelKit/Tests/TegelKitTests/DataFileTests.swift` (XCTest, or whatever Task 0 #8 found).
 
 **Interfaces:**
@@ -509,7 +547,8 @@ public final class RecordIndex: Sendable {
     public var count: Int { get }
     public let quoteRunaway: Bool                    // a quoted record passed 1 MB, or EOF was reached inside quotes -> rebuilt line-based
     public func records(in range: Range<Int>) throws -> [String]
-    // range clamped to 0..<count; trailing "\r" stripped; lossy UTF-8. Opens a FileHandle, seeks to the first offset and reads
+    // range clamped to 0..<count; trailing "\r" stripped; each record decoded by TextFileLoader.decode (so a Windows-1252
+    // CSV shows `é`, as in Quick Look), never lossy UTF-8. Opens a FileHandle, seeks to the first offset and reads
     // up to the end offset; if the file is now shorter than that end offset -> throws .truncated (never a mapped read, so no SIGBUS)
 }
 ```
@@ -523,6 +562,8 @@ public final class RecordIndex: Sendable {
   - **`testLinesCRLFAndBOM`:** `"\u{FEFF}a\r\nb\nc\n"` gives `count == 3` and `records(in: 0..<3) == ["a","b","c"]`.
   - **`testQuotedNewlineCSV`:** `Fixtures/data/quoted-newline.csv` with `quoteAware: true` gives `count == 4`, and `records(in: 2..<3)[0]` contains `"\n"`.
   - **`testUnbalancedQuoteFallsBackToLines`:** `"a,b\n\"open,1\n"` followed by 20,000 lines of `x,y` (about 80 KB, so this is the EOF-inside-quotes rule, not the 1 MB one) gives `quoteRunaway == true` and `count == 20_002`.
+  - **`testStrayQuoteInUnquotedField`:** `"id,size\n1,12\" pipe\n2,3\" pipe\n3,x\n"` with `quoteAware: true` gives `count == 4`, `quoteRunaway == false` and `records(in: 1..<2) == ["1,12\" pipe"]` (a quote that toggles anywhere merges rows 1 and 2).
+  - **`testWindows1252Record`:** the bytes of `"café,1\nx,2\n"` in Windows-1252 (`63 61 66 E9 2C 31 0A 78 2C 32 0A`) with `quoteAware: true` give `records(in: 0..<1) == ["café,1"]`.
   - **`testUTF16BOMThrows`:** bytes `FF FE 61 00` throw `RecordIndexError.utf16`.
   - **`testRangeClamped`:** on a 3-record file, `try records(in: 1..<10).count == 2` and `try records(in: 5..<9) == []`.
   - **`testTruncatedFileThrowsNotCrash`** (K12): index a 50 MB temp file of `"{\"i\":N}\n"` lines, then truncate it in place to 1 KB (`FileHandle(forWritingTo:).truncate(atOffset: 1024)` on the test's own temp file). `records(in: 1000..<1001)` throws `RecordIndexError.truncated`, and the test process is still alive.
@@ -530,11 +571,14 @@ public final class RecordIndex: Sendable {
 - [ ] **Step 2: Run them, expect FAIL.** `swift test --package-path Packages/TegelKit --filter DataFileTests`. Expected: FAIL to compile, `cannot find 'DataFile' in scope`.
 - [ ] **Step 3: Implement.**
   - `DataFile.load`: check `resourceValues(forKeys: [.isRegularFileKey])` first, then read a prefix through `TextFileLoader.load(url, maxBytes:)`. If Task 0 #2 found that it reads the whole file, read the prefix with `FileHandle.read(upToCount:)` instead. `secretFile = isSecret(filename: url.lastPathComponent)`.
-  - `RecordIndex`: read the file in 4 MiB chunks with `FileHandle.read(upToCount:)`, never `Data(contentsOf:options: .alwaysMapped)`. In line mode, `memchr` for `\n`. In quote mode, a byte loop that toggles on `0x22` (this handles `""` too); EOF inside quotes rebuilds line-based. Store record starts in `[Int]` plus the end offset.
-  - `records(in:)`: `FileHandle(forReadingFrom:)`, `fstat` size check against the range's end offset (throw `.truncated` if short), then `seek(toOffset:)` + `read(upToCount:)` and split at the stored offsets.
-- [ ] **Step 4: Run them, expect PASS.** `make fixtures && swift test --package-path Packages/TegelKit --filter DataFileTests`. Expected: 12 pass, 0 skipped.
-- [ ] **Step 5: Watch the truncation guard fail.** Comment out the size check in `records(in:)` and re-run `--filter testTruncatedFileThrowsNotCrash`. Expected: FAIL (no error thrown: the short read traps on the slice or returns wrong records). Restore it; PASS again.
-- [ ] **Step 6: Commit:** `Packages/TegelKit/Sources/TegelKit/DataFile.swift Packages/TegelKit/Tests/TegelKitTests/DataFileTests.swift`, `feat(tegelkit): DataFormat routing, capped DataFile loading, offset-only RecordIndex` + trailer.
+  - `RecordIndex`: read the file in 4 MiB chunks with `FileHandle.read(upToCount:)`, never `Data(contentsOf:options: .alwaysMapped)`. In line mode, `memchr` for `\n`. In quote mode, an RFC 4180 byte loop: a `"` opens a quoted field only as the field's first byte (record start or after `,`); inside a quoted field `""` is an escaped quote and a lone `"` closes it (a closing quote that waits on the next byte carries across the chunk boundary); a `"` anywhere in an unquoted field is literal. EOF inside quotes rebuilds line-based. Store record starts in `[Int]` plus the end offset.
+  - `records(in:)`: `FileHandle(forReadingFrom:)`, `fstat` size check against the range's end offset (throw `.truncated` if short), then `seek(toOffset:)` + `read(upToCount:)`, split at the stored offsets and decode each record with `TextFileLoader.decode`.
+- [ ] **Step 4: Run them, expect PASS.** `make fixtures && swift test --package-path Packages/TegelKit --filter DataFileTests`. Expected: 14 pass, 0 skipped.
+- [ ] **Step 5: Watch three guards fail.** One at a time, then restore each and re-run to PASS:
+  - comment out the size check in `records(in:)`, re-run `--filter testTruncatedFileThrowsNotCrash`. Expected: FAIL (no error thrown: the short read traps on the slice or returns wrong records);
+  - make every `"` toggle quote mode, re-run `--filter testStrayQuoteInUnquotedField`. Expected: FAIL, `count == 3`;
+  - decode records with `String(decoding:as: UTF8.self)`, re-run `--filter testWindows1252Record`. Expected: FAIL, `caf\u{FFFD},1`.
+- [ ] **Step 6: Commit:** `Packages/TegelKit/Sources/TegelKit/DataFile.swift Packages/TegelKit/Sources/TegelKit/TextFileLoader.swift Packages/TegelKit/Tests/TegelKitTests/DataFileTests.swift`, `feat(tegelkit): DataFormat routing, capped DataFile loading, offset-only RecordIndex` + trailer.
 
 ---
 
@@ -545,12 +589,13 @@ public final class RecordIndex: Sendable {
 - Modify: `Renderer/build.js` (a new entry, `src/data/view.js` → `data.js`, and copy `data.css`); `Renderer/src/data/labels.js` (adds `changed: 'The file changed on disk. Reloading…'`).
 - Modify: `Renderer/src/page.js`. Add stubs `window.tegel.renderData`, `openPaged` and `transcriptMarkdown`; they load `data.js` once through the Mermaid script loader (Task 0 #8). The CSP doesn't change.
 - Create: `Packages/TegelKit/Sources/TegelKit/DataRender.swift`.
+- Modify: `Packages/TegelKit/Sources/TegelKit/RendererWebView.swift` (plan 01's). A fresh renderer loads nothing yet (plan 01), and only `render` loads the page. Extract `render` steps 1–2 (cancel a pending render; if the page is dirty, install the rule list, (re)load `indexURL` and await `didFinish`) into `func preparePage() async throws` (internal), which `render` calls first. Markdown's behaviour doesn't change.
 - Create: `Fixtures/data/hostile.{json,jsonl,yaml,toml,csv,env}`. Each embeds `<img src=x onerror="window.__pwned=1">`, `<script>window.__pwned=1</script>`, `"><svg onload=window.__pwned=1>` and `javascript:window.__pwned=1` in keys and values. `hostile.env` also carries them in a `#` comment line: comments are the only `.env` text that reaches the page (bad keys become error rows that never echo, and values are masked).
 - Regenerate: `Packages/TegelKit/Sources/TegelKit/Resources/Renderer/` (`make renderer`).
-- Test: `Packages/TegelKit/Tests/TegelKitTests/DataRenderTests.swift`.
+- Test: `Packages/TegelKit/Tests/TegelKitTests/WebView/DataRenderTests.swift` (WebKit suites live under `WebView/`, plan 01 Task 5).
 
 **Interfaces:**
-- Consumes: Tasks 2–5 (including `maskSecrets` and `DataFile.secretFile`); `RendererWebView.webView`, `RenderOptions`, and the page's sanitise function.
+- Consumes: Tasks 2–5 (including `maskSecrets`, `maskNames` and `DataFile.secretFile`); `RendererWebView.webView`, `RenderOptions`, and the page's sanitise function.
 - Produces (CR-3):
 
 ```js
@@ -579,25 +624,27 @@ View rules:
 - **Paged window list, scaled virtual scroller** (K12): 22 px rows, 200 rows of overscan, 500-record pages, ≤ 20 cached pages. The spacer is `min(count × 22, MAX_SPACER_PX)` with `MAX_SPACER_PX = 16_000_000`, below WebKit's 33,554,432 px layout cap (2^31 / 64). The first visible record is `round(scrollTop / (spacer − viewport) × (count − visibleRows))`, and rows are positioned relative to the viewport, not at `i × 22`, so `big-200mb.jsonl`'s 2,747,748 records all stay reachable. *ponytail: no "Go to line" field; add one if users ask to jump to a line number.*
 - **A changed file:** when a `tegelData` request is rejected (`.truncated`), the list keeps the rows it has and shows `labels.changed`; the app's `FileWatcher` rebuilds the index (Task 8).
 - **`.env` reveal:** in `mode === 'window'`, clicking `.secret` toggles that one value from the in-memory entries. In `quicklook` mode there's no handler and the values are dropped after render.
-- **Quick Look secrets** (K12): in `quicklook` mode, `renderData` masks the input once, before any parser or view sees it, so every format and view (tree, rows, table, `.env`, text, error source) gets it: `text = maskSecrets(text, { wholeFile: secretFile, structured: format !== 'text' })`. There is no reveal.
+- **Quick Look secrets** (K12): in `quicklook` mode, `renderData` masks the input once, before any parser or view sees it, so every format and view (tree, rows, table, `.env`, text, error source) gets it: `text = maskSecrets(text, { wholeFile: secretFile, structured: format !== 'text' })`. Because structured input skips the name pass, every tree, row and table call in `quicklook` mode (lazy fills included) passes `maskNames: true` (Task 4), and an error view runs its source through `maskSecrets(text)` again without `structured` (it shows the source and never parses it). There is no reveal.
 - **Quick Look caps:** in `quicklook` mode, JSONL/CSV/TSV render statically, capped at 500 records or 1,000 rows, with a `labels.truncated` banner (also shown for `truncated: true`).
-- **Swift side:** `renderData` uses `webView.callAsyncJavaScript(… arguments:, contentWorld: .page)`. `renderPaged` swaps in a `WKScriptMessageHandlerWithReply` named `tegelData` (macOS 11+) that clamps `from ≥ 0` and `count ≤ 2000`, and replies with an error string when `records(in:)` throws.
+- **Swift side:** `renderData` and `renderPaged` first `try await preparePage()`, so they work on a fresh renderer. `renderData` then uses `webView.callAsyncJavaScript(… arguments:, contentWorld: .page)`. `renderPaged` swaps in a `WKScriptMessageHandlerWithReply` named `tegelData` (macOS 11+) that clamps `from ≥ 0` and `count ≤ 2000`, and replies with an error string when `records(in:)` throws.
 
 - [ ] **Step 1: Write the failing tests** (`@MainActor final class DataRenderTests: XCTestCase`, real WKWebView).
   - **`testHostileStringsNeverExecute`:** for each `hostile.*`, `DataFile.load(url, maxBytes: 2_000_000)` then `renderData` (mode `.window`). Assert `evaluateJavaScript("String(window.__pwned)") == "undefined"`, `document.querySelectorAll('#doc img,#doc script,#doc svg,#doc iframe,#doc a[href^=javascript]').length == 0`, and the `#doc` innerText contains `<script>` (so the container exists and the empty-query assertions aren't vacuous).
   - **`testDotenvMaskedUntilClicked`:** render `sample.env` in `.window`. `documentElement.outerHTML` contains none of its values; after `document.querySelector('.secret').click()`, exactly the first value appears and the second doesn't.
   - **`testDotenvQuickLookNeverReveals`:** the same in `.quicklook`. After the click, no value appears.
-  - **`testQuickLookMasksSecretFiles`** (K12): write a temp `.netrc` (`machine example.com login demo password not-a-real-secret-9`), a temp `id_rsa` whose PEM header and footer are built by concatenation around the body `ZmFrZS1ib2R5LWxpbmU=`, and a temp `key.json` holding that PEM as `{"private_key": "<PEM, newlines as \n>"}`. For each, `DataFile.load`, then `renderData` in mode `.quicklook` with `secretFile: file.secretFile`. `documentElement.outerHTML` contains neither `not-a-real-secret-9` nor `ZmFrZS1ib2R5`, and does contain `machine`. For `key.json`, `document.querySelector('#doc details')` is non-null and `mark.err` is null (the tree rendered, masked, not an error view).
+  - **`testQuickLookMasksSecretFiles`** (K12): write a temp `.netrc` (`machine example.com login demo password not-a-real-secret-9`), a temp `id_rsa` whose PEM header and footer are built by concatenation around the body `ZmFrZS1ib2R5LWxpbmU=`, and a temp `key.json` holding that PEM as `{"private_key": "<PEM, newlines as \n>", "client_secret": "not-a-real-secret-5"}`. For each, `DataFile.load`, then `renderData` in mode `.quicklook` with `secretFile: file.secretFile`. `documentElement.outerHTML` contains none of `not-a-real-secret-9`, `ZmFrZS1ib2R5` and `not-a-real-secret-5`, and does contain the file's own non-secret sentinel: `machine` (`.netrc`), `-----BEGIN` (`id_rsa`: the header's first token, which the whole-file rule keeps) and `client_secret` (`key.json`'s key). For `key.json`, `document.querySelector('#doc details')` is non-null and `mark.err` is null (the tree rendered, masked, not an error view).
   - **`testYAMLErrorLine`:** the bad YAML from Task 2 gives `errors.first?.line == 4`, and `document.querySelector('mark.err') != null`.
   - **`testPaged1MRows`:** `XCTSkip` without the fixture. `renderPaged(RecordIndex(url: big-1m.csv, quoteAware: true), format: .csv, …)` returns `records == 1_000_001` in < 2 s (timed after the index is built). After `document.scrollingElement.scrollTop = 1e9` and 500 ms, the last visible row's first cell is `"999999"`.
   - **`testPaged200MBLastRecordReachable`** (K12): `XCTSkip` without the fixture. `renderPaged` over `RecordIndex(url: big-200mb.jsonl, quoteAware: false)`. After `scrollTop = 1e9` and 500 ms, the last visible row's `data-line` equals `index.count`. After scrolling to `1_600_000 / index.count` of the maximum `scrollTop`, a `.row.bad` is visible (the plain-height list stops near record 1,525,000).
-- [ ] **Step 2: Run them, expect FAIL.** `swift test --package-path Packages/TegelKit --filter DataRenderTests`. Expected: FAIL to compile, `value of type 'RendererWebView' has no member 'renderData'`.
-- [ ] **Step 3: Implement** `view.js`, `data.css`, the `build.js` entry, the label, the `page.js` stubs and `DataRender.swift`. Then run `make renderer` to regenerate the committed bundle.
+- [ ] **Step 2: Run them, expect FAIL.** `swift test --package-path Packages/TegelKit --filter DataRenderTests`. Expected: FAIL to compile, `value of type 'RendererWebView' has no member 'renderData'`. If plan 01 took Branch B, run every `--filter DataRenderTests…` in this task as `xcodebuild test -project Tegel.xcodeproj -scheme TegelKitHostTests -derivedDataPath build -only-testing:TegelKitHostTests/DataRenderTests[/<test>]` instead (plan 02's rule).
+- [ ] **Step 3: Implement** `view.js`, `data.css`, the `build.js` entry, the label, the `page.js` stubs, `preparePage()` and `DataRender.swift`. Then run `make renderer` to regenerate the committed bundle, and re-run plan 01's `RendererWebViewTests` (same runner) to confirm the extraction left `render` unchanged.
 - [ ] **Step 4: Run them, expect PASS.** `make fixtures && swift test --package-path Packages/TegelKit --filter DataRenderTests && (cd Renderer && bun test)`. Expected: 7 pass, and the existing JS suite still passes (CSP and Markdown tests unchanged).
-- [ ] **Step 5: Watch both K12 guards fail.** One at a time, then restore each and re-run to PASS:
+- [ ] **Step 5: Watch the K12 guards and the page preparation fail.** One at a time, then restore each and re-run to PASS:
   - set `MAX_SPACER_PX = Infinity` in `view.js`, `make renderer`, run `--filter testPaged200MBLastRecordReachable`. Expected: FAIL, the last visible `data-line` is about 1,525,000;
-  - replace the `maskSecrets(…)` call in `view.js` with its `text` argument, `make renderer`, run `--filter testQuickLookMasksSecretFiles`. Expected: FAIL, `not-a-real-secret-9` is in the HTML.
-- [ ] **Step 6: Commit:** `Renderer/src/data/view.js Renderer/src/data/labels.js Renderer/src/css/data.css Renderer/build.js Renderer/src/page.js Packages/TegelKit/Sources/TegelKit/DataRender.swift Packages/TegelKit/Sources/TegelKit/Resources/Renderer Packages/TegelKit/Tests/TegelKitTests/DataRenderTests.swift Fixtures/data/hostile.*`, `feat(tegelkit): data view bridge with scaled paging, masking and hostile-input tests` + trailer.
+  - replace the `maskSecrets(…)` call in `view.js` with its `text` argument, `make renderer`, run `--filter testQuickLookMasksSecretFiles`. Expected: FAIL, `not-a-real-secret-9` is in the HTML;
+  - pass `maskNames: false` in `quicklook` mode, `make renderer`, run `--filter testQuickLookMasksSecretFiles`. Expected: FAIL, `not-a-real-secret-5` is in the HTML;
+  - remove the `preparePage()` call from `renderData`, run `--filter testHostileStringsNeverExecute`. Expected: FAIL with a JavaScript error (`window.tegel` is undefined on the unloaded page).
+- [ ] **Step 6: Commit:** `Renderer/src/data/view.js Renderer/src/data/labels.js Renderer/src/css/data.css Renderer/build.js Renderer/src/page.js Packages/TegelKit/Sources/TegelKit/DataRender.swift Packages/TegelKit/Sources/TegelKit/RendererWebView.swift Packages/TegelKit/Sources/TegelKit/Resources/Renderer Packages/TegelKit/Tests/TegelKitTests/WebView/DataRenderTests.swift Fixtures/data/hostile.*`, `feat(tegelkit): data view bridge with scaled paging, masking and hostile-input tests` + trailer.
 
 ---
 
@@ -643,35 +690,46 @@ If the system previewer wins for a type (DF5 says it may), write that down. The 
 **Files:**
 - Modify: `Apps/Data/App/DataApp.swift`.
 - Create: `Apps/Data/App/DataWindow.swift` and `Apps/Data/App/WelcomeView.swift`.
-- Modify: `project.yml`. Add `Apps/Markdown/App/ProGate.swift`, `Apps/Markdown/App/LicenceSettingsView.swift` and `Apps/Markdown/App/UpdatesSettingsView.swift` (paths from Task 0 #7) to the `data` target's sources by path; don't copy them. Add the Sparkle package product to `data` exactly as plan 03 adds it to `markdown`. [K12]
+- Modify: `project.yml`. Add `Apps/Markdown/App/ProGate.swift`, `Apps/Markdown/App/LicenceSettingsView.swift` and `Apps/Markdown/App/UpdatesSettingsView.swift` (paths from Task 0 #7) to the `data` target's sources by path; don't copy them. Add the Sparkle package product to `data` exactly as plan 03 adds it to `markdown`, and `- package: TegelKit, product: TegelStore` exactly as plan 03 Task 8 adds it to `markdown` (`LicenceSettingsView`, `LicenseManager` and `PolarConfig` live in TegelStore). [K12]
+- Modify: `Apps/Markdown/App/LicenceSettingsView.swift` (plan 03's) and App 1's Settings `TabView` call site (`grep -l 'LicenceSettingsView(' Apps/Markdown/App/*.swift`). The view gains `let proSummary: LocalizedStringKey`, the text of its `.free` row. App 1 passes its existing sentence unchanged, so its catalogue entry and NL/FR/AR still match; Data passes its own: "Pro adds the window viewer for large files, the .env viewer, session transcripts with search, and Markdown export. One-time purchase for up to 2 Macs, with a 14-day refund." Nothing else in the view changes.
+- Modify: `Apps/Data/Shared/Localizable.xcstrings`. A view compiled into `data` looks its strings up in Data's bundle, so add every string the three shared views show, with NL/FR/AR copied from `Apps/Markdown/App/Localizable.xcstrings`, plus Data's `proSummary`, the `WelcomeView` strings and the not-text copy below, translated to NL/FR/AR (D6).
 
 **Interfaces:**
-- Consumes: `EnvironmentValues.isPro` (`ProGate.swift`); `LicenceSettingsView` (plan 03; no updater parameter, since Updates is its own tab); `UpdatesSettingsView(updater:)` (plan 03); `LicenseManager(client: PolarClient(config: .fromInfoPlist()))` and plan 03's 24 h refresh loop; `SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)`; `QuickLookSetup.settingsURL` and `QuickLookSetup.settingsPath(macOSMajor:)` (TegelKit, plan 02 Task 15); `RendererWebView`, `renderData`, `renderPaged`; `RecordIndex(url:quoteAware:)`, `DataFile.load(_:maxBytes:)`; `FileWatcher(url:debounce:onChange:)`; App 1's open-file pattern (Task 0 #7).
+- Consumes: `EnvironmentValues.isPro` (`ProGate.swift`); `LicenceSettingsView(proSummary:)` (plan 03's view with this task's parameter; no updater parameter, since Updates is its own tab); `UpdatesSettingsView(updater:)` (plan 03); `LicenseManager(client: PolarClient(config: .fromInfoPlist()))` and plan 03's 24 h refresh loop; `SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)`; `QuickLookSetup.settingsURL` and `QuickLookSetup.settingsPath(macOSMajor:)` (TegelKit, plan 02 Task 15); `RendererWebView`, `renderData`, `renderPaged`; `RecordIndex(url:quoteAware:)`, `DataFile.load(_:maxBytes:)`; `FileWatcher(url:debounce:onChange:)`; App 1's open-file pattern (Task 0 #7).
 - Produces: `struct DataWindow: View { let url: URL }` and `struct WelcomeView: View`. `WelcomeView` shows when there's no Pro licence or no file:
   - the Quick Look how-to: Space in Finder, then the Settings path chosen by `QuickLookSetup.settingsPath(macOSMajor:)` (the same copy as App 1's Welcome, never hard-coded here), with an "Open System Settings" button for `QuickLookSetup.settingsURL`;
   - the Pro feature list, and "One-time purchase for 2 Macs" with a buy button (`PolarConfig.checkoutURL`). No price in the app: the checkout shows it (plan 05 Task 3 Step 1);
-  - App 1's `LicenceSettingsView`.
+  - App 1's `LicenceSettingsView`, given Data's `proSummary`.
 
 App wiring in `DataApp.swift` copies plan 03's `MarkdownApp` wiring line for line, nothing new [K12]:
 - one `SPUStandardUpdaterController` held by the app; `CommandGroup(after: .appInfo) { Button("Check for Updates…") { updaterController.updater.checkForUpdates() } }`;
 - one `LicenseManager`, started with `Task { while !Task.isCancelled { await m.refresh(); try? await Task.sleep(for: .seconds(86_400)) } }`, and its `isPro` injected into the environment;
-- a `Settings` scene with the tabs Licence | Updates (`LicenceSettingsView`, `UpdatesSettingsView(updater: updaterController.updater)`).
+- a `Settings` scene with the tabs Licence | Updates (`LicenceSettingsView(proSummary:)` with Data's summary, `UpdatesSettingsView(updater: updaterController.updater)`).
 
 Routing rule in `DataWindow`:
 - `!isPro` → `WelcomeView`. `jsonl`, `csv`, `tsv` → `RecordIndex` (`quoteAware` for csv only) → `renderPaged`; on `.utf16`, fall back to the next path.
 - Every other format, including `.text` → `DataFile.load(url, maxBytes: 100_000_000)` → `renderData(mode: .window)`.
+- A `DataFileError` (a binary or a non-regular file, which `public.data` in Task 1 lets through) shows "This file isn't a text file." and nothing else.
 - `FileWatcher` on the file → rebuild and re-render, keeping the scroll position (and sticking to the bottom if it was there).
 
 - [ ] **Step 1: Write the run checklist as the failing state.** On the current build, opening `sample.csv` from Finder ("Open With › Tegel Data") shows an empty window, the app menu has no "Check for Updates…", and ⌘, opens no Licence or Updates tab. That's FAIL.
-- [ ] **Step 2: Implement** the three views, the app wiring and the `project.yml` entries.
-- [ ] **Step 3: Build.** `xcodegen generate && make build`. Expected: `** BUILD SUCCEEDED **` with no new warnings in `Apps/Data`.
+- [ ] **Step 2: Implement.** First the `project.yml` entries alone, then `xcodegen generate && make build && grep -rl 'folder mode' "build/Build/Products/Debug/Tegel Data.app" | wc -l`. Expected: ≥ 1, App 1's Pro copy compiled into Data (the failing state). Then the `proSummary` parameter, the three views, the app wiring and Data's strings.
+- [ ] **Step 3: Build.** `xcodegen generate && make build`. Expected: `** BUILD SUCCEEDED **` with no new warnings in `Apps/Data`. Then `grep -rl 'folder mode' "build/Build/Products/Debug/Tegel Data.app" | wc -l` → `0`, and App 1 is unchanged: `make test-app ONLY=LocalizationTests` passes.
 - [ ] **Step 4: Run the checklist on the build Mac, expect PASS.**
   - Debug `isPro` override **off**: opening any fixture shows `WelcomeView`.
   - Override **on**: each `sample.*` renders; `big-1m.csv` opens in < 3 s and scrolls to row 1,000,000; `big-200mb.jsonl` flags the bad lines at multiples of 100,000, still renders the rest, and ⌘↓ shows its last record; `hostile.*` render as text; in `sample.env`, one click reveals one value.
   - Live reload: `printf '{"live":1}\n' >> /tmp/live.jsonl` while the file is open adds the row within 1 s. Then `: > /tmp/live.jsonl`: the app doesn't crash, and the window shows an empty file within 1 s (the watcher rebuilds the index) [K12].
-  - "Check for Updates…" in the app menu shows Sparkle's "You're up to date" sheet against the sandbox feed, and Settings shows Licence | Updates.
-  - Switch the system language to Arabic: the Welcome text is right-to-left and the data stays left-to-right.
-- [ ] **Step 5: Commit:** `Apps/Data/App project.yml`, `feat(data): Pro window viewer, paging, .env reveal, live reload, App 1's licence and update wiring` + trailer.
+  - "Check for Updates…" in the app menu reports Sparkle's update error: no Data appcast exists until Task 16 publishes one (plan 03 Task 10 Step 4 expects the same of App 1 before 1.0.0). Settings shows Licence | Updates, and the Licence tab's free copy is Data's `proSummary`.
+  - A real file named `.env` (Task 1's `public.data` claim). Make one in a temp folder, never the repo's real `.env`, and ask LaunchServices:
+
+```bash
+D=$(mktemp -d) && cp Fixtures/data/sample.env "$D/.env"
+F="$D/.env" swift -e 'import AppKit; let u = URL(fileURLWithPath: ProcessInfo.processInfo.environment["F"]!); print(NSWorkspace.shared.urlsForApplications(toOpen: u).contains { $0.lastPathComponent == "Tegel Data.app" }, NSWorkspace.shared.urlForApplication(toOpen: u)?.lastPathComponent ?? "none")'
+```
+
+    Expected: `true`, then an app other than `Tegel Data.app` (`Alternate` never takes the default). In Finder (⌘⇧. shows dotfiles), Open With on it lists Tegel Data and opens it with every value masked, and so does dropping it on the Dock icon. Watch it fail first: drop `public.data` from `LSItemContentTypes`, rebuild, `lsregister -f` the app, and the `swift -e` line prints `false`; restore it. Record in `docs/reviews/m06.md` what LaunchServices did at `Alternate`, including whether a `.png` now lists Tegel Data too (it may match `public.data` by conformance; the window then shows the not-text copy).
+  - Relaunch with `-AppleLanguages '(nl)'`, then `(fr)`, then `(ar)`: Welcome, Licence and Updates show no English and no Markdown feature. In Arabic the Welcome text is right-to-left and the data stays left-to-right.
+- [ ] **Step 5: Commit:** `Apps/Data/App Apps/Data/Shared/Localizable.xcstrings Apps/Markdown/App/LicenceSettingsView.swift <App 1's settings TabView file> project.yml`, `feat(data): Pro window viewer, paging, .env reveal, live reload, App 1's licence and update wiring` + trailer.
 
 ---
 
@@ -696,8 +754,8 @@ export function parseTranscript(lines /* string[] */)
   //                     text?, name?, input?, result?: { text, isError }, sidechain?, value?, message? }> }
 export function transcriptHTML(t, { showHidden = false, reveal = false, labels = DEFAULT_LABELS } = {})  // items get id="L<line>"; tools are closed <details class="tool">
 export function transcriptToMarkdown(t, { reveal = false, labels = DEFAULT_LABELS } = {})               // -> string
-  // both: unless reveal, the finished output passes through maskSecrets once, so every item kind is covered,
-  // raw and bad items included [K12]
+  // both: unless reveal, every item's text passes through maskSecrets before it is escaped or fenced, so every item
+  // kind is covered, raw and bad items included, and a NAME=value match never reaches the markup after it [K12]
 ```
 
 Mapping:
@@ -760,13 +818,20 @@ test('token shapes masked in view and export unless revealed', () => {
   expect(transcriptHTML(t, { reveal: true })).toContain(tok);
   expect(transcriptToMarkdown(t, { reveal: true })).toContain(tok);
 });
+test('masking stays inside its item', () => {
+  const u = c => JSON.stringify({ type: 'user', sessionId: 's', message: { role: 'user', content: c } });
+  const html = transcriptHTML(parseTranscript([u('DB_PASSWORD=x'), u('after')]));
+  expect(html).not.toContain('DB_PASSWORD=x');
+  expect(html).toMatch(/<[a-z]+[^>]*\bid="L2"/); // the next item's tag survives, anchor included
+  expect(html).toContain('after');
+});
 ```
 
 - [ ] **Step 2: Run it, expect FAIL.** `cd Renderer && bun test test/data-transcript.test.js`. Expected: FAIL, `Cannot find module '../src/data/transcript.js'`.
-- [ ] **Step 3: Implement.** `parseTranscript` is one pass over the lines (blank lines skipped, numbering kept) with a `Map` from id to the pending tool item. The Markdown export uses `## User` / `## Assistant` headings with the text verbatim, renders each tool as `#### Tool: name` with input and output in fences one backtick longer than the longest backtick run inside them (CommonMark rule), and leaves out `thinking`. One helper `m = s => reveal ? s : maskSecrets(s)` wraps the finished string of each output (the joined HTML, the whole Markdown), the one place every item passes through. Its only insertion is `••••••••` (never `<`, `>`, `&` or a quote), so it can't add markup, and the HTML still goes through the page's sanitiser.
-- [ ] **Step 4: Run it, expect PASS.** `cd Renderer && bun test test/data-transcript.test.js`. Expected: 5 pass. Then run the secret scan, which must print nothing:
+- [ ] **Step 3: Implement.** `parseTranscript` is one pass over the lines (blank lines skipped, numbering kept) with a `Map` from id to the pending tool item. The Markdown export uses `## User` / `## Assistant` headings with the text verbatim, renders each tool as `#### Tool: name` with input and output in fences one backtick longer than the longest backtick run inside them (CommonMark rule), and leaves out `thinking`. One helper `m = s => reveal ? s : maskSecrets(s)` wraps every text field of every item (the title, text, tool name, input and result, a note, a raw item's JSON, a bad line) before it is escaped (HTML) or fenced (Markdown, so fence lengths are measured on the masked text). Masking the joined HTML instead would let a NAME=value match run into the next item's markup. Its only insertion is `••••••••` (never `<`, `>`, `&` or a quote), and the HTML still goes through the page's sanitiser.
+- [ ] **Step 4: Run it, expect PASS.** `cd Renderer && bun test test/data-transcript.test.js`. Expected: 6 pass. Then run the secret scan, which must print nothing:
   `grep -rnE 'sk-[A-Za-z0-9]{20,}|ghp_|AKIA[0-9A-Z]{16}|PRIVATE KEY|/Users/[a-z]+' Fixtures/data | grep -v '/Users/demo'`
-- [ ] **Step 5: Watch the mask guard fail.** Change `m` to `s => s`, rerun the test file. Expected: FAIL in `token shapes masked…`. Restore `m`, rerun: 5 pass.
+- [ ] **Step 5: Watch the mask guards fail.** Change `m` to `s => s`, rerun the test file. Expected: FAIL in `token shapes masked…`. Restore `m`. Then apply `m` once to the joined HTML instead of each item's text: FAIL in `masking stays inside its item`. Restore it, rerun: 6 pass.
 - [ ] **Step 6: Commit:** `Renderer/src/data/transcript.js Renderer/src/data/view.js Renderer/test/data-transcript.test.js Fixtures/data/sessions Packages/TegelKit/Sources/TegelKit/Resources/Renderer`, `feat(renderer): tolerant Claude Code/Codex transcript parser, Markdown export, tokens masked` + trailer.
 
 ---
@@ -780,15 +845,17 @@ test('token shapes masked in view and export unless revealed', () => {
 **Interfaces:**
 - Consumes:
   - `BookmarkStore.save(_:)`, `BookmarkStore.resolveAll() -> [URL]` (scope handling per Task 0 #4);
-  - `FolderIndex.search(_:in:limit:) -> [SearchHit]`;
+  - `FolderIndex.search(_:in:limit:) -> [SearchHit]` (plan 02 Task 4: each file read through `TextFileLoader`'s 5 MB default cap);
   - `TextFileLoader.load(_:maxBytes:)`;
-  - `renderData(_:format: .transcript, …)`, `scroll(toHeading:)`;
+  - `renderData(_:format: .transcript, …)`, `scroll(toHeading:)` (plan 02: takes the DOM id and calls `getElementById`);
   - `FileWatcher`.
 - Produces:
 
 ```swift
 // TegelKit (master §3.3 signature): markdownFiles(in:limit:) becomes a call to this
 public static func files(in root: URL, extensions: Set<String>, limit: Int = maxFiles) throws -> [FolderItem]   // same skip list and 5,000 cap as markdownFiles
+// TegelKit (CR-2): search gains a per-file read cap; the default keeps App 1's 5 MB, so App 1's call sites don't change
+public static func search(_ query: String, in items: [FolderItem], limit: Int = 200, maxBytesPerFile: Int = 5_000_000) -> [SearchHit]
 // App
 @MainActor enum SessionSources {
     static func pick() -> URL?   // NSOpenPanel: canChooseDirectories, !canChooseFiles, showsHiddenFiles = true,
@@ -800,23 +867,26 @@ struct SessionsView: View
 // Pro (§6.2), gated exactly like DataWindow: !isPro -> WelcomeView, with no source list, search or session ever loaded.
 // The "Sessions" window and its ⌘⇧S command open this view, so neither reaches session mode without Pro.
 // Sidebar: sources, then sessions = FolderIndex.files(in:extensions:["jsonl"]) (default cap; a capped list says so in the sidebar footer) sorted by modification date (newest first).
-// Search field: debounced 300 ms, FolderIndex.search off the main actor; a hit opens the session, then scroll(toHeading: "L\(line)").
+// Search field: debounced 300 ms, FolderIndex.search(…, maxBytesPerFile: 128_000_000) off the main actor (the open-session cap below).
+// A result row shows `relativePath · L<line>`, plus SearchHit.snippet only while "Show secrets" is on: the snippet is raw file text.
+// A hit opens the session, then scroll(toHeading: "user-content-L\(line)"): the item's id="L<line>" after the page's
+// SANITIZE_NAMED_PROPS pass (plan 01 CR 4; Task 0 #5).
 // The open session loads through TextFileLoader.load(url, maxBytes: 128_000_000) (truncated -> banner).
 // FileWatcher on the open file -> re-render, kept at the bottom if it was there. ⌘R rescans the sources.
 // A "Show internal records" toggle maps to showHidden. A "Show secrets" toggle (off on every launch, never persisted) maps to reveal [K12].
 ```
 
-- [ ] **Step 1: Write the failing test.** `testFilesWithExtensions` builds a temp tree with `a.jsonl`, `b/c.jsonl`, `node_modules/x.jsonl`, `.git/y.jsonl` and `d.md`. It asserts `files(in:root, extensions:["jsonl"]).map(\.relativePath).sorted() == ["a.jsonl","b/c.jsonl"]`, `files(in:root, extensions:["jsonl"], limit: 1).count == 1` and `markdownFiles(in:root).map(\.relativePath) == ["d.md"]`. If Task 0 #3 found a 5 MB per-file cap in `search`, also add `testSearchFindsLateHitInLargeFile`: a 20 MB file with `needle` on its last line returns one hit.
+- [ ] **Step 1: Write the failing test.** `testFilesWithExtensions` builds a temp tree with `a.jsonl`, `b/c.jsonl`, `node_modules/x.jsonl`, `.git/y.jsonl` and `d.md`. It asserts `files(in:root, extensions:["jsonl"]).map(\.relativePath).sorted() == ["a.jsonl","b/c.jsonl"]`, `files(in:root, extensions:["jsonl"], limit: 1).count == 1` and `markdownFiles(in:root).map(\.relativePath) == ["d.md"]`. `testSearchFindsLateHitInLargeFile`: a 20 MB `.md` file with `needle` on its last line gives one hit with `search("needle", in: items, maxBytesPerFile: 128_000_000)` and none with `search("needle", in: items)` (App 1's 5 MB cap kept).
 - [ ] **Step 2: Run it, expect FAIL.** `swift test --package-path Packages/TegelKit --filter FolderIndexTests`. Expected: FAIL to compile, `type 'FolderIndex' has no member 'files'`.
-- [ ] **Step 3: Implement** `files(in:extensions:limit:)`, rebase `markdownFiles` onto it, then write the two app files.
+- [ ] **Step 3: Implement** `files(in:extensions:limit:)`, rebase `markdownFiles` onto it, and pass `maxBytesPerFile` through to `search`'s `TextFileLoader.load(_:maxBytes:)`. Then write the two app files.
 - [ ] **Step 4: Run it, expect PASS, then check the app.** `swift test --package-path Packages/TegelKit --filter FolderIndexTests` gives all pass. Then `make build`, and run this checklist with temp copies of `Fixtures/data/sessions/*` in a folder the panel picks, **never the real `~/.claude`**:
   - the panel can browse hidden folders;
   - after a relaunch, the list comes back with no prompt;
-  - searching `needle-42` gives one hit, and opening it scrolls to L9;
+  - searching `needle-42` gives one hit, and opening it scrolls to L9 (`document.getElementById('user-content-L9').getBoundingClientRect().top` is near 0 in Web Inspector);
   - tool calls are collapsed;
   - appending a synthetic user line adds it within 1 s;
   - a `.jsonl` that isn't a transcript shows generic rows;
-  - a synthetic user line holding `'sk-' + 40 × 'a'` (typed into the temp copy, never into `Fixtures/`) shows as `••••••••` until "Show secrets" is on, and is masked again after a relaunch;
+  - a synthetic user line holding `'sk-' + 40 × 'a'` (typed into the temp copy, never into `Fixtures/`) shows as `••••••••` until "Show secrets" is on, and is masked again after a relaunch. Searching `sk-aaaa` with "Show secrets" off lists the hit as `<session file> · L<n>` with no snippet; with it on, the row adds the snippet. Watch it fail first: show the snippet unconditionally, `make build`, and the off-state row shows `sk-aaaa…`; restore it;
   - **Pro gate:** with the Debug `isPro` override **off**, ⌘⇧S opens the Sessions window showing only `WelcomeView` (no sources, no search field), and so does Window › Sessions. Watch it fail first: comment out the `!isPro` branch in `SessionsView`, `make build`, and ⌘⇧S shows the session browser with the bookmarked sources. Restore it and rebuild: `WelcomeView` again. (Every row above runs with the override **on**.)
 - [ ] **Step 5: Commit:** `Packages/TegelKit/Sources/TegelKit/FolderIndex.swift Packages/TegelKit/Tests/TegelKitTests/FolderIndexTests.swift Apps/Data/App`, `feat(data): session mode with bookmarked folders, cross-session search, live reload` + trailer.
 
@@ -837,14 +907,15 @@ struct SessionsView: View
     static func exportMarkdown(from renderer: RendererWebView, suggestedName: String, reveal: Bool) async throws -> URL?
     // NSSavePanel(allowedContentTypes: [UTType(filenameExtension: "md")!]) -> callAsyncJavaScript("return window.tegel.transcriptMarkdown({ reveal })", arguments: ["reveal": reveal])
     // the export masks tokens exactly as the view does (K12)
-    // -> String.write(to: picked, atomically: true, encoding: .utf8). nil when cancelled.
-    static func openInMarkdownApp(_ exported: URL)
+    // -> String.write(to: picked, atomically: false, encoding: .utf8): the save panel grants the file, not its folder (plan 02 Task 11). nil when cancelled.
+    static var markdownAppURL: URL? { get }
     // NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.tegelapps.markdown")
-    //   -> open([exported], withApplicationAt:configuration:), else NSWorkspace.shared.open(URL(string: "https://tegelapps.com/markdown/")!) (path per Task 0 #10)
+    static func openInMarkdownApp(_ exported: URL, with app: URL)
+    // NSWorkspace.shared.open([exported], withApplicationAt: app, configuration:)
 }
 ```
 
-"Open in Tegel Markdown" is enabled after an export; it opens the file that was just exported. App 2 writes no temp file; the only write outside the app's container is the save-panel URL (rule 1 allows the container).
+"Open in Tegel Markdown" is shown only when `markdownAppURL` is non-nil, re-read each time the Sessions window appears. Without App 1 the button would be an in-app promotion (rule 8), so it is hidden, as plan 07 hides its own Open in Tegel Markdown action. It is enabled after an export and opens the file that was just exported. App 2 writes no temp file; the only write outside the app's container is the save-panel URL (rule 1 allows the container).
 
 - [ ] **Step 1: Write the failing gate.** Add this to the `Makefile`:
 
@@ -870,8 +941,8 @@ while IFS= read -r app; do "$LSREG" -u "$app"; done < "$TMPDIR/tm-copies.txt"
 swift -e 'import AppKit; print(NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.tegelapps.markdown") as Any)'
 ```
 
-    Expected: the last line prints `nil`. The button now opens `https://tegelapps.com/markdown/` in the browser.
-  - Re-register them: `while IFS= read -r app; do "$LSREG" -f "$app"; done < "$TMPDIR/tm-copies.txt"`. The `swift -e` line prints the `/Applications` path again.
+    Expected: the last line prints `nil`. Close and reopen the Sessions window: the toolbar has no "Open in Tegel Markdown" button. Watch it fail first: show the button unconditionally, `make build`, and it appears with App 1 unregistered; restore it.
+  - Re-register them: `while IFS= read -r app; do "$LSREG" -f "$app"; done < "$TMPDIR/tm-copies.txt"`. The `swift -e` line prints the `/Applications` path again, and the reopened Sessions window shows the button.
 - [ ] **Step 5: Commit:** `Apps/Data/App/ExportController.swift Apps/Data/App/SessionsView.swift Makefile`, `feat(data): export sessions to Markdown, open them in Tegel Markdown, read-only gate over Apps/` + trailer.
 
 ---
@@ -883,17 +954,18 @@ swift -e 'import AppKit; print(NSWorkspace.shared.urlForApplication(withBundleId
 **Files:**
 - Modify: the `Config/` xcconfigs. Fill `TG_POLAR_BENEFIT_ID_DATA` and `TG_POLAR_CHECKOUT_URL_DATA` (Task 1): sandbox values in the xcconfig that holds plan 03's sandbox values (Task 0 #9), production values in `Config/Release.xcconfig` (Step 3).
 - Modify: `docs/reviews/m06.md`.
-- Modify: `site/config.json` (`apps.data.checkoutURL` and `apps.bundle.checkoutURL`, Step 3; plan 04 expects plan 06 to supply them).
+- Modify: `site/config.json` (`apps.data.checkoutURL` and `apps.bundle.checkoutURL`: Task 13 sets the sandbox links, Step 3 swaps in production ones; plan 04 expects plan 06 to supply them).
 
 **Interfaces:**
 - Consumes: plan 03's `PolarConfig.benefitID`, `PolarError.wrongProduct` and its copy "This key is for another Tegel app. Each app has its own key on your Polar purchases page." (checked by Task 0 #6).
-- Produces: the Polar ids in `.env` under the Task 1 key names; App 2's `TGPolarBenefitID` = the Data licence benefit; `POLAR_QA_LICENSE_KEY_DATA` (production, for Task 14; removed in Task 16).
+- Produces: the Polar ids in `.env` under the Task 1 key names; App 2's `TGPolarBenefitID` = the Data licence benefit; `POLAR_QA_LICENSE_KEY_DATA` and a re-issued App 1 `POLAR_QA_LICENSE_KEY` (production, for Task 14; both removed in Task 16).
 
 **Activation UX for the bundle:** one key per app. Each app accepts only its own benefit, and the server enforces it. The bundle product carries **both** existing licence benefits (Polar lets one benefit attach to many products, DF6). No cross-key logic.
 
 - [ ] **Step 1: Create the Polar sandbox objects** (sandbox, so no approval needed; Polar API with `POLAR_SANDBOX_ACCESS_TOKEN`, or the dashboard). Record every id in `.env` under the Task 1 key names.
   - Benefit **"Tegel Data licence"**: `license_keys`, prefix `TGDATA`, `limit_activations: 2`, `enable_customer_admin: true`, no expiry.
   - Product **"Tegel Data"**: $15 one-time and a EUR price, that benefit. Product **"Tegel Bundle"**: $29 one-time and a EUR price, benefits [Markdown licence, Data licence]. EUR amounts: €15 and €29, **pending the user's confirmation** (K10; same open question as App 1's €19/€14). Both carry plan 05's opt-in field (`marketing_opt_in`, label "Email me set-up tips and news about Tegel apps", unticked; Task 0 #11) and say "2 Macs per licence"; the bundle adds "one key per app".
+  - A sandbox checkout link for each product, saved as `POLAR_SANDBOX_CHECKOUT_URL_DATA` and `POLAR_SANDBOX_CHECKOUT_URL_BUNDLE` (Step 2 buys through the second; Task 13's site build uses both).
   - Fill the sandbox `TG_POLAR_BENEFIT_ID_DATA` and `TG_POLAR_CHECKOUT_URL_DATA`, then `xcodegen generate && make build` and `/usr/libexec/PlistBuddy -c 'Print TGPolarBenefitID' "build/Build/Products/Debug/Tegel Data.app/Contents/Info.plist"`. Expected: the sandbox Data benefit id, not the Markdown one. Commit: `Config`, `build(data): sandbox Polar ids for Tegel Data` + trailer.
 
 - [ ] **Step 2: Sandbox end-to-end** (Debug builds of both apps; test card). Buy the bundle, then confirm:
@@ -903,22 +975,23 @@ swift -e 'import AppKit; print(NSWorkspace.shared.urlForApplication(withBundleId
   - the Data key in App 1 shows `wrongProduct`.
 
   Record the results in `docs/reviews/m06.md`.
-- [ ] **Step 3: Production** (**user approval**, H11). On Thu 28 Jan, before Task 16, create the same three objects in production with no public checkout link (check that Polar's storefront doesn't list them). Fill in `Release.xcconfig` and `.env`. Every App 1 build since 1.0.0 binds keys to its own benefit (plan 03), so Data keys can't unlock App 1 from the first sale.
+- [ ] **Step 3: Production** (**user approval**, H11). On Thu 28 Jan, before Task 16, create the same three objects in production with no public checkout link (check that Polar's storefront doesn't list them). Fill in `Release.xcconfig`, replacing Task 1's two `_DATA` placeholders, and `.env`. Expected: `grep -c REPLACE_IN_PLAN_05 Config/Release.xcconfig` → `0`. Every App 1 build since 1.0.0 binds keys to its own benefit (plan 03), so Data keys can't unlock App 1 from the first sale.
   - **Price and field check:** plan 05 Task 2 Step 5's price and field queries with `envget POLAR_PRODUCT_ID_MARKDOWN` changed to `envget POLAR_PRODUCT_ID_DATA`, then to `…_BUNDLE`. Expected: `[('eur', 1500), ('usd', 1500)]`, then `[('eur', 2900), ('usd', 2900)]` (or the user's EUR amounts), and the `marketing_opt_in` row ending `False` for both.
   - **BNPL check** (rule 7): run plan 05 Task 2 Step 11's procedure, unchanged, on `POLAR_CHECKOUT_URL_DATA` and `POLAR_CHECKOUT_URL_BUNDLE`; screenshots to `docs/reviews/m06-polar/checkout-{data,bundle}-{safari,chrome}-{nl,us}.png`. Its stop rule applies: BNPL shown → stop the App 2 launch prep and tell the user (B17).
   - **QA licence** 🔒 (plan 05 Task 2 Step 7's pattern): discount `QA-DATA`, 100%, single-use, ends 2027-02-05, never published; an unpublished checkout link for Tegel Data with it preset; complete it with the studio email, opt-in left unticked; save the key as `POLAR_QA_LICENSE_KEY_DATA` (`envset`). Expected: key check → `set`; the $0 order is excluded from G1b by `polar_sales.py`'s `net_amount > 0` rule.
-  - **Site checkout links** (after the BNPL check passes): set `apps.data.checkoutURL` to the `POLAR_CHECKOUT_URL_DATA` value and `apps.bundle.checkoutURL` (Task 13's entry) to `POLAR_CHECKOUT_URL_BUNDLE`, without printing either. Check: `. scripts/lib/env.sh && for k in DATA BUNDLE; do grep -qF "$(envget POLAR_CHECKOUT_URL_$k)" site/config.json && echo "match $k"; done` → `match DATA` and `match BUNDLE`; `(cd site && bun test)` → 0 fail. The links go live with Task 16 Step 4's deploy.
+  - **App 1 QA licence** 🔒, for Task 14 Step 4's cross-product check: plan 05 Task 10 Step 9 revoked `POLAR_QA_LICENSE_KEY` in December. Same pattern on the Tegel Markdown product: discount `QA-MD-DATA`, 100%, single-use, ends 2027-02-05, never published; an unpublished checkout link with it preset; studio email, opt-in left unticked; save the key as `POLAR_QA_LICENSE_KEY` (`envset`). Expected: key check → `set`; the $0 order counts as no sale (`net_amount > 0`).
+  - **Site checkout links** (after the BNPL check passes): replace Task 13's sandbox links, setting `apps.data.checkoutURL` to the `POLAR_CHECKOUT_URL_DATA` value and `apps.bundle.checkoutURL` to `POLAR_CHECKOUT_URL_BUNDLE`, without printing either. Check: `. scripts/lib/env.sh && for k in DATA BUNDLE; do grep -qF "$(envget POLAR_CHECKOUT_URL_$k)" site/config.json && echo "match $k"; grep -qF "$(envget POLAR_SANDBOX_CHECKOUT_URL_$k)" site/config.json && echo "sandbox $k"; done` → `match DATA` and `match BUNDLE`, and no `sandbox` line; `(cd site && bun test)` → 0 fail. The links go live with Task 16 Step 4's deploy.
   - Commit: `Config/Release.xcconfig site/config.json docs/reviews/m06.md docs/reviews/m06-polar`, `build(data): production Polar ids, BNPL evidence, site checkout links` + trailer.
 
 ---
 
 ### Task 13: Site pages (with plan 04)
 
-**Files** (plan 04's page register owns these URLs and their SEO targets; this task writes the copy, front matter `app: data`):
-- Create: `site/content/en/data.md`, the product page. It covers the formats and free vs Pro; a "Buy Pro" link `{{checkout:data}}` next to `{{pricing:data}}` (the URL comes from Task 12 Step 3); and "Bundle with Tegel Markdown: {{price:bundle}} (one key per app)" (plan 04 allows prices only through config placeholders); the 14-day refund; privacy (no network except licence checks and updates; `.env` values masked); "Not affiliated with Anthropic or OpenAI"; the Task 7 Quick Look results (claim only what was observed); the silent demo (Task 14); and a download link (Task 0 #9 URL).
+**Files** (plan 04's page register owns these URLs and their SEO targets; this task writes the copy, front matter `app: data`, except `bundle.md`'s `app: bundle`, so plan 04's JSON-LD offers the bundle's own name and price, not Data's):
+- Create: `site/content/en/data.md`, the product page. It covers the formats and free vs Pro; a "Buy Pro" link `{{checkout:data}}` next to `{{pricing:data}}` (a sandbox URL until Task 12 Step 3 swaps in the production one); and "Bundle with Tegel Markdown: {{price:bundle}} (one key per app)" (plan 04 allows prices only through config placeholders); the 14-day refund; privacy (no network except licence checks and updates; `.env` values masked); "Not affiliated with Anthropic or OpenAI"; the Task 7 Quick Look results (claim only what was observed); and the silent demo (Task 14). No download link yet: `{{download:data}}` throws while `downloadURL` is empty, so Task 16 Step 4 adds it with the URL.
 - Create: `site/content/en/jsonl-viewer-mac.md` (target query "jsonl viewer mac").
 - Create: `site/content/en/claude-code-transcript-viewer.md` (target query "view claude code transcripts"). It explains where the transcripts live (DF9, DF10) and that the app only reads them.
-- Modify: `site/config.json`. Set `apps.data.priceEUR` and `regularPriceEUR` to Task 12's confirmed EUR amount (default `"15"`, pending the user, K10), and add `"bundle": { "name": "Tegel Bundle", "page": "/bundle/", "price": "29", "regularPrice": "29", "intro": false, "priceEUR": "29", "regularPriceEUR": "29", "checkoutURL": "" }` (plan 04 Task 16 assigns `apps.bundle` to this plan). **No nl or fr page prices App 2 or the bundle until these EUR amounts equal Task 12's Polar price query** (`[('eur', 1500), ('usd', 1500)]`; plan 04's build throws on an empty EUR amount).
+- Modify: `site/config.json`. Set `apps.data.priceEUR` and `regularPriceEUR` to Task 12's confirmed EUR amount (default `"15"`, pending the user, K10), and add `"bundle": { "name": "Tegel Bundle", "page": "/bundle/", "price": "29", "regularPrice": "29", "intro": false, "priceEUR": "29", "regularPriceEUR": "29", "launchDate": "2027-02-02", "minMacOS": "14.0", "checkoutURL": "" }` (plan 04 Task 16 assigns `apps.bundle` to this plan; `launchDate` and `minMacOS` complete its JSON-LD offer). Plan 04's `fill` throws on an empty `{{checkout:…}}`, so set `apps.data.checkoutURL` and `apps.bundle.checkoutURL` to the `POLAR_SANDBOX_CHECKOUT_URL_DATA` and `…_BUNDLE` values (Task 12 Step 1) without printing them; Task 12 Step 3 swaps in the production links before anything merges. Check: `. scripts/lib/env.sh && for k in DATA BUNDLE; do grep -qF "$(envget POLAR_SANDBOX_CHECKOUT_URL_$k)" site/config.json && echo "sandbox $k"; done` → `sandbox DATA` and `sandbox BUNDLE`. **No nl or fr page prices App 2 or the bundle until these EUR amounts equal Task 12's Polar price query** (`[('eur', 1500), ('usd', 1500)]`; plan 04's build throws on an empty EUR amount).
 - Modify: `site/test/pages.test.js` (plan 04's file; B19).
 - Create: `site/content/en/bundle.md`, for plan 04's W14 bundle row (plan 06 owns the bundle): "Both apps, one licence each, 2 Macs per app: {{price:bundle}}. Bought separately they cost {{price:markdown}} and {{price:data}}." Both prices are current and real, so there's no "was" price and no countdown (rule 6). It states the 14-day refund and "one key per app", with a Buy link `{{checkout:bundle}}` next to the price.
 
@@ -932,14 +1005,15 @@ swift -e 'import AppKit; print(NSWorkspace.shared.urlForApplication(withBundleId
 test('App 2 pages carry price and licence limits from config', () => {
   expect(s.read(page('/data/'))).toContain(fill('{{pricing:data}}', 'en', config))
   expect(s.read(page('/data/'))).toContain('reference_id=site-data')
-  const b = s.read(page('/bundle/')); expect(b).toContain(fill('{{price:bundle}}', 'en', config)); expect(b).toContain('2 Macs per app'); expect(b).toContain('reference_id=site-bundle') })
+  const b = s.read(page('/bundle/')); expect(b).toContain(fill('{{price:bundle}}', 'en', config)); expect(b).toContain('2 Macs per app'); expect(b).toContain('reference_id=site-bundle')
+  expect(scan(b).ld.find(o => o['@type'] === 'SoftwareApplication')).toMatchObject({ name: 'Tegel Bundle', offers: { price: config.apps.bundle.price } }) })
 test('App 2 copy makes no claim the build Mac cannot prove', () => { for (const p of PHASES.APP2)
   expect([p, /klarna|afterpay|giveaway|apple silicon ready|works on macos 2[67]/i.test(s.read(page(p)))]).toEqual([p, false]) })
 ```
 
 Run `(cd site && bun test pages)`. Expected: FAIL, `APP2 pages exist` missing `/data/`.
 - [ ] **Step 2: Write the four pages.** Screenshots show only synthetic fixtures (Task 9 sessions), never a real transcript. Text and code only (rule 3).
-- [ ] **Step 3: Run the tests, expect PASS.** `(cd site && bun test)`. Expected: 0 fail. Then run the preview deploy (plan 04 Task 8's command; previews need no approval) and get Lighthouse SEO ≥ 95 on the 4 URLs.
+- [ ] **Step 3: Run the tests, expect PASS.** `(cd site && bun test)`. Expected: 0 fail. Watch the JSON-LD guard fail once: set `bundle.md`'s `app` to `data`, run, see `App 2 pages carry…` fail on `name: 'Tegel Data'`; revert. Then run the preview deploy (plan 04 Task 8's command; previews need no approval) and get Lighthouse SEO ≥ 95 on the 4 URLs.
 - [ ] **Step 4: Commit:** `site/content/en/data.md site/content/en/jsonl-viewer-mac.md site/content/en/claude-code-transcript-viewer.md site/content/en/bundle.md site/config.json site/test/pages.test.js`, `docs(site): Tegel Data product page, two SEO pages, the bundle page, EUR prices` + trailer.
 
 ---
@@ -953,8 +1027,8 @@ Run `(cd site && bun test pages)`. Expected: FAIL, `APP2 pages exist` missing `/
 - Modify: `docs/reviews/m06.md` (§ "Test matrix").
 
 **Interfaces:**
-- Consumes: plan 03's `scripts/release.sh <app> <version> [--sandbox] [--yes] [--no-upload] [--print-config] [--from-dmg <path>]` (version `X.Y.Z[-bN|-rcN]`; `--no-upload` stops after the notarised, stapled DMG and prints its path last; the `case $app` block sets `SLUG`, `SCHEME`, `NAME` and `VOL`, and under `set -u` everything after it derives from those: `DMG_NAME=$NAME-$V.dmg`, every feed and bucket path `$SLUG/…`, K7; `check_ents` diffs each signed bundle against `scripts/entitlements/<bundle id minus com.tegelapps.>.plist`); plan 05's `scripts/smoke-dmg.sh` and `scripts/test-smoke-dmg.sh`; plan 03's RC Sparkle acceptance with a locally served test feed; `POLAR_QA_LICENSE_KEY_DATA` (Task 12); `scripts/check-data-types.swift`; the Task 7 and 8 checklists.
-- Produces: `release.sh data …`; notarised, stapled RC1 and RC2 DMGs (RC2 carries the production Polar ids and is the build Task 16 publishes), and matrix evidence per machine.
+- Consumes: plan 03's `scripts/release.sh <app> <version> [--sandbox] [--yes] [--no-upload] [--print-config] [--from-dmg <path>]` (version `X.Y.Z[-bN|-rcN]`; `--no-upload` stops after the notarised, stapled DMG and prints its path last; the `case $app` block sets `SLUG`, `SCHEME`, `NAME` and `VOL`, and under `set -u` everything after it derives from those: `DMG_NAME=$NAME-$V.dmg`, every feed and bucket path `$SLUG/…`, K7; `check_ents` diffs each signed bundle against `scripts/entitlements/<bundle id minus com.tegelapps.>.plist`); plan 05's `scripts/smoke-dmg.sh` and `scripts/test-smoke-dmg.sh`; plan 03's RC Sparkle acceptance with a locally served test feed; `POLAR_QA_LICENSE_KEY_DATA` and the re-issued `POLAR_QA_LICENSE_KEY` (Task 12 Step 3); `scripts/check-data-types.swift`; the Task 7 and 8 checklists.
+- Produces: `release.sh data …`; notarised, stapled RC1 and RC2 DMGs, and matrix evidence per machine. RC1 is a `--sandbox` build: the production ids reach `Release.xcconfig` only on Thu 28 Jan (Task 12 Step 3). RC2 carries the production ids and is the installed build Task 16 Step 5 updates from; Task 16 Step 2 builds the published 1.0.0 afresh on `main`.
 
 - [ ] **Step 1: Add the `data` app to `release.sh`, its entitlement allowlist and `smoke-dmg.sh`.**
   - Add two `release_test.sh` cases in plan 03's style (no network, no signing, no build), right after `check print-config` in the first `fresh` block, where the clone still has every `.env` key and the `REPLACE_IN_PLAN_05` line:
@@ -984,8 +1058,8 @@ Run `(cd site && bun test pages)`. Expected: FAIL, `APP2 pages exist` missing `/
     - In `smoke-dmg.sh`, after the install, set `QL_ID` to the `CFBundleIdentifier` of the installed app's `Contents/PlugIns/*.appex` whose `NSExtension:NSExtensionPointIdentifier` is `com.apple.quicklook.preview` (PlistBuddy), or empty if there is none. The `quicklook` check becomes `[ -n "$QL_ID" ] && pluginkit -m -v -i "$QL_ID"`, with `${QL_ID:-none}` as its detail, and the soft `pluginkit -e use` step uses `$QL_ID`.
     - Re-run it. Expected: `test-smoke-dmg: PASS`. It stays outside `make check` (GUI, K13).
   - Commit: `scripts/release.sh scripts/release_test.sh scripts/entitlements/data.plist scripts/entitlements/data.quicklook.plist scripts/smoke-dmg.sh scripts/test-smoke-dmg.sh`, `build(data): release.sh data app and allowlist; smoke id from the smoked app` + trailer. Step 2's `release.sh` needs a clean tree.
-- [ ] **Step 2: Build RC1** (Tue 26 Jan). `scripts/release.sh data 1.0.0-rc1 --no-upload`. Expected: `spctl -a -vvv -t open --context context:primary-signature <dmg>` (plan 03's DMG check; `-t install` is for `.pkg`) prints `accepted` and `source=Notarized Developer ID`.
-- [ ] **Step 3: Run the matrix.** Every row runs `check-data-types.swift`, the Quick Look matrix, `big-1m.csv` in the window, `.env` masking and the session fixtures. Licence activation runs on Debug builds against the sandbox.
+- [ ] **Step 2: Build RC1** (Tue 26 Jan) with the sandbox Polar ids. First watch the placeholder guard cover the `_DATA` keys: `scripts/release.sh data 1.0.0-rc1 --no-upload`. Expected: exit 1, `Config/Release.xcconfig still has REPLACE_IN_PLAN_05; pass --sandbox for a beta` (App 1's placeholders went in plan 05, so only Task 1's `_DATA` ones remain). Then `scripts/release.sh data 1.0.0-rc1 --sandbox --no-upload`. Expected: `spctl -a -vvv -t open --context context:primary-signature <dmg>` (plan 03's DMG check; `-t install` is for `.pkg`) prints `accepted` and `source=Notarized Developer ID`.
+- [ ] **Step 3: Run the matrix.** Every row runs `check-data-types.swift`, the Quick Look matrix, `big-1m.csv` in the window, `.env` masking and the session fixtures. Licence activation runs against the sandbox: on RC1 with Task 12 Step 2's sandbox Data key, or on Debug builds.
 
 | Machine | Evidence source |
 |---|---|
@@ -998,8 +1072,8 @@ Run `(cd site && bun test pages)`. Expected: FAIL, `APP2 pages exist` missing `/
 - [ ] **Step 4: Build RC2 and prove the production path** (Thu 28 Jan, after Task 12 Step 3 put the production ids in `Release.xcconfig`).
   - `scripts/release.sh data 1.0.0-rc2 --no-upload`; `spctl` as in Step 2.
   - Bound to the right product: `. scripts/lib/env.sh; [ "$(/usr/libexec/PlistBuddy -c 'Print TGPolarBenefitID' "<rc2 app>/Contents/Info.plist")" = "$(envget POLAR_BENEFIT_ID_DATA)" ] && echo bound`. Expected: `bound`.
-  - **A real Data update** (K12): install RC1 in `/Applications`, then run plan 03's RC Sparkle acceptance with the test feed listing RC2. Expected: "Check for Updates…" offers 1.0.0-rc2, installs it, relaunches, and About shows `1.0.0-rc2`. This exercises App 2's own Sparkle wiring (Task 8), signed feed included.
-  - **Production licence:** on RC2, paste the `POLAR_QA_LICENSE_KEY_DATA` value. Expected: Pro. Quit and relaunch: still Pro with no prompt (the stored licence and the 24 h refresh loop from plan 03). Paste the `POLAR_QA_LICENSE_KEY` value (App 1's key): the `wrongProduct` copy.
+  - **A real Data update** (K12): install RC1 in `/Applications` with no licence active (Settings › Licence › Deactivate this Mac if Step 3 activated it: RC2 validates against production, where a sandbox key doesn't exist), then run plan 03's RC Sparkle acceptance with the test feed listing RC2. Expected: "Check for Updates…" offers 1.0.0-rc2, installs it, relaunches, and About shows `1.0.0-rc2`. This exercises App 2's own Sparkle wiring (Task 8), signed feed included.
+  - **Production licence:** on RC2, while it is still free (the key field only shows then), paste the `POLAR_QA_LICENSE_KEY` value (App 1's key, re-issued in Task 12 Step 3). Expected: the `wrongProduct` copy. Then paste the `POLAR_QA_LICENSE_KEY_DATA` value. Expected: Pro. Quit and relaunch: still Pro with no prompt (the stored licence and the 24 h refresh loop from plan 03).
   - Record each result in `docs/reviews/m06.md` § "RC2".
 - [ ] **Step 5: Record the demo.** A silent screen recording (no audio track; captions as text) of: Quick Look on JSONL, CSV and `.env` (masked) → window paging of 1M rows → a session transcript → export → open in Tegel Markdown. Use synthetic fixtures only. It goes up to R2 next to the DMG when Task 16 ships, under the same release approval (no separate ask).
 - [ ] **Step 6: Commit:** `docs/reviews/m06.md`, `test(data): RC1 matrix, RC2 update and production licence` + trailer.
@@ -1063,10 +1137,10 @@ Run **Procedure P (master §11)** with these deltas (B1):
 
 - [ ] **Step 1: Run Procedure P** with the deltas above. Commit: `docs/reviews/m06.md docs/reviews/m06-design`, `docs(m06): pipeline results` + trailer; then merge and push per P.
 - [ ] **Step 2: Build the release DMG** (Mon 1 Feb, on `main`). `scripts/release.sh data 1.0.0 --no-upload`. Expected: notarised and stapled; `spctl` accepted; the DMG path printed last. Then `APP_NAME="Tegel Data" FIXTURES=Fixtures/data scripts/smoke-dmg.sh <dmg> docs/reviews/m06-smoke` (plan 05's script, with Task 14's Quick Look id). Expected: exit 0, and `grep -c '^PASS quicklook com.tegelapps.data.quicklook' docs/reviews/m06-smoke/smoke.txt` → `1`.
-- [ ] **Step 3: Publish** (**user approval**; one approval covers the DMG, the appcast and the Task 14 demo upload to R2). `scripts/release.sh data 1.0.0 --from-dmg <Step 2 path>` publishes that tested DMG with no rebuild (K7). Expected: `curl -s https://downloads.tegelapps.com/data/appcast.xml | grep -c 'sparkle:edSignature'` → `1`, and `https://downloads.tegelapps.com/markdown/appcast.xml` is unchanged.
-- [ ] **Step 4: Site keys (plan 04 CR-5).** On `content/release-data-1.0.0`, set `apps.data.version` → `"1.0.0"` and `apps.data.downloadURL` → the URL on Step 3's `published …` line in `site/config.json`; `(cd site && bun test)` → 0 fail; run review stages 2, 3 and 9; merge, push, and deploy with plan 04's production deploy command (plan 04 Task 10 Step 2). Expected: `curl -s https://tegelapps.com/data/ | grep -cF "<downloadURL>"` ≥ 1.
+- [ ] **Step 3: Publish** (**user approval**; one approval covers the DMG, the appcast and the Task 14 demo upload to R2). `scripts/release.sh data 1.0.0 --yes --from-dmg <Step 2 path>` publishes that tested DMG with no rebuild (K7). `--yes` goes on only after that approval (plan 05 Task 10 Step 7's rule): without a terminal, the confirmation prompt reads EOF and aborts (plan 03). Expected: `curl -s https://downloads.tegelapps.com/data/appcast.xml | grep -c 'sparkle:edSignature'` → `1`, and `https://downloads.tegelapps.com/markdown/appcast.xml` is unchanged.
+- [ ] **Step 4: Site keys (plan 04 CR-5).** On `content/release-data-1.0.0`, set `apps.data.version` → `"1.0.0"` and `apps.data.downloadURL` → the URL on Step 3's `published …` line in `site/config.json`, and add the download link `{{download:data}}` with "Version {{version:data}}" to `site/content/en/data.md` (Task 13 left it out while `downloadURL` was empty); `(cd site && bun test)` → 0 fail; run review stages 2, 3 and 9; merge, push, and deploy with plan 04's production deploy command (plan 04 Task 10 Step 2). Expected: `curl -s https://tegelapps.com/data/ | grep -cF "<downloadURL>"` ≥ 1.
 - [ ] **Step 5: A real update on the production feed** (K12). On the build Mac with RC2 (Task 14) in `/Applications`: "Check for Updates…" offers 1.0.0, installs it and relaunches; About shows `1.0.0`; the QA licence is still Pro. Then download the public DMG and confirm that a Sparkle check on it finds no update. Record both in `m06.md`.
-- [ ] **Step 6: Close the QA licence** 🔒. Revoke the `POLAR_QA_LICENSE_KEY_DATA` key in the dashboard and archive the `QA-DATA` discount and its link. Then `. scripts/lib/env.sh; envset POLAR_QA_LICENSE_KEY_DATA ''; [ -z "$(envget POLAR_QA_LICENSE_KEY_DATA)" ] && echo gone`. Expected: `gone`.
+- [ ] **Step 6: Close the QA licences** 🔒. Revoke the `POLAR_QA_LICENSE_KEY_DATA` and `POLAR_QA_LICENSE_KEY` keys in the dashboard and archive the `QA-DATA` and `QA-MD-DATA` discounts and their links. Then `. scripts/lib/env.sh; for k in POLAR_QA_LICENSE_KEY_DATA POLAR_QA_LICENSE_KEY; do envset "$k" ''; [ -z "$(envget "$k")" ] && echo "gone $k"; done`. Expected: `gone POLAR_QA_LICENSE_KEY_DATA` and `gone POLAR_QA_LICENSE_KEY`.
 
 ## Launch runbook (no code; every outward action needs user approval)
 
@@ -1087,7 +1161,7 @@ Run **Procedure P (master §11)** with these deltas (B1):
 
 CR 1, 5 and 6, and CR-2's `files(in:extensions:limit:)`, accepted and applied to master §3.3 and §4 and to Task 8 (27 Oct); history in `docs/reviews/m00-consolidated.md`. Open:
 
-2. **CR-2 (TegelKit `FolderIndex.search`, conditional):** if Task 0 #3 finds a 5 MB per-file cap in `search`, add `maxBytesPerFile: Int = 5_000_000` to `search(_:in:limit:)`; session mode passes 128 MB.
+2. **CR-2 (TegelKit `FolderIndex.search`):** plan 02 Task 4 reads each file through `TextFileLoader`'s 5 MB cap, so add `maxBytesPerFile: Int = 5_000_000` to `search(_:in:limit:)` (Task 10); App 1 keeps the default, session mode passes 128 MB.
 3. **CR-3 (TegelKit and renderer additions):** Swift `DataFormat`, `DataFile`, `DataFileError`, `RecordIndex`, `RecordIndexError`, `DataIssue`, `DataRenderResult`, `RendererWebView.renderData(…)`, `RendererWebView.renderPaged(…)` and the `tegelData` reply handler. JS `window.tegel.renderData`, `openPaged`, `transcriptMarkdown({ reveal })`, and `maskSecrets` (K12). Swift `DataFile.secretFile`, `DataFile.isSecret(filename:)`, `RecordIndexError.truncated`. Layout: §3.1 gains `Renderer/src/data/` and `src/css/data.css`; the bundle gains `data.js`.
 4. **CR-4 (D5, narrowing):** the Data Quick Look extension omits `temporary-exception.files.absolute-path.read-only = /`. That exception exists only for Markdown's local images, and data files load none.
 <!-- numbers kept, so cross-plan references resolve -->

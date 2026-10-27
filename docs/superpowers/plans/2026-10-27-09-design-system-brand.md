@@ -270,7 +270,7 @@ Master §2/§3 and CLAUDE.md apply (build Mac and evidence rules, product rules 
     - gradients, `box-shadow` and `backdrop-filter` in site CSS [guard];
     - `Inter` anywhere [guard];
     - emoji in UI strings [guard];
-    - italic or synthetic oblique on Arabic;
+    - italic or synthetic oblique on Arabic or Hebrew [guard]: SF Arabic has no italic face, so WebKit would slant it. RTL emphasis (`em`, `i`, `cite`) is upright at weight 600;
     - `text-align: justify` in the renderer;
     - brand colour in the app UI;
     - a splash screen (hig-patterns launching);
@@ -335,7 +335,7 @@ test('UI strings and templates contain no emoji', () => {
 
 `\p{Emoji_Presentation}` deliberately leaves out ©, ®, ⌘ and arrows, which default to text presentation.
 
-- [ ] **Step 2: Run.** `cd Renderer && ~/.local/bin/bun test test/design.test.js`. Expected: FAIL, with `ENOENT … site/static/css/tokens.css` in both token tests. The other tests pass (vacuous or already true).
+- [ ] **Step 2: Run.** `cd Renderer && ~/.local/bin/bun test test/design.test.js`. Expected: FAIL, all 6 tests, each with `ReferenceError: … is not defined` (`ratio`, `blocks`, `read` or `files`: the helpers come in Step 3).
 - [ ] **Step 3: Implement** `ratio`, `blocks`, `files` and `read` in the test file (≤ 40 lines together). Write `tokens.css` with the Task 1 values.
 - [ ] **Step 4: Run.** Same command. Expected: PASS, 6 tests, 0 fail.
 - [ ] **Step 5: Watch each guard fail once, then restore** (CLAUDE.md coding rule 4: an unwatched guard isn't verified).
@@ -658,14 +658,16 @@ At the top of `base.css` (the PostScript names come from [V4]; `R_AR` = `U+0600-
 
 | Element | Rule |
 |---|---|
+| Root | `html { background: var(--tg-bg); color: var(--tg-fg); font: var(--tg-size)/var(--tg-lh) var(--tg-font) }`. Without it no theme colour, face or size reaches the page |
 | Column | `max-inline-size: var(--tg-measure); margin-inline: auto; padding: 40px 32px 64px` |
 | Paragraphs | `margin-block: 0 1lh`; `hanging-punctuation: first last`; `widows: 2; orphans: 2` |
 | RTL prose | `:dir(rtl)` p, li, td uses `--tg-lh-rtl`; RTL headings use 1.5 |
-| Headings | `font-family: var(--tg-head-font)`; `margin-block: 1.6em 0.5em` (first child 0); `text-wrap: balance` |
+| RTL emphasis | `:is(em, i, cite):dir(rtl) { font-style: normal; font-weight: 600 }` (DESIGN.md §11). `:dir()`, not `[dir=rtl]`: the direction comes from `dir="auto"` |
+| Headings | `font-family: var(--tg-head-font)`; `line-height: var(--tg-head-lh)`; `margin-block: 1.6em 0.5em` (first child 0); `text-wrap: balance` |
 | Lists | `padding-inline-start: 1.5em`; `li + li { margin-block-start: .25em }`; `::marker { color: var(--tg-muted) }`; `ol { font-variant-numeric: tabular-nums }` |
 | Blockquote | `margin-inline: 0; padding-inline-start: 1em; border-inline-start: 3px solid var(--tg-rule)`; text stays `--tg-fg` |
 | Tables | stay `display: table` (keeps VoiceOver table semantics); `border-collapse: collapse; font-variant-numeric: tabular-nums`. `th, td { padding: 6px 12px; text-align: start; vertical-align: top; border-block-end: 1px solid var(--tg-rule); overflow-wrap: anywhere }`; `thead th { border-block-end-color: var(--tg-muted); font-weight: 600 }`. No zebra stripes, no vertical rules |
-| Code | `pre { background: var(--tg-code-bg); padding: 12px 16px; border-radius: var(--tg-radius); overflow-x: auto; font: var(--tg-code-size)/1.5 var(--tg-mono); tab-size: 4 }`; inline `code { padding: .1em .3em; border-radius: 3px; font-size: .9em }` |
+| Code | `pre { background: var(--tg-code-bg); padding: 12px 16px; border-radius: var(--tg-radius); overflow-x: auto; font: var(--tg-code-size)/1.5 var(--tg-mono); tab-size: 4 }`; inline `:not(pre) > code { padding: .1em .3em; border-radius: 3px; font-size: .9em }` (scoped, so `pre > code` keeps the block size and no inline padding) |
 | Links | `color: var(--tg-link)`; underline 1 px, `text-underline-offset: .18em`, decoration colour `color-mix(in srgb, var(--tg-link) 45%, transparent)`. The underline is required: link-to-text contrast is only 1.65–3.20 (WCAG 1.4.1) |
 | Rules and images | `hr { border: 0; border-block-start: 1px solid var(--tg-rule); margin-block: 2lh }`; `img { max-inline-size: 100%; block-size: auto }` |
 | Mermaid | `div.mermaid { display: flex; justify-content: center; margin-block: 0 1lh } div.mermaid svg { max-inline-size: 100%; height: auto }` |
@@ -676,7 +678,7 @@ At the top of `base.css` (the PostScript names come from [V4]; `R_AR` = `U+0600-
 
 **Quick Look:**
 - `:root[data-mode="quicklook"] main { padding: 24px }`.
-- `@media (max-width: 480px) { :root[data-mode="quicklook"] { --tg-size: 15px } :root[data-mode="quicklook"] main { padding: 12px } }`.
+- `@media (max-width: 480px) { :root[data-mode="quicklook"][data-theme] { --tg-size: 15px } :root[data-mode="quicklook"] main { padding: 12px } }`. The extra `[data-theme]` matters: plain `:root[data-mode="quicklook"]` has the same specificity as `:root[data-theme="paper"]`, and the theme files load after `base.css`, so 16px would win.
 
 **Print** (`print.css`; keep the `@page` and break rules, which plan 01 creates and plan 02 Task 11 owns; colour in print is this plan's):
 - In `@media print`, override `--tg-size`: paper 11pt, ink 11.5pt, studio 10pt. The em-based measure keeps 66–74 characters per line.
@@ -756,8 +758,9 @@ final class FontCoverageTests: XCTestCase {
 | `testRTLScriptInCodeIsNotStretched` | `"قيمة الإعداد الافتراضية"` and `"ערך ברירת המחדל"` as a paragraph and as inline code | Range width of code ÷ width of prose < 1.15 (Courier New is ≈ 1.42 [V2]). `document.fonts` has a `TG RTL Code` face with `status === "loaded"` |
 | `testPrintModeStaysLightInDarkAppearance` | `.darkAqua`, mode `.print`, each theme | html background is `rgb(255, 255, 255)` or studio's `rgb(247, 248, 250)`; `p` colour has relative luminance < 0.05 |
 | `testWindowModeFollowsDarkAppearance` | `.darkAqua`, mode `.window`, paper | html background is `rgb(30, 30, 30)` (capability present, not just bug absent) |
+| `testRTLEmphasisIsUpright` | paper; `قيمة *الإعداد* الافتراضية` and `The *default* value` as two paragraphs | The Arabic `em`'s computed `fontStyle` is `normal` and `fontWeight` is `600`; the English `em` stays `italic` (capability kept). macOS 14 ships Safari 17's WebKit, above `:dir()`'s 16.4 [V6], but this Mac can't run 14 (master D11): run the test on lease L2's macOS 14 leg if it exists and record the machine, otherwise record "unverified on 14" |
 | `testUrduLangUsesNastaliqAndTallLines` | `<p lang="ur">یہ ایک تکنیکی دستاویز ہے</p>` (raw HTML is allowed, master §3.2) | `fontFamily` starts with `"Noto Nastaliq Urdu"`; lineHeight ÷ fontSize ≥ 2.2 |
-| `testQuickLookNarrowWidthHasNoHorizontalOverflow` | 260 px wide, mode `.quicklook`, `docs/design/samples/en-spec.md` (Task 8; until then `Fixtures/markdown/gfm-kitchen-sink.md`) | `scrollWidth <= clientWidth` on `document.scrollingElement` |
+| `testQuickLookNarrowWidthHasNoHorizontalOverflow` | 260 px wide, mode `.quicklook`, `docs/design/samples/en-spec.md` (Task 8; until then `Fixtures/markdown/gfm-kitchen-sink.md`) | `scrollWidth <= clientWidth` on `document.scrollingElement`, and the first `p`'s computed `fontSize` is `15px` (the small-window size beats paper's 16px) |
 
   First-line character count, run through `js(_:_:)` (the algorithm the test needs):
 
@@ -769,7 +772,7 @@ const y0 = top(0); for (let i = 1; i < t.length; i++) if (top(i) > y0 + 1) retur
 
 - [ ] **Step 3: Run.**
   - `cd Renderer && ~/.local/bin/bun test test/design.test.js`. Expected: FAIL. ink/studio fail with `ENOENT`; paper fails on missing tokens (plan 01's paper.css has no colour tokens) and on its missing Increase Contrast pair; the bundle test fails because `index.html` doesn't link `ink.css` or `studio.css` yet.
-  - `swift test --package-path Packages/TegelKit --filter 'FontCoverageTests|DesignRenderTests'`. Under plan 01 Branch B, use `xcodebuild test -project Tegel.xcodeproj -scheme TegelKitHostTests -derivedDataPath build -only-testing:TegelKitHostTests/DesignRenderTests` for the WebKit class. Expected: FAIL on the face set, measure (`68ch` gives ≈ 91), code stretch, Urdu and print-light.
+  - `swift test --package-path Packages/TegelKit --filter 'FontCoverageTests|DesignRenderTests'`. Under plan 01 Branch B, use `xcodebuild test -project Tegel.xcodeproj -scheme TegelKitHostTests -derivedDataPath build -only-testing:TegelKitHostTests/DesignRenderTests` for the WebKit class. Expected: FAIL on the face set, measure (plan 01's `base.css` sets no measure yet, so the first line runs the full 1400 px width, far past 75), code stretch, RTL emphasis, Urdu, print-light and the Quick Look `15px`.
 - [ ] **Step 4: Implement the CSS** per the tables.
   - Link `ink.css` and `studio.css` in `index.html` in this order: base, paper, ink, studio, print. Plan 02 Task 10 asks for the same order.
   - Run `make renderer && (cd Renderer && ~/.local/bin/bun test test/design.test.js -t 'bundle ships')`. Expected: FAIL `[ "ink.css", false ]`: plan 01's `build.js` copies a fixed list, `src/css/{base,paper,print}.css`.
@@ -779,6 +782,7 @@ const y0 = top(0); for (let i = 1; i < t.length; i++) if (top(i) > y0 + 1) retur
   - Temporarily drop `:not([data-mode="print"])` from ink's dark token selector (the test renders on screen, so `screen and` can't catch it), then `make renderer`. `testPrintModeStaysLightInDarkAppearance` must fail for ink. Revert.
   - Temporarily add `[dir="rtl"] p { line-height: 2 }` to `ink.css`. The `:dir()` guard must fail, naming `Renderer/src/css/ink.css`. Revert.
   - Temporarily move ink's dark Increase Contrast block into `base.css` as `@media (prefers-contrast: more) { :root { … } }`, the placement that loses the cascade. The "ink dark: Increase Contrast tokens win the cascade" guard must fail. Revert; all pass.
+  - Temporarily drop `[data-theme]` from the Quick Look small-window selector, then `make renderer`. `testQuickLookNarrowWidthHasNoHorizontalOverflow` must fail with `16px`. Revert.
 - [ ] **Step 7: Commit** `Renderer/src Renderer/build.js Renderer/test/design.test.js Packages/TegelKit/Sources/TegelKit/Resources/Renderer Packages/TegelKit/Tests/TegelKitTests/FontCoverageTests.swift Packages/TegelKit/Tests/TegelKitTests/WebView/DesignRenderTests.swift`: "feat(renderer): paper, ink and studio themes per DESIGN.md: RTL code and ink aliases, em measures, print stays light"
 
 ### Task 7: Mermaid follows the theme (TDD, Wed 4 Nov)
@@ -904,7 +908,7 @@ sync:
     - "פריט בעברית עם מספר: 4,096 בתים"
 - [ ] **Step 4: Check that they render.**
   - Run `make build && open -a "$PWD/build/Build/Products/Debug/Tegel Markdown.app" docs/design/samples/ar-spec.md docs/design/samples/mixed.md` (plan 01's target and app path; plan 02's `make run-app` isn't on this branch). Expected: headings and paragraphs right-aligned, code blocks LTR, Mermaid flowing right to left, no Courier-looking Arabic in code.
-  - Run `grep -c -P '[\x{1F300}-\x{1FAFF}]' docs/design/samples/*.md`. Expected: 0 for every file.
+  - Run `perl -CSD -wne 'print "$ARGV\n" if /[\x{1F300}-\x{1FAFF}]/' docs/design/samples/*.md` (macOS `grep` has no `-P`). Expected: no output. A file name means that file holds an emoji. `-CSD` reads the files as UTF-8, which Steps 1–3 write; on a file that isn't, perl 5.34 keeps going, and `-w` prints `does not map to Unicode`, so re-save that file as UTF-8 and re-run.
 - [ ] **Step 5: Commit** `docs/design/samples`: "docs(design): EN, AR and mixed-direction sample documents"
 
 ### Task 9: Icon concepts and the legibility sheet (Thu 5 Nov)
@@ -974,7 +978,8 @@ ls -d docs/design/icons/concepts/*.iconset | wc -l; ls docs/design/icons/concept
     Also render studio-head-mono (current) and studio-head-sans.
   - Expected: 3 samples × 3 themes × 2 appearances, plus 4 variant shots, all as files in `docs/design/proto/`.
 - [ ] **Step 2: Hero variants.**
-  - Get real window shots first: `make build`, then open `en-spec.md` and `ar-spec.md`, then run `scripts/window-shot.sh` (Task 12; until then `screencapture -o -w`) to `docs/design/proto/win-{en,ar}-{light,dark}.png`.
+  - Do Task 12 Step 1 first (it writes and checks `scripts/window-shot.sh`). Never fall back to `screencapture -w`: it waits for a click, so an agent stalls.
+  - Get real window shots: `make build`, then open `en-spec.md` and `ar-spec.md`, then run `scripts/window-shot.sh "Tegel Markdown" docs/design/proto/win-<en|ar>-<light|dark>.png` for each of the four.
   - The three variants:
 
     | Variant | Content |
@@ -1160,15 +1165,15 @@ ffmpeg -hide_banner -y -loop 1 -t 3 -i docs/design/proto/win-en-light.png -loop 
 | Gate | Screenshots (all light + dark unless noted) | Pass criteria |
 |---|---|---|
 | m01 | Quick Look preview of `rtl-arabic.md`, `mixed-bidi.md` and `mermaid-basic.md` on the build Mac (plan 01 Task 14) | Structure only, because the UI is unstyled scaffolding until Task 6: RTL alignment, LTR code, diagrams drawn, no horizontal overflow, legible in both appearances. Styling findings are deferred to Task 6 |
-| m02 | Window × paper/ink/studio; AR UI + EN doc; EN UI + `ar-spec.md`; folder window; Settings × 4 tabs; Pro window; Welcome; Quick Look panel; Quick Look at 260 px; PDF page 1 of EN and AR (`sips -s format png`); the `macos-26` runner set from `design-shots.yml` with `run_app_shots=true` | `design.test.js` and `DesignRenderTests` green. No P0/P1 from `/design-review`. RTL mirror correct (sidebar on the right, `#` unflipped). Every toolbar item is labelled in the VoiceOver rotor. Contrast in the Increase Contrast shot is ≥ the table. Liquid Glass shows only on system chrome |
+| m02 | Window × paper/ink/studio; AR UI + EN doc; EN UI + `ar-spec.md`; folder window; Settings, General and Appearance tabs (plan 03 adds Licence and Updates: m03); Pro window; Welcome; Quick Look panel; Quick Look at 260 px; PDF page 1 of EN and AR (`sips -s format png`); the `macos-26` runner set from `design-shots.yml` with `run_app_shots=true` | `design.test.js` and `DesignRenderTests` green. No P0/P1 from `/design-review`. RTL mirror correct (sidebar on the right, `#` unflipped). Every toolbar item is labelled in the VoiceOver rotor. Liquid Glass shows only on system chrome |
 | m03 | Settings › Licence (free, Pro, each error incl. `.wrongProduct`) and Settings › Updates, in EN UI and AR UI; the Sparkle update prompt | No P0/P1 from `/design-review`. Copy follows DESIGN.md §2, with no price in the app. AR UI mirrored |
 | m04 | `/`, `/markdown/`, `/pricing/`, `/download/` and `/ar/arabic-markdown-pdf/` at 390 and 1440 px through gstack browse; Lighthouse | Guards green. No horizontal scroll at 320 px. Focus ring visible. Measure 60–75 characters. Budget met. None of the banned patterns |
 | m05 | 4 PH gallery PNGs; OG; 3 demo frames; the icon at 16/32/128/512 in Finder | Exact sizes. Captions in the band, never over UI. No audio stream. Every image a real capture |
 | m06 | The m02 set for Tegel Data; the Data icon guard; JSON/CSV views | As m02, plus `.env` values masked in every shot (rule 2) |
 
 - [ ] **Step 1:** Write the table into DESIGN.md §12.
-- [ ] **Step 2: Run the m09 review.** Use `/design-review` on Task 9's legibility sheet, `theme-*.png`, `hero-*.png`, `og-v1.png`, `gallery-sample.png` and the runner icon renders. Record the result in `docs/reviews/design-m09.md`. Fix every P0/P1 in the owning task's files, and re-run that task's tests.
-- [ ] **Step 3: Commit** `DESIGN.md docs/reviews/design-m09.md`: "docs(design): review gates for m01–m06; m09 design review"
+- [ ] **Step 2: Run the m09 review.** Use `/design-review` on Task 9's legibility sheet, `theme-*.png`, `hero-*.png`, `og-v1.png`, `gallery-sample.png`, the runner icon renders and the Increase Contrast set. No app milestone captures that set, so it is made here: on the build Mac, turn on System Settings › Accessibility › Display › Increase contrast (a GUI step, like Task 11 Step 3), run Task 10 Step 1's snapshot command with `TG_SNAPSHOT_DIR=$PWD/docs/design/proto/contrast`, then turn the setting off. Pass: muted text renders in the body colour and rules are darker than in `theme-*.png`; the ratios themselves are Task 6's guards. If the shots match `theme-*.png`, WebKit didn't see the setting: record that, naming the machine, rather than passing it. Record the result in `docs/reviews/design-m09.md`. Fix every P0/P1 in the owning task's files, and re-run that task's tests.
+- [ ] **Step 3: Commit** `DESIGN.md docs/reviews/design-m09.md docs/design/proto/contrast`: "docs(design): review gates for m01–m06; m09 design review"
 
 ### Task 14: 9-stage pipeline, merge (Mon 9 Nov)
 
