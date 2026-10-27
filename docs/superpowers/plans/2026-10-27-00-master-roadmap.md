@@ -14,24 +14,31 @@
 - macOS 14.0+ deployment target. Swift 6 language mode. Xcode 26.3 on the build Mac [F1, F2].
 - XcodeGen; SwiftPM. bun as JS runtime, bundler and test runner.
 - markdown-it 14, highlight.js 11, DOMPurify 3, mermaid 11 (exact versions pinned in `bun.lock` at install).
-- Sparkle 2.10.1 [F4]; Polar licence API [F3].
+- Sparkle 2.10.1 [F4] with a signed feed (`SURequireSignedFeed` and `SUVerifyUpdateBeforeExtraction` both true, K7); Polar licence API [F3].
 - Cloudflare Pages, R2, Registrar and Email Routing [F8]. GitHub Actions (on demand) [F7]. Scaleway M1 for macOS 27 and arm64 [F9].
 
 **Spec:** `BUSINESS-PLAN.md`. **Facts:** `docs/research/2026-10-27-technical-facts.md` (cited as [F#]). **Rules:** `CLAUDE.md`.
 
 ## Global constraints
 
+These, §2, §3 and `CLAUDE.md` bind every plan. A plan's own Global Constraints list only its deltas, plus one line: "Master Global constraints, §2, §3 and CLAUDE.md apply." They don't repeat this list.
+
+Cluster ids (K1–K18) refer to `docs/reviews/m00-consolidated.md`.
+
 - macOS deployment target **14.0**. Universal binary (arm64 + x86_64).
 - **No Accessibility, Screen Recording or Input Monitoring permission.** Only public APIs (§7.2).
 - **Read-only:** the apps never write to user files. The only write is a PDF/Markdown export to a save-panel URL (§5 rule B).
 - **No telemetry, no accounts.** Network use is limited to the Polar licence calls and the Sparkle appcast/DMG (§6.3).
-- **Pricing:**
-  - App 1: **$19 once, 2 Macs**. Introductory **$14 until Mon 14 Dec 2026 23:59 CET**, set as the real price, not a discount [F3f].
-  - App 2: **$15**. Bundle: **$29**.
+- **Pricing** (each Polar product carries a EUR price beside the USD one; NL and every other EU-language page shows the EUR price incl. VAT; the honest-intro rules apply to EUR too; K10):
+  - App 1: **$19 / €19 once, 2 Macs**. Introductory **$14 / €14 until Mon 14 Dec 2026 23:59 CET**, set as the real price, not a discount [F3f]. The EUR points are **pending user confirmation**.
+  - App 2: **$15**. Bundle: **$29**. Their EUR prices are pending user confirmation.
 - **Free tier, App 1:** Quick Look preview of `.md`; single-file window; syntax highlighting; Mermaid; RTL.
 - **Paid tier, App 1:** folder mode (sidebar, cross-document search, live reload); paginated A4/Letter PDF export that is RTL-correct; 3 typographic themes with light/dark.
 - **UI languages:** EN, NL, FR, AR, in **all** tiers (decision D6).
 - **Licence:** validate at launch; **30-day grace** from the last successful validation; **2 activations** [F3e]. A 404 never locks on the spot [F3d].
+  - Pro holds only while `-1 day ≤ now − lastValidatedAt ≤ grace`. Outside that window the state is `.lapsed`, and the next successful validation restores Pro (K5).
+  - A validation succeeds only on a 200 that decodes to `status == "granted"` with the stored activation id. Anything else counts as a failure: grace, never a lock.
+- **Kill path (K14):** whenever sales end (G1b "stop the studio", the end of maintenance, or the user's call), new sales stop first. Then one final build ships that keeps Pro for any stored licence with no further online checks. G3 STOP stops development but keeps the apps on sale (BUSINESS-PLAN §12). That release still needs the user's approval (CLAUDE.md).
 - **Product rules 1–9 in `CLAUDE.md`** apply to all UI, copy and assets.
 - **Budget ceiling:** €200 cash, as itemised in §10 plus the remote-Mac line in §9 below.
 
@@ -43,7 +50,7 @@ These are the five input classes the spec implies but no feature test exercises 
 2. **Odd encodings and sizes:** UTF-16 with BOM, Windows-1252, a NUL byte, an empty file, a 50 MB file. Expected: the text decodes or a clear notice shows. Files over 5 MB render truncated with a banner. Quick Look never hangs past 2 s. *(Plan 01, Task 4.)*
 3. **Mixed bidi:** an Arabic paragraph with inline English and code; RTL lists, tables and blockquotes; a Hebrew heading followed by English text. Expected: each block takes the direction of its first strong character, and code stays LTR, both on screen and in the PDF. *(Plan 01, Task 3; Plan 02, Task on PDF.)*
 4. **Broken or huge Mermaid:** a syntax error, a 500-node graph, 30 diagrams in one file. Expected: an error box for that diagram only, while the rest of the document renders. Diagrams render lazily or after first paint. *(Plan 01, Task 5.)*
-5. **Licence edge cases:** offline at launch; Polar 404/5xx; clock moved backwards; activation limit reached; key pasted with spaces or newlines. Expected: paid features stay on within the grace window; clear messages; no crash. *(Plan 03, licensing tasks.)*
+5. **Licence edge cases:** offline at launch; Polar 404/5xx; a 200 without `status == "granted"` and the matching activation; clock moved backwards; activation limit reached; key pasted with spaces or newlines. Expected: paid features stay on within the grace window. A clock set back more than 1 day before `lastValidatedAt` gives `.lapsed` until the next successful validation (K5). Clear messages; no crash. *(Plan 03, licensing tasks.)*
 
 ---
 
@@ -65,17 +72,17 @@ These are the five input classes the spec implies but no feature test exercises 
 | D2 | **XcodeGen** `project.yml` is the source of truth; the `.xcodeproj` is gitignored | Agents edit YAML, not pbxproj; no merge conflicts |
 | D3 | The renderer is **JS in WKWebView**: markdown-it, highlight.js, DOMPurify, Mermaid (Mermaid loaded only when a ```` ```mermaid ```` block exists). bun bundles it into `Packages/TegelKit/Sources/TegelKit/Resources/Renderer/` (**committed**, so Xcode builds never need bun) | One renderer for window, Quick Look and PDF, as BUSINESS-PLAN §7.1 specifies. A Swift-side parser couldn't run Mermaid |
 | D4 | The renderer ships as a SwiftPM resource (`Bundle.module`) of `TegelKit`, linked statically into each app and its Quick Look extension | No duplicate copies to keep in sync; works inside the extension |
-| D5 | **The main app is sandboxed from day 1.** Entitlements: `app-sandbox`, `files.user-selected.read-write` (needed for the PDF save panel), `files.bookmarks.app-scope`, `network.client`, plus Sparkle's mach-lookup exception [F4]. Quick Look extension: `app-sandbox`, `network.client`, `temporary-exception.files.absolute-path.read-only = /` (Developer ID build only; shows local images) [F5]. App 2 Quick Look: `app-sandbox`, `network.client` only, with no `/` exception (plan 06 CR-4) | Same code path as the later MAS build; user trust; Sparkle supports it |
+| D5 | **The main app is sandboxed from day 1.** Entitlements: `app-sandbox`, `files.user-selected.read-write` (needed for the PDF save panel), `files.bookmarks.app-scope`, `network.client`, plus Sparkle's mach-lookup exception [F4]. Quick Look extensions of both apps: `app-sandbox` and `network.client` only, with **no** `/` read-only exception (K4; plan 06 CR-4 for App 2). Quick Look renders with `baseURL: nil` and shows no local images [F5] | Same code path as the later MAS build; user trust; Sparkle supports it |
 | D6 | Free and paid ship in **one binary**; Pro unlocks with a Polar key. UI languages aren't gated | Homebrew's "free version with optional paid features" rule [F11]; gating a language would be odd |
 | D7 | Working names: **Tegel Markdown** (`com.tegelapps.markdown`, extension `.quicklook`) and **Tegel Data** (`com.tegelapps.data`). The prefix is set once in `project.yml` (`options.bundleIdPrefix`) and is final at the first public build (W6) | Waits on the W1 trademark check (H4). A bundle id is permanent once Sparkle and licences ship |
 | D8 | Domain, DNS, Pages, R2 and support email all on **Cloudflare**. Registrar replaces Porkbun [F8] | One account and one card; email routing is free |
 | D9 | The site is a ~100-line **bun build script** that reuses markdown-it/highlight.js from `Renderer/`. No static-site-generator dependency | Ladder rung 2: the parser is already in the repo |
 | D10 | Tests run in three layers: `bun test` (pure renderer → HTML string), `swift test` (TegelKit/TegelStore, including WKWebView integration and PDF), `xcodebuild build` (apps and extensions). `make check` runs all three | Each layer runs on the build Mac with no new tools |
-| D11 | **Test machines:** macOS 15 Intel = the build Mac. macOS 15/26 arm64 = GitHub Actions `macos-15`/`macos-26`, on demand only [F7]. **macOS 27 arm64 = a Scaleway M1, 24-hour lease (€3.19 incl. VAT)** for G0 (L1) and the W5 matrix (L2) [F9]. macOS 14 = GitHub `macos-14` for automated tests plus the last slot of lease L2 if Scaleway offers it (H6) | The build Mac can't run 26/27 [F1] |
+| D11 | **Test machines:** macOS 15 Intel = the build Mac. macOS 15/26 arm64 = GitHub Actions `macos-15`/`macos-26`, on demand only [F7]. **macOS 27 arm64 = a Scaleway M1, 24-hour lease (€3.19 incl. VAT)** for G0 (L1) and the W5 matrix (L2) [F9]. macOS 14 = GitHub `macos-14` for automated tests, running a binary built on a newer runner and handed over as an artefact (K13), plus the last slot of lease L2 if Scaleway offers it (H6) | The build Mac can't run 26/27 [F1] |
 | D12 | DMG built with `hdiutil` (no create-dmg). Appcast and DMGs on R2 behind `downloads.tegelapps.com` | Ladder rung 4: native tool |
-| D13 | The **9-stage pipeline** runs at the end of each milestone plan (01–06) and before every release tag. Per-task review comes from subagent-driven-development | "Whenever you're done with a major task" = a milestone |
+| D13 | The **9-stage pipeline** (Procedure P, §11) runs at the end of each milestone plan (01–09) and before every release tag. Per-task review comes from subagent-driven-development | "Whenever you're done with a major task" = a milestone |
 | D14 | One branch per milestone (`m01-g0-renderer`, …), merged into `main` after the pipeline passes, then pushed. **Pushing to this private repo is treated as authorised** (the user set up access for it) | Keeps a base SHA for cubic; history stays reviewable |
-| D15 | Launch price set as the **actual Polar price of $14**, changed to $19 by hand on **Tue 15 Dec 00:00 CET** (calendar checkpoint), never as a discount [F3f] | Art. 5a Bpp; product rule 6 |
+| D15 | Launch price set as the **actual Polar price of $14 / €14**, changed to $19 / €19 by hand on **Tue 15 Dec 00:00 CET** (calendar checkpoint; procedure owned by plan 05 Task 12), never as a discount [F3f]. EUR points pending user confirmation (K10) | Art. 5a Bpp; product rule 6 |
 | D16 | Polar `organization_id`, checkout URL, API base, portal URL and benefit id go in xcconfig (`Debug.xcconfig` → sandbox, `Release.xcconfig` → production) as build settings `TG_POLAR_API_BASE`, `TG_POLAR_ORGANIZATION_ID`, `TG_POLAR_CHECKOUT_URL_<APP>`, `TG_POLAR_PORTAL_URL`, `TG_POLAR_BENEFIT_ID_<APP>`, and reach the app through Info.plist keys `TGPolarAPIBase`, `TGPolarOrganizationID`, `TGPolarCheckoutURL`, `TGPolarPortalURL`, `TGPolarBenefitID` | Not secret [F3]; sandbox in Debug only; the benefit id binds each key to one app |
 | D17 | **Every phase gets a full plan, down to the last detail, from W1 to the finished product (user instruction, 27 Oct).** App 2 (plan 06) and post-launch (plan 07: v1.1, MAS, bundle, Setapp, Homebrew, macOS 28, paid v2, App 3) are written in full now. Each starts with a **re-validation task** that diffs its assumed interfaces against what actually shipped, and each sits behind its gate. A gate that fails cancels the plan; it isn't rewritten | User asked for full detail. Re-validation stops stale signatures from being built blindly |
 
@@ -89,9 +96,12 @@ A plan that needs to change anything here lists it under **"Contract change requ
 
 ```
 mac-utility-studio/
-├─ Makefile                       # targets: check, renderer, test-js, test-swift, test-app, test-release, test-site, test-scripts,
-│                                 #          site, build, fixtures, clean (+ readonly-gate from W10)
+├─ Makefile                       # targets: check, generate, renderer, test-js, test-swift, test-app, test-release, test-site, test-scripts,
+│                                 #          test-smoke, site, build, fixtures, clean (+ readonly-gate from W10)
 │                                 # check: test-js test-swift test-app test-release test-site test-scripts build (+ readonly-gate)
+│                                 #        plus the K1 guard (no `set -a`, no unpinned `bunx <pkg>`) and `bun audit` (plan 01)
+│                                 # generate = xcodegen generate; test-app and build depend on it
+│                                 # test-smoke (GUI: test-smoke-dmg.sh) stays OUT of check (K13)
 │                                 # derived data: build/
 ├─ project.yml                    # XcodeGen; options.bundleIdPrefix: com.tegelapps; bundle id = prefix + "." + target name
 │                                 # targets/schemes: markdown, markdown.quicklook, MarkdownAppTests; data, data.quicklook (W10)
@@ -103,6 +113,7 @@ mac-utility-studio/
 │  ├─ src/markdown.js             # PURE: renderToHTML(markdown, opts) -> string
 │  ├─ src/page.js                 # DOM: window.tegel.render(...), sanitise, mermaid lazy-load, posts 'rendered'
 │  ├─ src/sanitize.js             # SANITIZE_CONFIG + addHooks(purify, {fileImages}); used by page.js and site/tools
+│  │                              # fileImages keeps `tegel-doc:` on img[src] only; `file:` is never kept (K4)
 │  ├─ src/index.html              # page template with CSP meta
 │  ├─ src/css/{base,print,paper,ink,studio}.css
 │  ├─ build.js                    # bun build → Packages/TegelKit/Sources/TegelKit/Resources/Renderer/
@@ -117,17 +128,31 @@ mac-utility-studio/
 ├─ Apps/Data/{App,QuickLook,Shared}/        # App 2 (W10+)
 ├─ Fixtures/markdown/ , Fixtures/data/   # test inputs (large ones generated, not committed)
 ├─ site/{build.js,config.json,content/<lang>/,templates/,static/,functions/api/,tools/,test/,lighthouse.sh}  # → site/public (gitignored)
+│  ├─ functions/                  # route modules ONLY: every file here is deployed as a route
+│  ├─ test/functions/             # Function tests (K8), importing ../../functions/api/*.js
 │  └─ static/{_headers,_redirects,site.css,css/tokens.css,img/,media/,llms.txt}   # deploy runs from site/
-├─ scripts/release.sh             # <app> <version> [--sandbox] [--yes] [--no-upload]; version X.Y.Z[-bN|-rcN]
+├─ scripts/lib/env.sh             # K1: envget KEY (literal parse, never `source`), envset KEY VALUE (umask 077, mktemp + atomic mv,
+│                                 #     writes KEY='…' with ' escaped, rejects newlines), need. Callers: `. scripts/lib/env.sh`,
+│                                 #     then KEY="$(envget KEY)" cmd. No `set -a; . ./.env` anywhere
+├─ scripts/release.sh             # <app> <version> [--sandbox] [--yes] [--no-upload] [--print-config] [--from-dmg <path>]; version X.Y.Z[-bN|-rcN]
+│                                 # the app `case` sets SLUG (markdown|data); every path uses it: dist-release/$SLUG/,
+│                                 #   $SLUG/appcast.xml, --download-url-prefix …/$SLUG/, $R2_BUCKET/$SLUG/ (K7)
+│                                 # --print-config prints the resolved paths and exits; --from-dmg publishes an already
+│                                 #   smoke-tested DMG with no rebuild; the previous appcast comes from dist-release/, never curl
+│                                 # entitlements of each bundle are diffed against scripts/entitlements/<target>.plist; any difference fails
 ├─ scripts/{release_test.sh,smoke-dmg.sh,test-smoke-dmg.sh,check-data-types.swift,polar_sales.py,kpi.py,sync_buyers.py,test_*.py}
+├─ scripts/entitlements/<target>.plist   # the allowed entitlements per signed bundle (K7)
 ├─ docs/{gates/,reviews/,ops/support-log.md,growth/,launch/}   # gate files end with a `Decision: …` line
 └─ .github/workflows/{ci.yml,smoke.yml}   # ci: js job on every push; macOS jobs on workflow_dispatch + tags v*
+                                          # K13: a dispatch-only workflow (smoke.yml, design-shots.yml, the UTType matrix)
+                                          #   lands on `main` first in a small reviewed commit, then `gh workflow run … --ref <branch>`;
+                                          #   actions pinned to SHAs; runners `xcode-select` the pinned Xcode 26.x
 ```
 
 ### 3.2 JS renderer API (`Renderer/src`)
 
 - `renderToHTML(markdown: string, opts: { mode: 'window'|'quicklook'|'print', baseHref?: string }) -> string`
-  - With `baseHref`, a relative `img` `src` becomes `new URL(src, baseHref).href` (plan 02). Nothing else is rewritten.
+  - With `baseHref`, a relative `img` `src` becomes `new URL(src, baseHref).href` (plan 02). Nothing else is rewritten. App windows pass the document's `tegel-doc:` URL as `baseHref` (K4).
   - Pure, with no DOM.
   - markdown-it settings: `html: true`, `linkify: true`, `typographer: false`.
   - Highlighting goes through markdown-it's `highlight` option.
@@ -139,19 +164,29 @@ mac-utility-studio/
   - DOM side.
   - Page: `<html data-theme data-mode>`, content in `<main id="doc">`.
   - Steps: `renderToHTML`, then `DOMPurify.sanitize(html, {...SANITIZE_CONFIG, RETURN_DOM_FRAGMENT: true})` from `sanitize.js`
-    (forbids `script`, `iframe`, `object`, `embed`, `form`, `base`, `meta`, every `on*` attribute, `javascript:` and `file:` URLs,
-    and `data:` URLs except `data:image/*`; `file:` is kept **only on `img[src]`**, via the `fileImages` hook installed by page.js),
-    then `#doc.replaceChildren(fragment)`. Anything else that sanitises HTML (site tool, KaTeX) imports the same module.
+    (forbids the tags `script`, `style`, `iframe`, `object`, `embed`, `form`, `base`, `meta` via `FORBID_TAGS`, every `on*` attribute,
+    `javascript:` and `file:` URLs, and `data:` URLs except `data:image/*`. `tegel-doc:` is kept **only on `img[src]`**, via the
+    `fileImages` hook installed by page.js; `file:` is never kept), then `#doc.replaceChildren(fragment)`.
+    Anything else that sanitises HTML (site tool, KaTeX) imports the same module.
   - If `[data-mermaid]` exists, inject `mermaid.min.js` and run Mermaid with `securityLevel: 'strict'`, `startOnLoad: false`,
-    `suppressErrorRendering: true`, `theme: 'base'`, `themeVariables` from the `--tg-*` tokens. Success → `div.mermaid` with the
-    source in `dataset.src` (text); failure → `div.mermaid-error` (text only). Re-render on a `prefers-color-scheme` change unless `data-mode="print"`.
+    `suppressErrorRendering: true`, `htmlLabels: false`, `theme: 'base'`, `themeVariables` from the `--tg-*` tokens.
+    Each SVG passes through `DOMPurify.sanitize(svg, {USE_PROFILES: {svg: true, svgFilters: true}, RETURN_DOM_FRAGMENT: true})` before
+    it is inserted (K6). No `html` profile, so no HTML gets back in; Mermaid's own `<style>` survives. Mermaid scopes that style under the SVG's id,
+    and the hostile fixture's `themeCSS` break-out attempt must leave `#doc` visible (plan 01). Success → `div.mermaid` with the source in `dataset.src` (text); failure → `div.mermaid-error` (text only). Re-render on a `prefers-color-scheme` change unless `data-mode="print"`.
   - Theme CSS: tokens under `:root[data-theme="<name>"]`; dark values only under
     `@media screen and (prefers-color-scheme: dark) { :root[data-theme="<name>"]:not([data-mode="print"]) }`, so PDFs stay light. Values: DESIGN.md §7.
   - When done, posts `webkit.messageHandlers.tegel.postMessage({type:'rendered', ms, headings:[{level,text,id}], mermaidCount, errors:[string]})`.
-- **CSP** (meta in `index.html`): `default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' file: data:; font-src 'self'`. No `connect-src`, so there's no network. Any change runs pipeline stage 4. (Pre-approved conditional, plan 02 CR-1: `img-src … tegel-doc:`.)
+- **CSP** (meta in `index.html`): `default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: tegel-doc:; font-src 'self'`. No `connect-src` and no `file:`, so there's no network and no direct file read. Any change runs pipeline stage 4 (`/cso`).
+  - **Second network barrier (K6):** `RendererWebView` installs a `WKContentRuleList` that blocks `^https?:`, `^wss?:` and `^ftp:` (three rules; WebKit's `url-filter` has no `|`) before the first load, so a CSP gap still can't reach the network.
+  - **Conditional (K6):** a WebKit test injects a document-folder `.js` as `<script src>`. If it runs under `script-src 'self'` on the `file:` origin, the renderer moves to a `tegel-renderer://` scheme handler (plan 01's fallback).
+- **Local images (K4; plan 02 CR-1, now unconditional):**
+  - A `WKURLSchemeHandler` for `tegel-doc:` serves only `UTType.image` files.
+  - The file's `standardizedFileURL.resolvingSymlinksInPath()` must lie under the security-scoped grant root that contains the document, compared by `pathComponents` (never by string prefix). Anything else returns 404.
+  - Quick Look passes `baseURL: nil` and shows no local images.
+  - Before writing a PDF, the export lists every loaded local image outside the document's own folder and asks for confirmation.
 - **Site CSP** (`site/static/_headers`):
   - `/*`: `default-src 'none'; img-src 'self'; media-src 'self'; style-src 'self'; script-src https://static.cloudflareinsights.com; connect-src 'self' https://cloudflareinsights.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`
-  - `/tools/*`: detach the above (`! Content-Security-Policy`), then `default-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`
+  - `/tools/*`: detach the above (`! Content-Security-Policy`), then `default-src 'none'; img-src data:; style-src 'self'; script-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`. With no `'self'` in `img-src`, a pasted same-origin path sends nothing. The tool's sanitiser also drops every non-`data:` `src` (K15).
 - App 2 additions (`window.tegel.renderData`, `openPaged`, `transcriptMarkdown`, handler `tegelData`): plan 06 Task 0/CR-3.
 
 ### 3.3 Swift API (`Packages/TegelKit`)
@@ -160,26 +195,34 @@ mac-utility-studio/
 // TegelKit
 public enum RendererTheme: String, CaseIterable, Sendable { case paper, ink, studio }   // paper = free
 public enum RenderMode: String, Sendable { case window, quicklook, print }
-public struct RenderOptions: Sendable { public var mode: RenderMode; public var theme: RendererTheme; public var baseURL: URL?   // baseURL = the document; passed to JS as baseHref
+public struct RenderOptions: Sendable { public var mode: RenderMode; public var theme: RendererTheme; public var baseURL: URL?   // baseURL = the document; passed to JS as its tegel-doc: URL (baseHref); Quick Look: nil (K4)
                                         public init(mode: RenderMode, theme: RendererTheme, baseURL: URL?) }
 public enum RendererError: Error { case timeout /* … */ }
 public struct Heading: Sendable, Hashable, Decodable { public let level: Int; public let text: String; public let id: String }
 public struct RenderResult: Sendable, Decodable { public let ms: Double; public let headings: [Heading]; public let mermaidCount: Int; public let errors: [String] }
 @MainActor public final class RendererWebView {          // owns one WKWebView loaded with Resources/Renderer/index.html
+                                                          // installs the network-blocking WKContentRuleList before the first load (K6)
+                                                          // registers the tegel-doc: image handler (K4, §3.2)
     public let webView: WKWebView
     public var timeout: Duration                          // default 10 s (plan 01)
-    public var readAccessURL: URL?                        // plan 02; default baseURL's folder
+    public var readAccessURL: URL?                        // plan 02; the grant root that contains the document; tegel-doc: serves images only under it
+                                                          // (nil → the document's folder; no baseURL → nothing)
+    public func loadedImages(outside folder: URL) -> [URL]  // plan 02; the export's confirmation list (K4)
     public init()
     public func render(_ markdown: String, options: RenderOptions) async throws -> RenderResult
     public func scroll(toHeading id: String) async
     public func scroll(toLine line: Int) async -> Bool    // plan 02
     public func find(_ text: String, backwards: Bool) async -> Bool   // plan 02
 }
+extension URL { public func isInside(_ root: URL) -> Bool }   // plan 02; resolved pathComponents, never a string prefix (K4)
 public struct LoadedText: Sendable { public let text: String; public let encoding: String.Encoding; public let truncated: Bool; public let byteCount: Int }
 public enum TextFileLoader { public static func load(_ url: URL, maxBytes: Int = 5_000_000) throws -> LoadedText   // UTF-8 → BOM UTF-16 → Windows-1252
                              public static func decode(_ data: Data, maxBytes: Int) -> LoadedText }               // plan 01; LoadedText.displayMarkdown
 public enum PaperSize: String, CaseIterable, Sendable { case a4, letter }
-@MainActor public enum PDFExporter { public static func export(_ renderer: RendererWebView, to url: URL, paper: PaperSize) async throws }  // printOperation [F6]
+@MainActor public enum PDFExporter { public static func makePDFData(_ renderer: RendererWebView, paper: PaperSize) async throws -> Data  // plan 02; paginated
+                                     public static func export(_ renderer: RendererWebView, to url: URL, paper: PaperSize) async throws }  // writes makePDFData's result; printOperation [F6]
+// makePDFData paginates through WebKit's print operation, which only saves to a file: it uses a private 0700 folder in the
+// app's container and deletes it before returning. No file is left after the call (plan 02 Task 11).
 public struct FolderItem: Sendable, Hashable, Identifiable { public let url: URL; public let relativePath: String; public var id: URL { url } }
 public enum FolderIndex { public static func markdownFiles(in root: URL, limit: Int = maxFiles) throws -> [FolderItem]   // skips .git, node_modules, .build, DerivedData, Pods, dist
                           public static func files(in root: URL, extensions: Set<String>, limit: Int = maxFiles) throws -> [FolderItem]  // plan 06 CR-2
@@ -196,25 +239,31 @@ public struct PolarConfig: Sendable { public let apiBase: URL; public let organi
                                       public static func fromInfoPlist(_ bundle: Bundle = .main) -> PolarConfig }
 extension PolarConfig { public func checkoutURL(ref: String) -> URL }                  // adds reference_id=<ref> (plan 08)
 public struct StoredLicense: Codable, Sendable, Equatable { public let key: String; public let activationID: String; public var lastValidatedAt: Date }
-public enum LicenseState: Sendable, Equatable { case free; case pro(StoredLicense); case lapsed(StoredLicense) }  // lapsed = >30 d without a 200
+public enum LicenseState: Sendable, Equatable { case free; case pro(StoredLicense); case lapsed(StoredLicense) }
 public enum LicensePolicy { public static let grace: TimeInterval = 30 * 86_400
                             public static func state(stored: StoredLicense?, now: Date) -> LicenseState }
+                            // .pro iff -1 day ≤ now − lastValidatedAt ≤ grace; otherwise .lapsed (K5). The next successful validate restores .pro
 public struct PolarClient: Sendable { public init(config: PolarConfig, session: URLSession = .shared)
     public func activate(key: String, label: String) async throws -> String          // returns activation id; license_key.benefit_id ≠ config.benefitID
                                                                                      //   → deactivates that activation, throws .wrongProduct
     public func validate(key: String, activationID: String) async throws -> Date?     // body adds benefit_id; returns expires_at; throws PolarError
+                                                                                     //   a 200 counts only if it decodes to status == "granted" with this
+                                                                                     //   activationID; otherwise it throws (grace, never a lock; K5)
     public func deactivate(key: String, activationID: String) async throws }
 public enum PolarError: Error, Equatable { case limitReached, notFound, http(Int), network, wrongProduct }
 @MainActor @Observable public final class LicenseManager { public private(set) var state: LicenseState; public var isPro: Bool { get }   // computed: state is .pro
     public init(client: PolarClient, keychain: KeychainStore = .init(service: Bundle.main.bundleIdentifier ?? "tegel"))
     public func activate(key: String) async throws; public func deactivate() async throws /* 404 = success */; public func refresh(now: Date = .now) async }
-public enum UpsellFeature: String, Sendable, Hashable, Codable { case folder, pdf, theme }  // plan 02 defines it app-side (the pro WindowGroup needs Codable); plan 08 moves it here
-@MainActor public final class UpsellPolicy { public init(); public func shouldShowPreview(_ feature: UpsellFeature) -> Bool }
+    // K5: one activate/deactivate in flight at a time. A Keychain save failure after activate triggers a best-effort deactivate (no retry queue)
 public struct KeychainStore: Sendable { public init(service: String); public func load() -> StoredLicense?; public func save(_ l: StoredLicense) throws; public func delete() throws }
 ```
 
 App-side seam: an `EnvironmentValues.isPro: Bool` (`Apps/Markdown/App/ProGate.swift`) that views read. Plan 02 builds it with a Debug override; plan 03 feeds it from `LicenseManager`.
 `ProUpsellView` lives in its own file and is shown in the `pro` window (never a sheet); the triggering `UpsellFeature` is passed to it.
+
+- **`UpsellFeature` stays app-side** (K18): `enum UpsellFeature: String, Codable, Hashable, CaseIterable, Sendable { case folder, pdf, theme }`, declared by plan 02. It is the `pro` window's value, so it's `Codable`. It never moves into TegelStore, which the MAS build drops. There is no `UpsellPolicy` type.
+- **`UpsellContext`** (app-side, plan 08) is one instance per launch. It gains `var previewShown: Set<UpsellFeature>`, so a preview shows once per feature per launch (`previewShown.insert(f).inserted`). Its preview is at most two page images (`PDFPage.thumbnail`) from `PDFExporter.makePDFData` → `PDFDocument(data:)`; no file is left after the call.
+
 Settings is a `TabView`: General | Appearance | Licence (plan 03) | Updates (plan 03). First run: `Window("Welcome to Tegel Markdown", id: "welcome")`, `TGWelcomeShown`.
 
 ### 3.4 Fixtures (shared by tests, G0 and screenshots)
@@ -231,12 +280,12 @@ Location: `Fixtures/markdown/`.
 | # | Plan file | Weeks | Exit criterion |
 |---|---|---|---|
 | 01 | `2026-10-27-01-g0-renderer-quicklook.md` | **W1** 27 Oct – 2 Nov | **G0**: `g0-1mb.md` renders in < 1 s in the app window **and** Quick Look on macOS 15 (Intel, local) and macOS 27 (arm64, Scaleway). Measured, recorded in `docs/gates/G0.md`, pipeline passed |
-| 09 | `2026-10-27-09-design-system-brand.md` | **W1 – W2**: Drop A merged **Mon 2 Nov**, Drop B merged **Mon 9 Nov** | Drop A (after plan 01 merges; stages 2, 3, 4 and 9 before the merge): `DESIGN.md`, app UI and site specs, `site/static/css/tokens.css`, OG template, first design guards. Drop B: renderer themes, Mermaid theming, icon, screenshot/caption/gallery system, design-review runbook. Full pipeline passed by Mon 9 Nov |
+| 09 | `2026-10-27-09-design-system-brand.md` | **W1 – W2**: Drop A merged **Mon 2 Nov**, Drop B merged **Mon 9 Nov** | Drop A (after plan 01 merges; the pre-merge review subset of plan 09 Task 5 before the merge): `DESIGN.md`, app UI and site specs, `site/static/css/tokens.css`, OG template, first design guards. Drop B: renderer themes, Mermaid theming, icon, screenshot/caption/gallery system, design-review runbook. Full pipeline passed by Mon 9 Nov |
 | 02 | `2026-10-27-02-app1-reader-features.md` | W2 – W3 (3 – 16 Nov) | Folder mode, live reload, search, outline, find, paginated RTL-correct PDF, 3 themes, light/dark, EN/NL/FR/AR, local images, Copy Diagnostics. All behind the `isPro` seam. Pipeline passed |
-| 03 | `2026-10-27-03-licensing-updates-release.md` | W4 (17 – 23 Nov) | Polar sandbox purchase → activate → validate → deactivate works end to end. Sparkle updates 1.0.0-b1 → b2 from R2. `scripts/release.sh` gives a notarised, stapled DMG that passes `spctl` on a clean Mac. Pipeline passed |
-| 04 | `2026-10-27-04-site-seo.md` | W2 (skeleton + 2 pages, imprint with the KvK no.), W5 (+2 pages, legal), W6 (download), W8+ (2 articles/week) | Site live on tegelapps.com, GSC verified, sitemap submitted, Lighthouse SEO ≥ 95 |
-| 05 | `2026-10-27-05-release-readiness-launch.md` | W5 – W9 (24 Nov – 28 Dec) | Test matrix green; docs/FAQ; silent demo; Polar live at $14; launch 8 Dec; price → $19 on 15 Dec; v1.0.1; support log; **G1 on Thu 7 Jan 2027** |
-| 06 | `2026-10-27-06-app2-data-reader.md` | W10 – W14 (29 Dec – 1 Feb), re-validated at W9 | App 2 notarised; $29 bundle on sale; launch **Tue 2 Feb 2027**; cross-sell copy for the email to App 1 buyers (plan 08 sends it) |
+| 03 | `2026-10-27-03-licensing-updates-release.md` | W4 (17 – 23 Nov) | Polar sandbox purchase → activate → validate → deactivate works end to end. Sparkle updates 1.0.0-b1 → b2 through a private feed (betas never go on the public R2 feed, K7). `scripts/release.sh` gives a notarised, stapled DMG that passes `spctl` on a clean Mac. Pipeline passed |
+| 04 | `2026-10-27-04-site-seo.md` | W2 (skeleton + 2 pages, imprint with the KvK no. and btw-id, K17), W5 (+2 pages, legal), W6 (download), W8+ (2 articles/week) | Site live on tegelapps.com, GSC verified, sitemap submitted, Lighthouse SEO ≥ 95 |
+| 05 | `2026-10-27-05-release-readiness-launch.md` | W5 – W9 (24 Nov – 28 Dec) | Test matrix green; docs/FAQ; silent demo; Polar live at $14 / €14; launch 8 Dec; price → $19 / €19 on 15 Dec; v1.0.1; support log; **G1 on Thu 7 Jan 2027** |
+| 06 | `2026-10-27-06-app2-data-reader.md` | W10 – W14 (29 Dec – 1 Feb), re-validated at W9 | App 2 notarised; $29 bundle on sale (EUR price beside it, K10); launch **Tue 2 Feb 2027**; cross-sell copy for the email to App 1 buyers (plan 08 sends it) |
 | 08 | `2026-10-27-08-growth-engine.md` | **W1 → month 12**, runs alongside every other plan | Weekly KPI review running from W2. Waitlist live before launch. Stretch targets (§12) tracked. Every growth tactic passes the halal guardrails in §12 |
 | 07 | `2026-10-27-07-post-launch-scale.md` | Mar – Oct 2027 (months 5–12) | G2 (8 Mar), G3 (30 Apr), G4 (29 Oct) measured and recorded. v1.1, MAS build, bundle check (built in plan 06), Setapp application, macOS 28 re-test, and App 3 if G3 passes |
 
@@ -256,13 +305,13 @@ Location: `Fixtures/markdown/`.
 |---|---|---|---|
 | H1 | ~~Add the SSH key to GitHub~~ **done 27 Oct** | | |
 | — | **User decisions, 27 Oct:** H2 = a **new individual Apple membership in the user's name** (budget Case B; see §9). H3 = **marketing@snelverhuizen.nl** for the studio accounts (in `.env` as `STUDIO_EMAIL`). H6 = **Scaleway M1 rental** (the user adds the card; Claude asks before each lease). Studio name = **Tegel**, pending the W1 trademark check | | |
-| H2-status | **27 Oct 2026:**<br>• Apple Account `marketing@snelverhuizen.nl` created (by the user in Safari; the automated browser was blocked by Apple's fraud check).<br>• Enrolment as **Individual / Sole Proprietor, Mohammed Haroen Baksh**, done through every step up to payment: Developer Agreement and Program License Agreement accepted. Enrollment ID `7KFB34BTYH`.<br>• **€99 paid on 27 Oct** (by a colleague; invoice to invoice@bakshlogistics.com). At 08:12 the account still said "Pending, purchase may take up to 48 hours to process", and the team didn't exist yet.<br>• Ready: the Developer ID private key and CSR in `~/.tegel-signing/` (chmod 700, outside the repo).<br>• Still to do once the team is active: upload the existing CSR on developer.apple.com (not through Xcode ▸ Manage Certificates, which would orphan this key) as a **Developer ID Application (G2 Sub-CA)** certificate, import it, create the ASC API key, `notarytool store-credentials tegel-notary`, and run a test notarisation | | |
+| H2-status | **27 Oct 2026:**<br>• Apple Account `marketing@snelverhuizen.nl` created (by the user in Safari; the automated browser was blocked by Apple's fraud check).<br>• Enrolment as **Individual / Sole Proprietor, Mohammed Haroen Baksh**, done through every step up to payment: Developer Agreement and Program License Agreement accepted. Enrollment ID `7KFB34BTYH`.<br>• **€99 paid on 27 Oct** (by a colleague; invoice to invoice@bakshlogistics.com). At 08:12 the account still said "Pending, purchase may take up to 48 hours to process", and the team didn't exist yet.<br>• Ready: the Developer ID private key and CSR in `~/.tegel-signing/` (chmod 700, outside the repo).<br>• Still to do once the team is active: upload the existing CSR on developer.apple.com (not through Xcode ▸ Manage Certificates, which would orphan this key) as a **Developer ID Application (G2 Sub-CA)** certificate, import it, create the ASC API key, `notarytool store-credentials tegel-notary`, and run a test notarisation.<br>• **Keys at rest (K3):** after the one-time Keychain import, the Developer ID private key, the Sparkle EdDSA private key and the ASC `.p8` move into encrypted offline storage. Where they go is the user's choice (USER item). The plaintext files are then deleted, and `.env` carries no `SPARKLE_PRIVATE_KEY_BACKUP_PATH`. Stage-4 check: `find ~/.tegel-signing ~/.tegel-secrets -type f \( -name '*.key' -o -name '*.p8' -o -name '*.p12' \)` prints nothing (watch it list the files before the move) | | |
 | H2 | **Apple Developer membership** (BUSINESS-PLAN Q1): whose membership, is it current, may it sign commercial apps? If a new one is needed, enrol as an *individual* (sole proprietors enrol as individuals; Gatekeeper then shows the personal legal name). **27 Oct:** the seller turns out to be **Baksh Logistics B.V.** (H7), but the membership stays **individual** for launch, because an organisation enrolment needs a D-U-N-S number and Apple review, which would put the 16 Nov certificate at risk. Gatekeeper shows "Mohammed Haroen Baksh" while the imprint shows the BV. User decision before the MAS edition (plan 07 B, Apr 2027): ask Apple Developer Support to move the membership to the BV, if the MAS seller name should be the BV. Then, as Account Holder: create the **Developer ID Application** certificate and an **App Store Connect API key** (for notarytool) | Enrol by **Fri 6 Nov** (enrolment can take days); certificate and key by **Mon 16 Nov** | Plan 03, so the launch date |
 | H3 | **Studio email.** Which inbox do studio accounts use until `hello@tegelapps.com` forwards (H4)? | W1, before account creation | Every account |
 | H4 | **Cloudflare:** create the account (Claude can drive the sign-up; the user does 2FA). Add a card. **Approve buying `tegelapps.com`** (~$10.46) **after** the trademark check comes back clean | Wed 28 Oct (account), Fri 30 Oct (domain) | Site, R2, email routing |
 | H5 | **Polar:** create the sandbox org now (plan 03 Task 1). Then the **production** org, with payouts and Stripe identity verification (plan 05 Task 2 Step 0) | Sandbox: W1; production live: **Fri 20 Nov** | Plan 03 sandbox; plan 05 production products (Tue 24 Nov) |
 | H6 | **Scaleway** (or any Apple Silicon Mac): an account plus card for two 24-hour M1 leases at **€3.19 incl. VAT** each (€2.64 + 21%). Claude asks before each lease.<br>• **L1** (G0): order Fri 30 Oct evening or Sat 31 Oct.<br>• **L2: Thu 26 Nov 09:00 → Fri 27 Nov 09:00**, shared, in this order: plan 05 macOS 27 matrix → plan 03 arm64/macOS 27 acceptance with b2 → plan 02 pending arm64 checks → plan 08 deep-link check → macOS 14 last (reinstall, if offered).<br>• No other pre-launch lease; plan 09's Liquid Glass shots use GitHub `macos-26`. L3–L6 fall in 2027 and are paid from revenue | L1 yes: Fri 30 Oct; L2 yes: Tue 24 Nov | G0's macOS 27 leg; test matrix |
-| H7 | **Selling entity: Baksh Logistics B.V.** (BV, KvK `85272248`, vestiging 000051325756, Archimedesbaan 13, 3439 ME Nieuwegein). Looked up in the KvK Handelsregister on 27 Oct. `KVK_NUMBER` is in `.env`; the imprint uses `business` = "Baksh Logistics B.V." and that address.<br>Two gaps, both **free to fix in Mijn KVK** (kvk.nl/wijzigen/handelsnaam-wijzigen-of-toevoegen/, kvk.nl/wijzigen/bedrijfsactiviteiten-wijzigen-of-toevoegen/):<br>• "Tegel" is not one of its handelsnamen;<br>• the activities (removals, business advice, car trading) don't include software publishing.<br>The user adds both after the trademark check says GO (Fri 30 Oct). btw-id **NL863569353B01** (`VAT_ID` in `.env`; checked valid in EU VIES on 27 Oct: BAKSH LOGISTICS B.V., Archimedesbaan 13, Nieuwegein) goes on the imprint | Handelsnaam and activity by **Fri 6 Nov** | Imprint (BW 3:15d, Handelsregisterwet: trade names in use must be registered). The site's checkout link and imprint checks verify `KVK_NUMBER` is filled |
+| H7 | **Selling entity: Baksh Logistics B.V.** (BV, KvK `85272248`, vestiging 000051325756, Archimedesbaan 13, 3439 ME Nieuwegein). Looked up in the KvK Handelsregister on 27 Oct. `KVK_NUMBER` is in `.env`; the imprint uses `business` = "Baksh Logistics B.V." and that address.<br>Two gaps, both **free to fix in Mijn KVK** (kvk.nl/wijzigen/handelsnaam-wijzigen-of-toevoegen/, kvk.nl/wijzigen/bedrijfsactiviteiten-wijzigen-of-toevoegen/):<br>• "Tegel" is not one of its handelsnamen;<br>• the activities (removals, business advice, car trading) don't include software publishing.<br>The user adds both after the trademark check says GO (Fri 30 Oct). btw-id **NL863569353B01** (`VAT_ID` in `.env`; checked valid in EU VIES on 27 Oct: BAKSH LOGISTICS B.V., Archimedesbaan 13, Nieuwegein) goes on the imprint | Handelsnaam and activity by **Fri 6 Nov** | Imprint (BW 3:15d, Handelsregisterwet: trade names in use must be registered). The site's checkout link and imprint checks verify `KVK_NUMBER` and `VAT_ID` are filled, from the first deploy (K17) |
 | H8 | **Scholar questions** (BUSINESS-PLAN §5: 3 questions; text ready in plan 05) | Send in **W1** (this week), so an answer that needs a change lands before the Tue 24 Nov products | Launch |
 | H9 | **Launch identity:** r/macapps transparency path vs megathread; the PH/HN/IH accounts to post from (no face photo, product rule 3) | Tue 1 Dec | Launch posts |
 | H10 | **Tax adviser** questions (§15, now for a **BV**: VAT treatment of Polar MoR payouts to the BV, booking app revenue next to the existing activities, MAS/Setapp VAT). KOR is likely moot given the BV's existing turnover. Ask the fee up front | Send by **Fri 13 Nov** | Bookkeeping; the btw-id on the imprint |
@@ -271,6 +320,11 @@ Location: `Fixtures/markdown/`.
 ## 6. Accounts register
 
 Credentials go to `.env` the moment an account exists; `.env.example` names every key.
+
+**Secrets notes:**
+- `.env` is read only through `scripts/lib/env.sh` (`envget`/`envset`, K1). It is never `source`d.
+- Signing keys never stay on disk in plaintext. After the Keychain import, the Developer ID key, the Sparkle private key and the `.p8` live only in the Keychain and in encrypted offline storage (K3, H2-status).
+- Account passwords stay in `.env` (chmod 600) by default. Moving them to the Keychain is a USER question (S28).
 
 | Service | Purpose | Created by | When |
 |---|---|---|---|
@@ -292,13 +346,13 @@ Credentials go to `.env` the moment an account exists; `.env.example` names ever
 | W3 | 10 – 16 Nov | 02 (PDF, themes, i18n, local images, diagnostics) | H10 sent by Fri 13 Nov · H2 certificate due Mon 16 Nov |
 | W4 | 17 – 23 Nov | 03 entire. BNPL check on a real checkout [F3g] | H5 production live by Fri 20 Nov |
 | W5 | 24 – 30 Nov | 05 (test matrix on lease L2 + CI; FAQ known-issues section, docs; silent demo). 04 (+2 SEO pages; refund, terms and FAQ pages) | H6 lease L2 Thu 26 Nov |
-| W6 | 1 – 7 Dec | 05 (Polar live at $14; final notarised 1.0.0; launch post drafts). 04 (download page) | H9 |
+| W6 | 1 – 7 Dec | 05 (Polar live at $14 / €14; final notarised 1.0.0; launch post drafts). 04 (download page) | H9 |
 | **W7** | **Tue 8 Dec** | **Launch App 1:** PH, r/macapps, Show HN, IH. All posts approved by the user first | H11 |
-| W8 | 15 – 21 Dec | **Tue 15 Dec 00:00 CET: price → $19** (D15). Fixes → v1.0.1. SEO 2/week. Support log | |
+| W8 | 15 – 21 Dec | **Tue 15 Dec 00:00 CET: price → $19 / €19** (D15). Fixes → v1.0.1. SEO 2/week. Support log | |
 | W9 | 22 – 28 Dec | v1.0.x. **Re-validate plan 06** against the shipped TegelKit | |
 | W10–W13 | 29 Dec – 25 Jan | 06 build. **G1 Thu 7 Jan** | G1 |
 | W14 | 26 Jan – 1 Feb | 06 notarise, docs, demo, cross-sell email draft | |
-| **W15** | **Tue 2 Feb 2027** | **Launch App 2** + email to App 1 buyers (soft opt-in; plan 08 sends) | **Thu 4 Mar:** App 2 < 10 sales and App 1 < 10 at G1 → stop the studio |
+| **W15** | **Tue 2 Feb 2027** | **Launch App 2** + email to App 1 buyers who ticked the checkout opt-in (K9; plan 08 sends) | **Thu 4 Mar:** App 2 < 10 sales and App 1 < 10 at G1 → stop the studio (kill path, Global constraints) |
 | Month 5 | Mar 2027 | **G2 Mon 8 Mar.** §8 post-launch items, if G2 passes | G2 |
 | Month 6 | Apr 2027 | MAS submission (plan 07 B6, Fri 23 Apr). **G3 Fri 30 Apr** | G3 |
 | Months 7–12 | May – Oct 2027 | §8 items, gated. **About Wed 20 Oct 2027:** decide on the Apple membership and domain renewals, or turn auto-renew off. **G4 Fri 29 Oct 2027** | G4 |
@@ -311,13 +365,13 @@ Credentials go to `.env` the moment an account exists; `.env.example` names ever
    - custom CSS (a user-picked file, read-only bookmark);
    - print headers and footers (page numbers via CSS `@page` margin boxes, if WebKit supports them, else omitted).
 2. **Mac App Store build of App 1:**
-   - a separate target `MarkdownMAS` with no Sparkle and no TegelStore (paid features unlocked, priced upfront) and no `temporary-exception` entitlements, so Quick Look shows image placeholders [F5];
+   - a separate target `MarkdownMAS` with no Sparkle and no TegelStore (paid features unlocked, priced upfront) and no `temporary-exception` entitlements; Quick Look shows no local images, as in the Developer ID build since K4 [F5];
    - built on a GitHub `macos-26` runner or the remote Mac if the SDK requirement passes Xcode 26.3 [F2];
    - guidelines 2.4.5 and 2.5.1;
    - submitted in **April 2027** (plan 07 B6, Fri 23 Apr), not month 5 as in BUSINESS-PLAN §11. The plan date governs; BUSINESS-PLAN.md isn't edited.
 3. **Setapp application:** once 3+ months of releases and public reviews exist (§8 of the business plan).
 4. **Homebrew Cask:** only if the notability rules can be met [F11]. Expect "no" for a closed-source self-submission.
-5. **Bundle at $29** (Polar product with both licence benefits): built and put on sale by **plan 06** (W14); plan 07 C1 only verifies it. Paid v2 upgrade path.
+5. **Bundle at $29**, with a EUR price beside it (K10). It's a Polar product with both licence benefits, built and put on sale by **plan 06** (W14); plan 07 C1 only verifies it. Paid v2 upgrade path.
 6. **App 3 from the backlog** (selection-action bar, needs Accessibility, Developer ID only), only if G3 ≥ €300/month.
 7. **June 2027:** re-test both apps on the macOS 28 betas (Scaleway).
 
@@ -341,19 +395,59 @@ Case B leaves about €83 of buffer under €200; the dispute reserve still come
 | P1 | The build Mac is capped at Xcode 26.3 and can't test 26/27 or arm64 [F1, F2] | CI + Scaleway (D11). MAS builds after an SDK bump move to CI |
 | P2 | WKWebView inside a Quick Look extension is blank or slow [F5] | G0 compares view-based against data-based. Fallback per BUSINESS-PLAN §12 G0 |
 | P3 | Polar changes its licence API and validate returns 404 [F3d] | Grace logic treats 404 like offline (D16). Omit the `Polar-Version` header; run the sandbox activate/validate/deactivate check quarterly |
-| P4 | Sandboxed single-file window can't read images next to the file | "Show images" button grants folder access through the open panel + bookmark (plan 02) |
+| P4 | Sandboxed single-file window can't read images next to the file | "Show images" button grants folder access through the open panel + bookmark; images load through the `tegel-doc:` handler (plan 02, K4) |
 | P5 | Signing identity blocked (H2 late) | Plans 01, 02 and 04 don't need it. If H2 isn't done by 16 Nov, launch slips week for week (BUSINESS-PLAN risk 11: slip dates, not quality) |
 | P6 | Trademark conflict on "Tegel" | Choose Kadeworks or Netjes (§15) before W2; only `bundleIdPrefix`, site copy and the domain change |
 
-## 11. Review pipeline cadence
+## 11. Review pipeline: cadence and Procedure P
 
 - **Per task:** subagent-driven-development (implementer, then reviewer).
-- **Per milestone:** the full 9 stages in CLAUDE.md, base = `git merge-base HEAD main`, plus a `design-review` pass with light, dark and Arabic screenshots in the pipeline task of plans 01–06 (plans 07–09 already have it).
-- **Before each release tag:** stages 2, 3, 4, 9 at minimum, and the full pipeline if code changed since the last milestone run. Applied:
-  - plan 03 runs stages 2, 3, 4 and 9 before publishing b1 (b1 and b2 carry the new `release.sh` and appcast);
-  - plan 05's 1.0.1 runs the full pipeline;
-  - plan 09 Drop A runs stages 2, 3, 4 and 9 before it merges on Mon 2 Nov; its full pipeline runs in Task 14 (Mon 9 Nov).
-- The pipeline results for each milestone go in `docs/reviews/<milestone>.md` (findings, fixes, cubic rounds).
+- **Per milestone:** Procedure P (below) at the end of every plan 01–09: per section in plan 07, per drop in plan 09.
+- **Before each release tag:** stages 2, 3, 4 and 9 of P at minimum, and the full P if code changed since the last milestone run. If the tag goes on the exact HEAD that a full P run just passed, that run counts; nothing is repeated. Applied:
+  - plan 03 runs stages 2, 3, 4 and 9 before cutting b1 (b1 and b2 carry the new `release.sh` and appcast);
+  - plan 05's 1.0.1 runs the full P;
+  - plan 09 Drop A runs the pre-merge subset that plan 09 Task 5 names before it merges on Mon 2 Nov; its full P runs in Task 14 (Mon 9 Nov).
+- **Out of cadence:** any change to the renderer's sanitisation/CSP, the entitlements, licensing, the release scripts or the appcast runs the full P (CLAUDE.md).
+- Each run's results go in `docs/reviews/<id>.md`: findings, fixes, cubic rounds and every stage that couldn't run.
+
+### Procedure P: 9-stage pipeline, merge, push
+
+The source is CLAUDE.md's "Mandatory 9-stage review pipeline", and CLAUDE.md wins on any difference. A plan's pipeline task says "Run Procedure P (master §11)" and lists only its deltas:
+- its id and branch;
+- its `/cso` scope;
+- its design-review screenshot list;
+- its release steps;
+- any stage known in advance not to run.
+
+`BASE=$(git merge-base HEAD main)`.
+
+1. **Bloat audit (pre):** run `~/.claude/skills/code-upgrade/bloat-audit.md` over `git diff $BASE...HEAD` and the touched files. Strip self-introduced bloat. Pre-existing findings go under "Questions for the user".
+2. **Baseline:** `git status --short` is empty, then `make check`. Record the pass/fail counts; later stages must not regress them.
+3. **Code review:** a cold review of `git diff $BASE...HEAD`, bugs, security and correctness first (gstack `/review`, or a code-review subagent).
+4. **Security:** `/cso` with the plan's scope, whenever the diff touches a CLAUDE.md stage-4 trigger:
+   - renderer HTML/JS, CSP or DOMPurify config;
+   - file parsing;
+   - entitlements or sandbox exceptions;
+   - security-scoped bookmarks;
+   - licensing, Polar calls or the Keychain;
+   - Sparkle, appcast or EdDSA;
+   - `scripts/release.sh`, `.env` handling;
+   - site forms or external URLs.
+5. **Adversarial:** `/codex` challenge mode on the same diff (fallback: the closest agent).
+6. **Consolidate:** merge and dedupe the findings. Write a P0/P1/P2 table in the review file and decide what gets fixed.
+7. **Patch + re-review:** fix every P0/P1 and the actionable P2s. Re-run `make check`, the targeted tests and the reviews until they close. Every new guard is watched failing first.
+8. **Bloat audit (post):** stage 1 again, over the final cumulative diff.
+9. **Final loop:**
+   - Run gstack `/review`, then `cubic review -b $BASE -j` from the repo root; the JSON key is `issues`.
+   - Repeat after each fix batch until two consecutive rounds show no new P0/P1.
+   - Stabilise the tree first: no agent may still be writing to it.
+10. **Design review** (any milestone that touched UI, icon, theme, site page or screenshots): `design-review` with light, dark and Arabic screenshots in `docs/reviews/<id>-design/` (CLAUDE.md "Verification").
+11. **Merge and push:**
+    - `git checkout main && git pull --ff-only && git merge --no-ff <branch> -m "merge: <id>"`, with the plan's commit trailer.
+    - Run `make check`, then `git push origin main` (authorised, D14).
+    - Finish with `graphify update .`.
+
+**If a stage can't run:** the review file names the stage, the reason and what ran instead. A stage is never skipped silently.
 
 ## 12. Growth stance (user instruction, 27 Oct: "best efforts to make this sellable, achieving great numbers, without compromising the halal constraints")
 
@@ -363,7 +457,7 @@ Distribution gets the same rigour as the product. Plan 08 owns it end to end; pl
 
 | When | Metric | Stretch target | Source of the number |
 |---|---|---|---|
-| Launch → day 30 (G1, 7 Jan) | App 1 paid sales | **≥ 47** (G1 passes at ≥ 30) | p75 2nd-month revenue $661 ÷ $14 [BUSINESS-PLAN §12] |
+| Launch → day 30 (G1, 7 Jan) | App 1 paid sales | **≥ 47** (G1 passes at ≥ 30) | p75 2nd-month revenue $661 ÷ $14 (USD intro price; the EUR intro is €14) [BUSINESS-PLAN §12] |
 | Day 90 (G2, 8 Mar) | GSC impressions / 30 d | **≥ 10,000** | G2 threshold |
 | Day 90 | App 1 sales, last 30 d | **≥ 47** | p75 |
 | Month 6 (G3, 30 Apr) | Net / month, both apps | **≥ €760** (p75) | BUSINESS-PLAN §1 |
@@ -381,6 +475,6 @@ Distribution gets the same rigour as the product. Plan 08 owns it end to end; pl
 | Asking buyers for reviews or testimonials, with no reward attached | Incentivised or fabricated reviews (Deception rule) |
 | Disclosed affiliate or referral commission, if added later | Giveaways by draw, "spin to win", raffles (Chance rule) |
 | Silent screen-recorded demos with captions and no voice-over (CLAUDE.md's no-music-or-audio rule governs BUSINESS-PLAN §5's "optional voice-over"); text and diagram visuals | Music or jingles, faces, figures, animals, mascots (Imagery and Music rules) |
-| An email waitlist with consent; cross-sell to buyers under soft opt-in with opt-out | Buying lists, emailing without consent; marketing to inburgering or immigration use cases (Migration rule) |
+| An email waitlist with consent; cross-sell only to buyers who ticked the unticked checkout opt-in ("Email me set-up tips and news about Tegel apps"), with opt-out on every email (K9) | Buying lists, emailing without consent; marketing to inburgering or immigration use cases (Migration rule) |
 | Neutral seasonal timing (e.g. the date of a macOS release) | Christmas, holiday or other-religion theming (Other-religions rule) |
 | Arabic/RTL as a language feature | Islamic-themed marketing (Not-Islamic-themed rule); Qur'an or hadith as sample text (Imagery rule) |

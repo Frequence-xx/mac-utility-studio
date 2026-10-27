@@ -59,3 +59,8 @@ Inputs:
 - K10: EUR price points.
 - K3: where the encrypted key backup lives.
 - S28: move the account passwords out of `.env` into the Keychain? CLAUDE.md currently mandates `.env`. Default: keep `.env` (chmod 600) and use K1.
+
+## Amendment after stage 7 (27 Oct)
+
+- **K14 narrowed.** As first written, "every stop stops new sales first" reversed BUSINESS-PLAN §12 G3 ("< €100 → stop development; keep the apps on sale") without the user's sign-off. Now: Procedure S (stop sales, then a final build that keeps every stored licence working offline) runs whenever sales end: G1b "stop the studio", the end of maintenance, or the user's call. G3 STOP keeps the apps on sale with a "Maintenance only" note. Plan 07 open question 6 asks whether to stop sales at G3 instead.
+- **K18 "no temp file" corrected.** WebKit paginates only through its print operation, which saves to a file. `makePDFData` uses a private 0700 folder in the app container that is deleted before it returns. The tests assert that no file is left after the call.

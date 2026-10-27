@@ -5,9 +5,9 @@
 **Goal:** Turn the G0 renderer into the sellable App 1. That means folder mode with cross-document search and live reload, an outline, find in page, local images, three themes with light/dark, paginated RTL-correct PDF, four UI languages and Copy Diagnostics. Every paid feature sits behind the `isPro` seam.
 
 **Architecture:**
-- **TegelKit:** new logic goes here as small tested units: `BookmarkStore`, `FolderIndex`, `FileWatcher`, `PDFExporter`, `Diagnostics`, plus navigation methods on `RendererWebView`.
+- **TegelKit:** new logic goes here as small tested units: `BookmarkStore`, `FolderIndex`, `FileWatcher`, `DocumentImageHandler`, `PDFExporter`, `Diagnostics`, plus navigation methods on `RendererWebView`.
 - **App:** thin SwiftUI over those units: a folder `WindowGroup`, an outline inspector, a find bar, a Settings `TabView`, a Welcome window and a Pro window.
-- **Renderer:** print CSS (the theme CSS is plan 09 Task 6's), plus small JS additions: source-line anchors, image-failure reporting, and relative images resolved against `baseHref` with a `file:`-on-`img[src]` sanitiser hook.
+- **Renderer:** print CSS (the theme CSS is plan 09 Task 6's), plus small JS additions: source-line anchors, image-failure reporting, and relative images rewritten to `tegel-doc:` URLs, which a `WKURLSchemeHandler` serves from the grant root (K4).
 
 **Tech Stack:**
 - Swift 6.2.4 (Swift 6 mode), SwiftUI + AppKit, WebKit, PDFKit, CoreServices FSEvents, XCTest.
@@ -22,7 +22,11 @@
 - W2 (Tue 3 – Mon 9 Nov): Tasks 1–9. Needs plan 09 Drop A in `main` (`DESIGN.md`, `docs/design/app-ui-spec.md`; Mon 2 Nov).
 - W3 (Tue 10 – Mon 16 Nov): Tasks 10–17. Needs plan 09 Drop B in `main` (theme CSS, `docs/design/samples/`, `scripts/window-shot.sh`; Mon 9 Nov).
 
-**Shell:** `export PATH="$HOME/.local/bin:$PATH"` (bun, xcodegen). Build Mac: Intel iMac19,1, macOS 15.7, Xcode 26.3.
+**Shell:** `export PATH="$HOME/.local/bin:$PATH"` (bun, xcodegen). Build Mac: Intel iMac19,1, macOS 15.7, Xcode 26.3. This plan reads nothing from `.env`.
+
+**Commits:** every commit step means `git add <paths> && git commit -m "<message>" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`; the steps give only the paths and the message.
+
+**UI tasks:** read `DESIGN.md` and the `docs/design/app-ui-spec.md` steps each task names under "UI spec"; no UI value outside them.
 
 ## Assumed from plan 01 (checked in Task 1, Step 1)
 
@@ -33,30 +37,25 @@
 | Reader view | `Apps/Markdown/App/DocumentView.swift`, hosting `RendererWebView.webView` through `NSViewRepresentable` |
 | Swift API | `RenderOptions` has a `public init(mode: RenderMode = .window, theme: RendererTheme = .paper, baseURL: URL? = nil)`; `RendererWebView.render` resolves after the `rendered` message |
 | Makefile | targets per master §3.1; `make check` = `test-js test-swift build`; derived data in `build` (`build/Build/Products/<Config>/Tegel Markdown.app`) |
+| K4 renderer pieces | CSP `img-src 'self' data: tegel-doc:` (no `file:`); `addHooks(purify, { fileImages: true })` in `sanitize.js` keeps `src` only on `img` and only when it starts with `tegel-doc:` (plan 01 owns the hook and its tests); Quick Look renders with `baseURL: nil` |
+| Make | a `generate` target (`xcodegen generate`, CR-P2-17) |
 | Tests | `Packages/TegelKit/Tests/TegelKitTests/TestSupport.swift` holds `fixtureURL(_:) -> URL` and `@MainActor js(_:_:) async throws -> Any?`. `js` runs its body through `callAsyncJavaScript`, so every script `return`s its value. WebKit test files go under `TegelKitTests/WebView/` (plan 01 Task 5); if plan 01 took Branch B, run them with `xcodebuild test -project Tegel.xcodeproj -scheme TegelKitHostTests -derivedDataPath build -only-testing:TegelKitHostTests/<Class>` instead of `swift test --filter <Class>` |
 
 If plan 01 used other names, substitute them in every command and path below. Don't rename plan 01's files.
 
 ## Global Constraints
 
-- **Platform:** macOS deployment target **14.0**; universal binary (arm64 + x86_64); Swift 6 language mode.
-- **Read-only:** the apps never write to user files. The only write is a PDF to a save-panel URL, plus the app's own container (UserDefaults for bookmarks and settings).
-- **No network:** no telemetry, no accounts, and this milestone adds no network call of any kind.
-- **Renderer security unchanged:** the CSP is exactly master §3.2 (`img-src 'self' file: data:`). The DOMPurify config is unchanged except the `file:`-on-`img[src]` hook (Task 8); navigation stays blocked, Mermaid keeps `securityLevel: 'strict'`.
-- **Free:** Quick Look, single-file window, highlighting, Mermaid, RTL, local images, find, outline, all UI languages, the paper theme.
+Master §2/§3 and CLAUDE.md apply (platform, read-only, no network, imagery, honest pricing, contract names). Deltas for this plan:
+- **Writes:** the only file write is the PDF at the save-panel URL (Task 12), plus the app's own container (bookmarks, settings, `makePDFData`'s private folder, which is gone before the call returns).
+- **Renderer security:** this plan changes no CSP and no DOMPurify config (plan 01 owns both, K4). Document images reach the page only as `tegel-doc:` URLs that `DocumentImageHandler` serves from the grant root (Task 8). Navigation stays blocked; Mermaid keeps `securityLevel: 'strict'`.
+- **Free:** Quick Look, single-file window, highlighting, Mermaid, RTL, local images, find, outline, all four UI languages (D6), the paper theme.
 - **Pro:** folder mode (sidebar, cross-document search, live reload), PDF export, the ink and studio themes.
-- **UI languages:** **en, nl, fr, ar in every tier** (D6).
-- **Honest copy:**
-  - State the licence limits ("one-time", "2 Macs", "14-day refund").
-  - No price in the app, because the price changes by hand on 15 Dec (D15).
-  - No urgency, no counters.
-- **Imagery and sound:** text, code and diagrams only. Screenshots use `Fixtures/markdown/`. Arabic sample text is neutral technical prose, never Qur'an or hadith. No holiday theming, no audio.
-- **Contract:** names come verbatim from master §3. Additions go in each task's Interfaces block; changes only under "Contract change requests" at the end.
+- **Copy:** state the licence limits ("one-time", "2 Macs", "14-day refund"); no price in the app (it changes by hand on 15 Dec, D15); no urgency, no counters. Screenshots use `Fixtures/markdown/` and `docs/design/samples/` only.
+- **Contract:** additions go in each task's Interfaces block; changes only under "Contract change requests" at the end.
 - **Evidence:**
   - Local runs prove macOS 15.7 Intel only.
   - arm64 and macOS 15/26 → GitHub Actions `macos-15`/`macos-26` via `workflow_dispatch` [F7]; one matrix run per milestone (Task 17).
   - macOS 27 → Scaleway M1 lease L2, Thu 26 Nov 09:00 → Fri 27 Nov 09:00 (booked by plan 05) [F9]. Plan 02's pending checks run third on it, after plan 05's matrix and plan 03's acceptance.
-- **Commits** end with the line `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 
 ## Review Focus
 
@@ -75,6 +74,12 @@ If plan 01 used other names, substitute them in every command and path below. Do
 5. **PDF of awkward documents.** Examples: an empty file, 40+ pages (FB20581927 [F6]), a 600-character code line, a broken Mermaid diagram, mixed bidi.
    - Expected: an empty file gives one page; every section and the end marker are present; long lines wrap; there are no blank pages; no heading ends a page.
    - Pinned by Task 11's tests.
+6. **Hostile image references.** Examples: `../` and `%2E%2E` escapes, a symlink out of the grant root, a sibling folder whose name extends the root's (`notes-old`), a hidden 1 px image from outside the document's folder.
+   - Expected: nothing outside the grant root is served (404); a sibling prefix never counts as inside; PDF export lists outside-folder images and asks before writing.
+   - Pinned by Task 8: `testDotDotEscapeIs404`, `testEverythingElseIs404`, `testRootContainingComparesPathComponents`, `testHiddenOutsideFolderImageIsListedForExport`.
+7. **Huge files and fast typing.** Examples: a 266 MB `.md` opened from Finder; a query typed faster than the 200 ms debounce over 5,000 files.
+   - Expected: the window never reads the whole file; a superseded query never scans, and an older, slower scan never overwrites newer results.
+   - Pinned by Task 1: `testOpeningAHugeFileNeverReadsItWhole`; Task 4: `testCancelledScanStopsBeforeReading`; Task 9: `testStaleSearchIsDropped`.
 
 ---
 
@@ -86,9 +91,11 @@ If plan 01 used other names, substitute them in every command and path below. Do
 | `Apps/Markdown/App/ProUpsellView.swift` | `UpsellFeature`, `ProUpsellView` in the `pro` window | 1 |
 | `Apps/Markdown/AppTests/*` | Hosted (sandboxed) app tests | 1, 8–10, 12–14, 16 |
 | `Packages/TegelKit/Sources/TegelKit/{BookmarkStore,FolderIndex,FileWatcher,PDFExporter,Diagnostics}.swift` | Contract units plus `Diagnostics` | 2–5, 11, 13 |
+| `Packages/TegelKit/Sources/TegelKit/DocumentImageHandler.swift` | the `tegel-doc:` scheme handler and `URL.isInside(_:)` | 8 |
 | `Packages/TegelKit/Sources/TegelKit/QuickLookSetup.swift` | Quick Look settings path and deep link (plan 08's interface) | 15 |
-| `Packages/TegelKit/Sources/TegelKit/RendererWebView.swift` | + `scroll(toLine:)`, `find`, `readAccessURL` | 6, 7, 8 |
-| `Renderer/src/{markdown.js,page.js,sanitize.js,build.js}` | line anchors, scroll, relative images via `baseHref`, `file:` image hook, image errors, version file | 6, 8, 13 |
+| `Packages/TegelKit/Sources/TegelKit/RendererWebView.swift` | + `scroll(toLine:)`, `find`, `readAccessURL`, `loadedImages(outside:)` | 6, 7, 8 |
+| `Apps/Markdown/App/{MarkdownApp,DocumentView}.swift` (plan 01) | bounded document open | 1 |
+| `Renderer/src/{markdown.js,page.js,build.js}` | line anchors, scroll, relative images → `tegel-doc:` via `baseHref`, image wait and errors, version file | 6, 8, 13 |
 | `Renderer/src/css/{base,print}.css` | `.tg-hit`, print breaks (theme CSS: plan 09 Task 6) | 6, 11 |
 | `Apps/Markdown/App/{ReaderController,FindBar,OutlineView,AppCommands}.swift` | per-window model, find, outline, menus, toolbar | 7 |
 | `Apps/Markdown/App/{Grants,ImageGrantBar}.swift` | granted roots, "Show Images" bar | 8 |
@@ -97,50 +104,57 @@ If plan 01 used other names, substitute them in every command and path below. Do
 | `Apps/Markdown/App/DropRouter.swift` | window drops | 14 |
 | `Apps/Markdown/App/{WelcomeView.swift,Samples/Welcome.md,Samples/Welcome-ar.md}` | Welcome window and its bundled samples | 15 |
 | `Apps/Markdown/App/Localizable.xcstrings` | en/nl/fr/ar | 16 |
-| `docs/reviews/m02.md`, `docs/reviews/design-m02.md`, `docs/reviews/m02/*.png` | pipeline and design-review records, screenshots | 10–12, 15–17 |
+| `docs/reviews/m02.md`, `docs/reviews/design-m02.md`, `docs/reviews/m02-design/*.png` | pipeline and design-review records, screenshots | 8, 10–12, 15–17 |
 
 ---
 
-### Task 1: App test target and the Pro seam
+### Task 1: App test target, bounded document open and the Pro seam
 
-**Prerequisite:** read `DESIGN.md` and `docs/design/app-ui-spec.md` (Pro window, Step 6); no UI value outside them.
+**UI spec:** app-ui-spec Step 6 (Pro window).
 
 **Files:**
 - Modify: `project.yml`: add a `MarkdownAppTests` target (`type: bundle.unit-test`, `platform: macOS`, `sources: Apps/Markdown/AppTests`, `dependencies: [{target: markdown}]`, hosted by the app) and add it to the `markdown` scheme's test targets (`scheme: { testTargets: [MarkdownAppTests] }`).
 - Modify: `Makefile`: add `test-app` and `run-app`, and make `check` also run `test-app`.
 - Create: `Apps/Markdown/App/ProGate.swift`, `Apps/Markdown/App/ProUpsellView.swift`
 - Modify: `Apps/Markdown/App/MarkdownApp.swift`: inject `.environment(\.isPro, isPro)` into every scene, and add `WindowGroup("Tegel Markdown Pro", id: "pro", for: UpsellFeature.self) { $feature in ProUpsellView(feature: feature) }.windowResizability(.contentSize)`.
-- Test: `Apps/Markdown/AppTests/ProGateTests.swift`
+- Modify: plan 01's `MarkdownFile` (wherever Step 1's grep finds it) and `Apps/Markdown/App/DocumentView.swift`: bounded open (K11).
+- Test: `Apps/Markdown/AppTests/ProGateTests.swift`, `Apps/Markdown/AppTests/LargeFileOpenTests.swift`
 
 **Interfaces:**
-- Consumes: `RendererTheme` (contract).
+- Consumes: `RendererTheme` (contract); `TextFileLoader.load(_:maxBytes:)` (plan 01: a `FileHandle` read of at most `maxBytes`).
 - Produces:
 ```swift
 extension EnvironmentValues { @Entry var isPro: Bool = false }
 enum ProGate {
     static let forceProKey = "TGForcePro"
+    #if DEBUG
+    static let overrideLabel = "Pro (debug override)"   // ≥ 16 bytes, so it's a __cstring literal Step 6's Release check can see; Copy Diagnostics shows it (Task 13)
+    #endif
     static func isPro(licensed: Bool, defaults: UserDefaults = .standard) -> Bool
     static func effectiveTheme(_ stored: RendererTheme, isPro: Bool) -> RendererTheme
 }
 // ProUpsellView.swift
-enum UpsellFeature: String, Codable, Hashable, CaseIterable, Sendable { case folder, pdf, theme }   // plan 08 Task 12 moves it into TegelStore
+enum UpsellFeature: String, Codable, Hashable, CaseIterable, Sendable { case folder, pdf, theme }   // stays app-side (K18)
 struct ProUpsellView: View { let feature: UpsellFeature? }   // opened anywhere with openWindow(id: "pro", value: UpsellFeature.<x>)
 ```
-- The upsell is a small window rather than a sheet, so menu commands can open it when no document window is focused. Each call site passes the triggering feature: `.folder` (Open Folder…, folder drops, licence lapse), `.pdf` (Export as PDF…), `.theme` (a Pro theme). Plan 02 shows the same copy for every feature; plan 08 Task 12 adds the feature-specific title, body and PDF preview.
+- The upsell is a small window rather than a sheet, so menu commands can open it when no document window is focused. Each call site passes the triggering feature: `.folder` (Open Folder…, folder drops, licence lapse), `.pdf` (Export as PDF…), `.theme` (a Pro theme). Plan 02 shows the same copy for every feature. Plan 08 Task 12 adds the feature-specific copy and, for `.pdf`, a preview of at most two page images (`PDFExporter.makePDFData` → `PDFDocument(data:)` → `PDFPage.thumbnail`; no file left after the call), shown once per feature per launch through `UpsellContext.previewShown: Set<UpsellFeature>` (K18).
+- Bounded open (K11), on SwiftUI's document API ([`DocumentGroup(viewing:)`](https://developer.apple.com/documentation/swiftui/documentgroup) with a [`FileDocument`](https://developer.apple.com/documentation/swiftui/filedocument)):
+  - `MarkdownFile.init(configuration:)` reads nothing. It throws `CocoaError(.fileReadCorruptFile)` unless `configuration.file.isRegularFile`, keeps `openedAt`, and never touches `configuration.file.regularFileContents`.
+  - `DocumentView` reads the text from `fileURL` ([`FileDocumentConfiguration.fileURL`](https://developer.apple.com/documentation/swiftui/filedocumentconfiguration/fileurl), set for every document opened from disk) with `TextFileLoader.load`, in a detached task started from its `.task`, then renders `displayMarkdown`. The `LoadedText` moves from `MarkdownFile` into `DocumentView` state. A nil `fileURL` shows plan 01's error text.
 - Make targets:
-  - `make test-app [ONLY=Class[/testMethod]]`: `xcodebuild test -project Tegel.xcodeproj -scheme markdown -derivedDataPath build -only-testing:MarkdownAppTests[/$(ONLY)]`.
+  - `make test-app [ONLY=Class[/testMethod]]`: depends on `generate` (CR-P2-17), then `xcodebuild test -project Tegel.xcodeproj -scheme markdown -derivedDataPath build -only-testing:MarkdownAppTests[/$(ONLY)]`.
   - `make run-app [FILES="path…"] [ARGS="…"]`: Debug build into `build` (plan 01's derived-data path), then `open -n -a "build/Build/Products/Debug/Tegel Markdown.app" $(FILES) --args $(ARGS)`.
 - `MarkdownApp` computes `isPro = ProGate.isPro(licensed: false)` until plan 03 feeds it from `LicenseManager`.
 
 - [ ] **Step 1: Check plan 01's names**
 
-Run: `grep -nE '^name:|type: (application|app-extension)' project.yml; ls Apps/Markdown/App; grep -nE '^[a-z-]+:' Makefile; xcodebuild -project Tegel.xcodeproj -scheme markdown -showBuildSettings | grep ' PRODUCT_MODULE_NAME '`
-Expected: the names in "Assumed from plan 01", and `PRODUCT_MODULE_NAME = Tegel_Markdown`. Write down any differences and substitute them from here on.
+Run: `grep -nE '^name:|type: (application|app-extension)' project.yml; ls Apps/Markdown/App; grep -nE '^[a-z-]+:' Makefile; xcodebuild -project Tegel.xcodeproj -scheme markdown -showBuildSettings | grep ' PRODUCT_MODULE_NAME '; grep -rn 'struct MarkdownFile\|regularFileContents' Apps/Markdown/App; grep -n 'tegel-doc' Renderer/src/sanitize.js Renderer/src/index.html`
+Expected: the names in "Assumed from plan 01"; `PRODUCT_MODULE_NAME = Tegel_Markdown`; the file that holds `MarkdownFile` (and whether it still reads `regularFileContents`); a `tegel-doc` hit in both renderer files. Write down any differences and substitute them from here on. If `tegel-doc` is missing from either file, stop: Task 8 depends on plan 01's K4 pieces.
 
 - [ ] **Step 2: Branch and baseline**
 
 Run: `git checkout main && git pull --ff-only && git checkout -b m02-app1-features && git merge-base HEAD main && make check`
-Expected: all green. Record the SHA (the pipeline base) and the pass counts in your notes.
+Expected: all green. Create `docs/reviews/m02.md` with that SHA and the pass counts; later tasks append to it.
 
 - [ ] **Step 3: Write the failing test** (`Apps/Markdown/AppTests/ProGateTests.swift`)
 
@@ -188,20 +202,55 @@ Expected: FAIL, `cannot find 'ProGate' in scope`.
     - "Buy Pro…" and "Enter Licence Key…": both `.disabled(true)`; plan 03 wires them.
     - "Not Now": closes the window.
 
-- [ ] **Step 6: Run the tests, then prove the override is gone from Release**
+- [ ] **Step 6: Run the tests, then prove the override is gone from Release** (CR-P2-18)
 
 Run: `make test-app ONLY=ProGateTests`
 Expected: `Executed 4 tests, with 0 failures` … `** TEST SUCCEEDED **`.
 
-Run: `xcodebuild -project Tegel.xcodeproj -scheme markdown -configuration Release -derivedDataPath build CODE_SIGNING_ALLOWED=NO build >/dev/null && strings "build/Build/Products/Release/Tegel Markdown.app/Contents/MacOS/Tegel Markdown" | grep -c TGForcePro`
+`TGForcePro` is 10 bytes, a Swift small string stored as immediates, so `strings` can't see it; the check looks for the 20-byte `overrideLabel` instead. Debug builds keep app code in `Contents/MacOS/*.debug.dylib`, hence the glob.
+
+Run (positive control): `xcodebuild -project Tegel.xcodeproj -scheme markdown -configuration Debug -derivedDataPath build CODE_SIGNING_ALLOWED=NO build >/dev/null && strings "build/Build/Products/Debug/Tegel Markdown.app/Contents/MacOS/"* | grep -c 'Pro (debug override)'`
+Expected: `1` or more. This is the check failing on a build that has the override.
+
+Run: `xcodebuild -project Tegel.xcodeproj -scheme markdown -configuration Release -derivedDataPath build CODE_SIGNING_ALLOWED=NO build >/dev/null && strings "build/Build/Products/Release/Tegel Markdown.app/Contents/MacOS/"* | grep -c 'Pro (debug override)'`
 Expected: `0`.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Write the bounded-open test, and run it against plan 01's open path** (`Apps/Markdown/AppTests/LargeFileOpenTests.swift`)
 
-```bash
-git add project.yml Makefile Apps/Markdown/App/ProGate.swift Apps/Markdown/App/ProUpsellView.swift Apps/Markdown/App/MarkdownApp.swift Apps/Markdown/AppTests/ProGateTests.swift
-git commit -m "feat(app): isPro seam with Debug-only TGForcePro override and Pro window" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```swift
+import XCTest
+import AppKit
+@testable import Tegel_Markdown
+
+@MainActor final class LargeFileOpenTests: XCTestCase {
+    private func peakRSS() -> Int { var u = rusage(); getrusage(RUSAGE_SELF, &u); return u.ru_maxrss }   // bytes on macOS
+    func testOpeningAHugeFileNeverReadsItWhole() async throws {        // Review Focus 7; K11
+        let url = FileManager.default.temporaryDirectory.appending(path: "huge-\(UUID().uuidString).md")
+        FileManager.default.createFile(atPath: url.path(percentEncoded: false), contents: nil)
+        let h = try FileHandle(forWritingTo: url); let chunk = Data(String(repeating: "Line of text\n", count: 80_000).utf8)   // 1,040,000 bytes
+        for _ in 0..<256 { try h.write(contentsOf: chunk) }; try h.close()                                                    // 266 MB
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
+        let before = peakRSS()
+        let (doc, _) = try await NSDocumentController.shared.openDocument(withContentsOf: url, display: true)   // the Finder/Open… path
+        try await Task.sleep(for: .seconds(3))                                                                  // DocumentView loads its prefix and renders
+        let grown = peakRSS() - before; doc.close()
+        XCTAssertLessThan(grown, 128 << 20, "peak RSS grew \(grown >> 20) MB opening a 266 MB file")
+    }
+}
 ```
+
+Run: `make test-app ONLY=LargeFileOpenTests`
+Expected: FAIL (`peak RSS grew` ≥ 256 MB) if plan 01's `MarkdownFile` still reads `regularFileContents` into memory. If it already passes (plan 01 made the open bounded, or SwiftUI maps the file), record the measured growth in `docs/reviews/m02.md`.
+
+- [ ] **Step 8: Make the open bounded, then watch the guard fail**
+
+Change `MarkdownFile` and `DocumentView` as in Interfaces (skip the edit if Step 1 found no `regularFileContents`). Run `make test-app ONLY=LargeFileOpenTests`.
+Expected: `Executed 1 test, with 0 failures`.
+- **If it still fails** with a contents-free `init`, SwiftUI itself reads the whole file. Stop and report: the window needs an `NSDocument`-based open (a contract change), and the test isn't loosened.
+
+Then add `_ = try? String(contentsOf: fileURL!, encoding: .utf8)` (a whole-file read) as the first line of `DocumentView`'s load task, rerun, and expect FAIL (`peak RSS grew` ≥ 256 MB). Remove the line and rerun: `Executed 1 test, with 0 failures`.
+
+- [ ] **Step 9: Commit** `project.yml Makefile Apps/Markdown/App Apps/Markdown/AppTests/ProGateTests.swift Apps/Markdown/AppTests/LargeFileOpenTests.swift docs/reviews/m02.md`, "feat(app): isPro seam with Debug-only override, Pro window, bounded document open"
 
 ---
 
@@ -274,12 +323,7 @@ Expected: FAIL, `cannot find 'BookmarkStore' in scope`.
 Run: `swift test --package-path Packages/TegelKit --filter BookmarkStoreTests`
 Expected: `Executed 4 tests, with 0 failures`.
 
-- [ ] **Step 5: Commit**
-
-```bash
-git add Packages/TegelKit/Sources/TegelKit/BookmarkStore.swift Packages/TegelKit/Tests/TegelKitTests/BookmarkStoreTests.swift Packages/TegelKit/Tests/TegelKitTests/TestSupport.swift
-git commit -m "feat(tegelkit): security-scoped BookmarkStore, deduped and capped at 20" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-```
+- [ ] **Step 5: Commit** `Packages/TegelKit/Sources/TegelKit/BookmarkStore.swift Packages/TegelKit/Tests/TegelKitTests/BookmarkStoreTests.swift Packages/TegelKit/Tests/TegelKitTests/TestSupport.swift`, "feat(tegelkit): security-scoped BookmarkStore, deduped and capped at 20"
 
 ---
 
@@ -298,7 +342,7 @@ git commit -m "feat(tegelkit): security-scoped BookmarkStore, deduped and capped
 - Rules:
   - **Skip:** folders named `.git`, `node_modules`, `.build`, `DerivedData`, `Pods`, `dist` at any depth. Symlinked folders are never entered. Unreadable subfolders are skipped (the enumerator's `errorHandler` returns `true`).
   - **Keep:** other hidden folders stay in (`.github/` and `.claude/` hold agent docs).
-  - **Match:** extensions match case-insensitively. `relativePath` uses `/` separators.
+  - **Match:** extensions match case-insensitively. `relativePath` uses `/` separators. It comes from `pathComponents` after `resolvingSymlinksInPath()` on both the root and the item, never a string prefix: test roots are `/var/folders/…` while the enumerator returns `/private/var/…` (CR-P2-28).
   - **Order:**
     - rank 0: root `CLAUDE.md`;
     - rank 1: root `AGENTS.md`;
@@ -360,12 +404,7 @@ Use `FileManager.enumerator(at:includingPropertiesForKeys: [.isDirectoryKey, .is
 Run: `swift test --package-path Packages/TegelKit --filter FolderIndexFilesTests`
 Expected: `Executed 6 tests, with 0 failures`.
 
-- [ ] **Step 5: Commit**
-
-```bash
-git add Packages/TegelKit/Sources/TegelKit/FolderIndex.swift Packages/TegelKit/Tests/TegelKitTests/FolderIndexFilesTests.swift
-git commit -m "feat(tegelkit): FolderIndex.markdownFiles with skip rules and agent-first ordering" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-```
+- [ ] **Step 5: Commit** `Packages/TegelKit/Sources/TegelKit/FolderIndex.swift Packages/TegelKit/Tests/TegelKitTests/FolderIndexFilesTests.swift`, "feat(tegelkit): FolderIndex.markdownFiles with skip rules and agent-first ordering"
 
 ---
 
@@ -383,6 +422,7 @@ git commit -m "feat(tegelkit): FolderIndex.markdownFiles with skip rules and age
   - **Hits:** one hit per matching line. Lines are split with `split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)`, so CRLF counts once. `line` is 1-based.
   - **Reading:** files are read through `TextFileLoader` (encodings and the 5 MB cap come with it); unreadable files are skipped.
   - **Order:** item order, then line; stop at `limit`.
+  - **Cancellation (K11):** before each file, check `Task.isCancelled` and return the hits so far when it's set, so a superseded query stops reading files.
   - **Snippet:** the trimmed line. If it's longer than 160 Characters, take a 160-Character window starting 60 before the match, with `…` on each cut side.
 
 - [ ] **Step 1: Write the failing test**
@@ -432,6 +472,11 @@ final class FolderSearchTests: XCTestCase {
         let its = try items(["a.md": Array(repeating: "needle", count: 300).joined(separator: "\n")])
         XCTAssertEqual(FolderIndex.search("needle", in: its).count, 200)
     }
+    func testCancelledScanStopsBeforeReading() async throws {      // Review Focus 7; K11
+        let its = try items(Dictionary(uniqueKeysWithValues: (1...50).map { ("f\($0).md", "needle") }))
+        let hits = await Task { withUnsafeCurrentTask { $0?.cancel() }; return FolderIndex.search("needle", in: its) }.value
+        XCTAssertEqual(hits, [])
+    }
 }
 ```
 
@@ -445,14 +490,11 @@ Expected: FAIL, `type 'FolderIndex' has no member 'search'`.
 - [ ] **Step 4: Run**
 
 Run: `swift test --package-path Packages/TegelKit --filter FolderSearchTests`
-Expected: `Executed 9 tests, with 0 failures`.
+Expected: `Executed 10 tests, with 0 failures`.
 
-- [ ] **Step 5: Commit**
+Then comment out the `Task.isCancelled` check and rerun `--filter testCancelledScanStopsBeforeReading`. Expected: FAIL, 50 hits instead of `[]`. Restore the check and rerun: PASS.
 
-```bash
-git add Packages/TegelKit/Sources/TegelKit/FolderIndex.swift Packages/TegelKit/Tests/TegelKitTests/FolderSearchTests.swift
-git commit -m "feat(tegelkit): literal cross-file search with line numbers and windowed snippets" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-```
+- [ ] **Step 5: Commit** `Packages/TegelKit/Sources/TegelKit/FolderIndex.swift Packages/TegelKit/Tests/TegelKitTests/FolderSearchTests.swift`, "feat(tegelkit): literal cross-file search with line numbers and windowed snippets"
 
 ---
 
@@ -529,12 +571,7 @@ Expected: FAIL, `cannot find 'FileWatcher' in scope`.
 Run: `for i in 1 2 3; do swift test --package-path Packages/TegelKit --filter FileWatcherTests || break; done`
 Expected: `Executed 6 tests, with 0 failures`, three times.
 
-- [ ] **Step 5: Commit**
-
-```bash
-git add Packages/TegelKit/Sources/TegelKit/FileWatcher.swift Packages/TegelKit/Tests/TegelKitTests/FileWatcherTests.swift
-git commit -m "feat(tegelkit): FSEvents FileWatcher with latency-based debounce" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-```
+- [ ] **Step 5: Commit** `Packages/TegelKit/Sources/TegelKit/FileWatcher.swift Packages/TegelKit/Tests/TegelKitTests/FileWatcherTests.swift`, "feat(tegelkit): FSEvents FileWatcher with latency-based debounce"
 
 ---
 
@@ -632,18 +669,13 @@ Expected:
 Run: `(cd Renderer && bun test) && swift test --package-path Packages/TegelKit --filter NavigationTests`
 Expected: bun `0 fail` (plan 01's tests still pass); swift `Executed 3 tests, with 0 failures`.
 
-- [ ] **Step 5: Commit**
-
-```bash
-git add Renderer/src Renderer/test/lines.test.js Packages/TegelKit/Sources/TegelKit Packages/TegelKit/Tests/TegelKitTests/NavigationTests.swift Packages/TegelKit/Tests/TegelKitTests/TestSupport.swift
-git commit -m "feat(renderer): source-line anchors, scroll(toLine:) and heading scroll" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-```
+- [ ] **Step 5: Commit** `Renderer/src Renderer/test/lines.test.js Packages/TegelKit/Sources/TegelKit Packages/TegelKit/Tests/TegelKitTests/NavigationTests.swift Packages/TegelKit/Tests/TegelKitTests/TestSupport.swift`, "feat(renderer): source-line anchors, scroll(toLine:) and heading scroll"
 
 ---
 
 ### Task 7: Outline inspector and find in page
 
-**Prerequisite:** read `DESIGN.md` (§9 symbols) and `docs/design/app-ui-spec.md` (Steps 1, 3, 7); no UI value outside them.
+**UI spec:** DESIGN.md (§9 symbols) and app-ui-spec (Steps 1, 3, 7).
 
 **Files:**
 - Modify: `Packages/TegelKit/Sources/TegelKit/RendererWebView.swift` (add `find`)
@@ -717,40 +749,58 @@ Expected: `Executed 3 tests, with 0 failures`, then `** TEST SUCCEEDED **`. Then
 - ⌘G and ⇧⌘G move through matches; "zzzq" shows "Not found"; Esc closes the bar.
 - The inspector toggles from the View menu and the toolbar; clicking an Arabic heading scrolls to it.
 
-- [ ] **Step 5: Commit**
-
-```bash
-git add Packages/TegelKit/Sources/TegelKit/RendererWebView.swift Packages/TegelKit/Tests/TegelKitTests/FindTests.swift Apps/Markdown/App
-git commit -m "feat(app): outline inspector and find bar on the public WKWebView find API" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-```
+- [ ] **Step 5: Commit** `Packages/TegelKit/Sources/TegelKit/RendererWebView.swift Packages/TegelKit/Tests/TegelKitTests/FindTests.swift Apps/Markdown/App`, "feat(app): outline inspector and find bar on the public WKWebView find API"
 
 ---
 
-### Task 8: Local images (risk P4)
+### Task 8: Local images through `tegel-doc:` (risk P4; K4)
 
-**Prerequisite:** read `DESIGN.md` and `docs/design/app-ui-spec.md` for the "Show Images" bar; no UI value outside them.
+**UI spec:** app-ui-spec, the "Show Images" bar.
+
+Local images never load from `file:`. WebKit asks a `WKURLSchemeHandler` for `tegel-doc:` URLs, and the handler reads with the app's own security-scoped grant ([`WKURLSchemeHandler`](https://developer.apple.com/documentation/webkit/wkurlschemehandler), [`setURLSchemeHandler(_:forURLScheme:)`](https://developer.apple.com/documentation/webkit/wkwebviewconfiguration/seturlschemehandler(_:forurlscheme:))). So the sandboxed WebContent process needs no read access to user folders, and nothing outside the grant root is ever served. Plan 01 owns the CSP (`img-src 'self' data: tegel-doc:`) and the `fileImages` sanitiser branch that keeps `tegel-doc:` on `img[src]` only, with their tests.
 
 **Files:**
-- Modify: `Packages/TegelKit/Sources/TegelKit/RendererWebView.swift` (add `readAccessURL`; pass `baseHref`)
-- Modify: `Renderer/src/markdown.js` (resolve relative image `src` against `baseHref`), `Renderer/src/sanitize.js` (the `fileImages` hook), `Renderer/src/page.js` (report image failures; install the hook); regenerate the resources
-- Modify: `Renderer/package.json`, `Renderer/bun.lock` (devDependency `happy-dom`, exact pin, for the sanitiser tests)
+- Create: `Packages/TegelKit/Sources/TegelKit/DocumentImageHandler.swift` (the handler and `URL.isInside(_:)`)
+- Modify: `Packages/TegelKit/Sources/TegelKit/RendererWebView.swift` (register the handler in `init`; `readAccessURL`; `loadedImages(outside:)`; `baseHref` as a `tegel-doc:` URL)
+- Modify: `Renderer/src/markdown.js` (relative image `src` → `tegel-doc:` via `baseHref`), `Renderer/src/page.js` (image wait and `image:` errors); regenerate the resources
+- Modify: `Packages/TegelKit/Tests/TegelKitTests/TestSupport.swift` (add `squarePNG`)
 - Create: `Fixtures/markdown/local-image.md` (`# Local image` / `![Grey square](assets/square.png)`) and `Fixtures/markdown/assets/square.png`
 - Create: `Apps/Markdown/App/Grants.swift`, `Apps/Markdown/App/ImageGrantBar.swift`
 - Create: `Apps/Markdown/AppTests/AppTestSupport.swift`, holding app-target copies of `tempDir`, `write`, `hosted`, `js` (plan 01's signature and body) and `squarePNG` (test helpers can't be shared across test targets)
-- Modify: `ReaderController.swift`, `DocumentView.swift`, `MarkdownApp.swift` (`App.init` runs `Grants.roots = BookmarkStore.resolveAll()`)
-- Test: `Renderer/test/images.test.js`, `Packages/TegelKit/Tests/TegelKitTests/LocalImageTests.swift`, `Apps/Markdown/AppTests/SandboxImageTests.swift`
+- Modify: `ReaderController.swift`; `DocumentView.swift` (render with `baseURL: fileURL`, the document, per master §3.3: plan 01's `fileURL?.deletingLastPathComponent()` would resolve `assets/x.png` one folder too high and widen the default root); `MarkdownApp.swift` (`App.init` runs `Grants.roots = BookmarkStore.resolveAll()`)
+- Test: `Renderer/test/images.test.js`, `Packages/TegelKit/Tests/TegelKitTests/{DocumentImageHandlerTests,LocalImageTests}.swift`, `Apps/Markdown/AppTests/{SandboxImageTests,GrantsTests}.swift`
 
 **Interfaces:**
-- Produces (TegelKit, addition): `public var readAccessURL: URL?` on `RendererWebView`.
-  - The folder WebKit may read for document resources is `readAccessURL ?? baseURL?.deletingLastPathComponent()`.
-  - When that folder differs from the one the page was last loaded with, `render` first reloads `index.html` with `webView.loadFileURL(indexURL, allowingReadAccessTo: folder)` and waits for the load. Apple: "To read additional files related to the content file, specify a directory" ([loadFileURL](https://developer.apple.com/documentation/webkit/wkwebview/loadfileurl(_:allowingreadaccessto:))).
+- Produces (TegelKit):
+```swift
+extension URL {
+    /// True when this file URL is `root` or lies under it. Compares `pathComponents` after
+    /// `standardizedFileURL.resolvingSymlinksInPath()` on both sides, never a string prefix.
+    public func isInside(_ root: URL) -> Bool
+}
+@MainActor final class DocumentImageHandler: NSObject, WKURLSchemeHandler {   // RendererWebView.init registers it for "tegel-doc"
+    var root: URL?                                                           // set by every render
+    private(set) var served: [URL]                                           // resolved files answered 200; reset when a render starts
+    nonisolated static func response(for request: URL, root: URL?) -> (HTTPURLResponse, Data)   // 200 + bytes, or 404 + no body
+}
+// RendererWebView additions
+public var readAccessURL: URL?                           // the grant root the handler serves images from; nil → the document's folder
+public func loadedImages(outside folder: URL) -> [URL]   // served since the last render began, not inside `folder`; request order, no duplicates
+```
+- `response(for:root:)` answers 200 only when all hold, otherwise 404 with no body:
+  1. `root` is non-nil and the scheme is `tegel-doc`. The host is ignored.
+  2. `let file = URL(fileURLWithPath: request.path(percentEncoded: false))`. Decoding first turns `%2E%2E` into `..`, which `isInside` then standardises.
+  3. `file.isInside(root)`.
+  4. `resourceValues(forKeys: [.isRegularFileKey, .contentTypeKey])` gives a regular file whose content type conforms to `UTType.image`.
+  5. `Data(contentsOf: file, options: .mappedIfSafe)` succeeds.
+  The 200 carries `Content-Type: <contentType.preferredMIMEType>`. `webView(_:start:)` sends the response, the data and `didFinish()`, and appends the resolved file to `served` on 200. `webView(_:stop:)` does nothing, because the answer was already sent. `// ponytail: synchronous mapped read on the main actor; move to a detached read if large images stall the window.`
+- `render` sets `handler.root = readAccessURL ?? options.baseURL?.deletingLastPathComponent()`, clears `served`, and passes `baseHref` = `options.baseURL` with its scheme set to `tegel-doc` through `URLComponents` (`tegel-doc:///Users/u/notes/my%20doc.md`). Quick Look passes `baseURL: nil`, so its root is nil and it serves nothing.
 - Produces (JS):
-  - **Relative images:** when `opts.baseHref` is set, `renderToHTML`'s `image` render rule (reading `baseHref` from markdown-it's `env`) rewrites a relative `src` (no scheme, not starting `//` or `#`) to `new URL(src, baseHref).href`. Nothing else is rewritten. Don't use `<base>`: it would re-point the lazy `mermaid.min.js` load. `RendererWebView` passes `baseHref = options.baseURL?.absoluteString` (plan 01's `render` already sends a `baseHref` key; check its value).
-  - **Sanitiser:** `addHooks(purify, { fileImages: true })` in `sanitize.js` (plan 01 exports `SANITIZE_CONFIG` and `addHooks`) adds an `uponSanitizeAttribute` hook that sets `data.forceKeepAttr = true` only when the node is an `img`, `data.attrName === 'src'` and the value matches `/^file:\/\//i`. `<a href="file:…">` stays stripped. `page.js` calls `addHooks(DOMPurify, { fileImages: true })`; the site tool (plan 08) calls `addHooks(DOMPurify)` without it.
-  - **Image wait:** when `mode !== 'quicklook'`, `page.js` waits for every `img` whose `src` starts with `file:` (`load`/`error`, at most 1,500 ms in total) before posting `rendered`. Each failure is appended to `errors` as `"image: " + src`. This also makes print mode wait for images.
+  - **Relative images:** when `opts.baseHref` is set, `renderToHTML`'s `image` render rule (reading `baseHref` from markdown-it's `env`) rewrites a relative `src` (no scheme, not starting `//` or `#`) to `new URL(src, baseHref).href`, a `tegel-doc:` URL. Nothing else is rewritten. Don't use `<base>`: it would re-point the lazy `mermaid.min.js` load.
+  - **Image wait:** when `mode !== 'quicklook'`, `page.js` waits for every `img` whose `src` starts with `tegel-doc:` (`load`/`error`, at most 1,500 ms in total) before posting `rendered`. Each failure is appended to `errors` as `"image: " + src`. This also makes print mode wait for images.
 - Produces (app):
 ```swift
-@MainActor enum Grants { static var roots: [URL]; static func root(containing url: URL) -> URL? }   // path-prefix match on resolved paths
+@MainActor enum Grants { static var roots: [URL]; static func root(containing url: URL) -> URL? }   // the first root with url.isInside(root)
 extension ReaderController { var needsImageGrant: Bool { get } }  // any error hasPrefix("image: ") && Grants.root(containing: doc) == nil
 ```
 - Bar copy:
@@ -769,38 +819,54 @@ Expected: `pixelWidth: 1`. Add `squarePNG: Data` (the same base64) to TestSuppor
 
 - [ ] **Step 2: Write the failing tests**
 
-Run first: `cd Renderer && bun add --dev --exact happy-dom` (record the pinned version in the commit body, as plan 01 does for its pins).
-
 ```js
 // Renderer/test/images.test.js
 import { test, expect } from "bun:test";
-import { Window } from "happy-dom";
-import DOMPurify from "dompurify";
 import { renderToHTML } from "../src/markdown.js";
-import { SANITIZE_CONFIG, addHooks } from "../src/sanitize.js";
 
-const purify = (fileImages) => {
-  const p = DOMPurify(new Window());
-  expect(p.isSupported).toBe(true);
-  addHooks(p, { fileImages });
-  return p;
-};
-test("a relative image resolves against baseHref, and nothing else is rewritten", () => {
-  const md = "![sq](assets/square.png) ![w](https://example.com/w.png)";
-  const html = renderToHTML(md, { mode: "window", baseHref: "file:///Users/u/notes/doc.md" });
-  expect(html).toContain('src="file:///Users/u/notes/assets/square.png"');
+test("relative images become tegel-doc: URLs against baseHref; nothing else is rewritten", () => {
+  const md = "![sq](assets/square.png) ![up](../shared/up.png) ![w](https://example.com/w.png) ![d](data:image/png;base64,AA==)";
+  const html = renderToHTML(md, { mode: "window", baseHref: "tegel-doc:///Users/u/notes/doc.md" });
+  expect(html).toContain('src="tegel-doc:///Users/u/notes/assets/square.png"');
+  expect(html).toContain('src="tegel-doc:///Users/u/shared/up.png"');
   expect(html).toContain('src="https://example.com/w.png"');
-  expect(renderToHTML(md, { mode: "window" })).toContain('src="assets/square.png"');
+  expect(html).toContain('src="data:image/png;base64,AA=="');
 });
-test("file: links are still stripped with the image hook installed", () => {
-  expect(purify(true).sanitize('<a href="file:///x">x</a>', SANITIZE_CONFIG)).toBe("<a>x</a>");
-});
-test("file: survives on img[src] only when the hook is installed", () => {
-  expect(purify(true).sanitize('<img src="file:///x">', SANITIZE_CONFIG)).toBe('<img src="file:///x">');
-  expect(purify(false).sanitize('<img src="file:///x">', SANITIZE_CONFIG)).toBe("<img>");
+test("without baseHref an image src is left alone", () => {
+  expect(renderToHTML("![sq](assets/square.png)", { mode: "window" })).toContain('src="assets/square.png"');
 });
 ```
-If `isSupported` is `false` under happy-dom, swap in jsdom (`new JSDOM("").window`, the setup in DOMPurify's README) with the same pinning rule; the assertions stay as written.
+
+```swift
+final class DocumentImageHandlerTests: XCTestCase {
+    private var root: URL!
+    override func setUpWithError() throws {
+        let base = try tempDir(); root = base.appending(path: "notes")
+        try FileManager.default.createDirectory(at: root.appending(path: "assets"), withIntermediateDirectories: true)
+        try squarePNG.write(to: root.appending(path: "assets/in.png")); _ = try write("# x", "a.md", in: root)
+        try squarePNG.write(to: base.appending(path: "secret.png"))
+        try FileManager.default.createSymbolicLink(at: root.appending(path: "link.png"), withDestinationURL: base.appending(path: "secret.png"))
+    }
+    private func req(_ rel: String) -> URL { URL(string: "tegel-doc://" + root.path(percentEncoded: true) + "/" + rel)! }
+    private func status(_ u: URL, root: URL?) -> Int { DocumentImageHandler.response(for: u, root: root).0.statusCode }
+
+    func testServesImageInsideRoot() {
+        let (resp, data) = DocumentImageHandler.response(for: req("assets/in.png"), root: root)
+        XCTAssertEqual(resp.statusCode, 200); XCTAssertEqual(resp.value(forHTTPHeaderField: "Content-Type"), "image/png")
+        XCTAssertEqual(data, squarePNG)
+    }
+    func testDotDotEscapeIs404() {                                 // Review Focus 6; S12
+        XCTAssertEqual(status(req("../secret.png"), root: root), 404)
+        XCTAssertEqual(status(req("%2E%2E/secret.png"), root: root), 404)
+    }
+    func testEverythingElseIs404() {                               // Review Focus 6
+        XCTAssertEqual(status(req("link.png"), root: root), 404)          // symlink out of the root
+        XCTAssertEqual(status(req("a.md"), root: root), 404)              // not an image
+        XCTAssertEqual(status(req("assets/nope.png"), root: root), 404)   // missing
+        XCTAssertEqual(status(req("assets/in.png"), root: nil), 404)      // no root: Quick Look
+    }
+}
+```
 
 ```swift
 @MainActor final class LocalImageTests: XCTestCase {
@@ -809,69 +875,124 @@ If `isSupported` is `false` under happy-dom, swap in jsdom (`new JSDOM("").windo
         try FileManager.default.createDirectory(at: root.appending(path: "assets"), withIntermediateDirectories: true)
         try squarePNG.write(to: root.appending(path: "assets/square.png")); return (root, doc)
     }
+    private func width(_ r: RendererWebView) async throws -> Int? { try await js(r, "return document.images[0].naturalWidth") as? Int }
+
     func testRelativeImageLoadsNextToDocument() async throws {
         let (_, doc) = try setUpDoc("![sq](assets/square.png)", at: "doc.md"); let r = hosted()
         let res = try await r.render("![sq](assets/square.png)", options: RenderOptions(mode: .window, theme: .paper, baseURL: doc))
-        let width = try await js(r, "return document.querySelector('img').naturalWidth") as? Int
-        XCTAssertEqual(width, 1); XCTAssertFalse(res.errors.contains { $0.hasPrefix("image: ") })
+        let w = try await width(r)
+        XCTAssertEqual(w, 1); XCTAssertFalse(res.errors.contains { $0.hasPrefix("image: ") })
     }
     func testParentRelativeImageLoadsWithReadAccessRoot() async throws {
         let (root, doc) = try setUpDoc("![sq](../assets/square.png)", at: "docs/page.md"); let r = hosted(); r.readAccessURL = root
         _ = try await r.render("![sq](../assets/square.png)", options: RenderOptions(mode: .window, theme: .paper, baseURL: doc))
-        let width = try await js(r, "return document.querySelector('img').naturalWidth") as? Int
-        XCTAssertEqual(width, 1)
+        let w = try await width(r)
+        XCTAssertEqual(w, 1)
+    }
+    func testImageAboveTheRootIsNotServed() async throws {          // default root = the document's folder
+        let (_, doc) = try setUpDoc("![sq](../assets/square.png)", at: "docs/page.md"); let r = hosted()
+        let res = try await r.render("![sq](../assets/square.png)", options: RenderOptions(mode: .window, theme: .paper, baseURL: doc))
+        let w = try await width(r)
+        XCTAssertEqual(w, 0); XCTAssertTrue(res.errors.contains { $0.hasPrefix("image: ") && $0.hasSuffix("square.png") })
     }
     func testMissingImageIsReported() async throws {
         let (_, doc) = try setUpDoc("![x](assets/nope.png)", at: "doc.md"); let r = hosted()
         let res = try await r.render("![x](assets/nope.png)", options: RenderOptions(mode: .window, theme: .paper, baseURL: doc))
         XCTAssertTrue(res.errors.contains { $0.hasPrefix("image: ") && $0.hasSuffix("nope.png") })
     }
+    func testHiddenOutsideFolderImageIsListedForExport() async throws {   // Review Focus 6; S3 option A
+        let md = "![in](assets/square.png)\n\n<span style=\"display:inline-block;width:1px;height:1px;overflow:hidden\">![](../outside.png)</span>\n"
+        let root = try tempDir(); let doc = try write(md, "docs/page.md", in: root)
+        try FileManager.default.createDirectory(at: root.appending(path: "docs/assets"), withIntermediateDirectories: true)
+        try squarePNG.write(to: root.appending(path: "docs/assets/square.png")); try squarePNG.write(to: root.appending(path: "outside.png"))
+        let r = RendererWebView(); r.readAccessURL = root                                  // the export path: fresh, offscreen, print mode
+        _ = try await r.render(md, options: RenderOptions(mode: .print, theme: .paper, baseURL: doc))
+        XCTAssertEqual(r.loadedImages(outside: doc.deletingLastPathComponent()).map(\.lastPathComponent), ["outside.png"])
+    }
 }
 ```
 
-`Apps/Markdown/AppTests/SandboxImageTests.swift`, `testImageLoadsInsideSandboxedApp`: the same body as `testRelativeImageLoadsNextToDocument`. It runs inside the sandboxed host, and its `tempDir()` (an AppTests copy) lives in the app container.
-
 - [ ] **Step 3: Run**
 
-Run: `(cd Renderer && bun test test/images.test.js); swift test --package-path Packages/TegelKit --filter LocalImageTests`
+Run: `(cd Renderer && bun test test/images.test.js); swift test --package-path Packages/TegelKit --filter 'DocumentImageHandlerTests|LocalImageTests'`
 Expected:
-- bun: 2 fail (the `baseHref` rewrite; the `img` hook), 1 pass (`file:` links were already stripped by DOMPurify's default URI list);
-- swift: FAIL, `value of type 'RendererWebView' has no member 'readAccessURL'`.
+- bun: 1 fail (the `tegel-doc:` rewrite), 1 pass (nothing rewrites yet);
+- swift: FAIL, `cannot find 'DocumentImageHandler' in scope`.
 
-- [ ] **Step 4: Implement `readAccessURL`, the `baseHref` image rule, the `fileImages` hook, the `page.js` image wait, then `make renderer`**
+- [ ] **Step 4: Implement `isInside`, `DocumentImageHandler`, the `RendererWebView` changes, the `baseHref` image rule and the `page.js` image wait, then `make renderer`**
 
-- [ ] **Step 5: Run the unsandboxed test** (WebKit's helper processes are sandboxed even here, so this exercises read access for real)
+Plan 01's `render` already sends a `baseHref` key; it now carries the `tegel-doc:` form.
 
-Run: `(cd Renderer && bun test) && swift test --package-path Packages/TegelKit --filter LocalImageTests`
-Expected: bun `0 fail` (plan 01's tests still pass); swift `Executed 3 tests, with 0 failures`.
-- If `render` times out because `index.html` sits outside `folder`: retry once with `allowingReadAccessTo` = the common ancestor of the renderer folder and `folder`.
+- [ ] **Step 5: Run the unsandboxed tests**
 
-- [ ] **Step 6: Run the sandbox proof. This is the decision point.**
+Run: `(cd Renderer && bun test) && swift test --package-path Packages/TegelKit --filter 'DocumentImageHandlerTests|LocalImageTests'`
+Expected: bun `0 fail` (plan 01's tests, including its `fileImages` hook tests, still pass); swift `Executed 8 tests, with 0 failures`.
 
-Run: `make test-app ONLY=SandboxImageTests`
-Expected: `** TEST SUCCEEDED **`.
-- **If it fails:** CR-1 (end of this plan) is pre-approved for exactly this case (consolidation CR 02-1). Record the failure output in m02.md, implement CR-1's scheme handler instead of `readAccessURL`, and run pipeline stage 4 (`/cso`) on the CSP change before Step 7. If it passes, CR-1 stays unused.
+- [ ] **Step 6: Write the app tests, then run**
 
-- [ ] **Step 7: Implement `Grants`, `ImageGrantBar` and the wiring, then check by hand in the sandboxed app**
+```swift
+@MainActor final class GrantsTests: XCTestCase {
+    func testRootContainingComparesPathComponents() throws {        // Review Focus 6; S12
+        let base = try tempDir(); let notes = base.appending(path: "notes"), old = base.appending(path: "notes-old")
+        for d in [notes, old] { try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true) }
+        let saved = Grants.roots; Grants.roots = [notes]; defer { Grants.roots = saved }
+        XCTAssertNil(Grants.root(containing: old.appending(path: "a.md")))
+        XCTAssertEqual(Grants.root(containing: notes.appending(path: "sub/a.md")), notes)
+    }
+}
+
+@MainActor final class SandboxImageTests: XCTestCase {
+    private func width(_ r: RendererWebView) async throws -> Int? { try await js(r, "return document.images[0].naturalWidth") as? Int }
+    func testImageLoadsInsideSandboxedApp() async throws {          // tempDir() is in the app container
+        let root = try tempDir(); let doc = try write("![sq](assets/square.png)", "doc.md", in: root)
+        try FileManager.default.createDirectory(at: root.appending(path: "assets"), withIntermediateDirectories: true)
+        try squarePNG.write(to: root.appending(path: "assets/square.png"))
+        let r = hosted(); _ = try await r.render("![sq](assets/square.png)", options: RenderOptions(mode: .window, theme: .paper, baseURL: doc))
+        let w = try await width(r)
+        XCTAssertEqual(w, 1)
+    }
+    func testBookmarkedFolderOutsideContainerServesImages() async throws {   // CR-P2-24; needs Step 8's grant
+        guard let root = Grants.roots.first(where: { $0.pathComponents.suffix(2) == ["Fixtures", "markdown"] })
+        else { throw XCTSkip("Grant Fixtures/markdown through Show Images… first (Task 8 Step 8)") }
+        let doc = root.appending(path: "local-image.md"); let r = hosted(); r.readAccessURL = Grants.root(containing: doc)
+        _ = try await r.render(try TextFileLoader.load(doc).text, options: RenderOptions(mode: .window, theme: .paper, baseURL: doc))
+        let w = try await width(r)
+        XCTAssertEqual(w, 1)
+    }
+}
+```
+
+Run: `make test-app ONLY=GrantsTests`
+Expected: FAIL, `cannot find 'Grants' in scope`.
+
+- [ ] **Step 7: Implement `Grants`, `ImageGrantBar` and the wiring, then run**
+
+Run: `make test-app ONLY=GrantsTests && make test-app ONLY=SandboxImageTests`
+Expected: `Executed 1 test, with 0 failures`; then `testImageLoadsInsideSandboxedApp` passed and `testBookmarkedFolderOutsideContainerServesImages` skipped ("Grant Fixtures/markdown…").
+
+- [ ] **Step 8: Grant a folder outside the container by hand, then prove it serves images**
 
 Run: `make run-app FILES="Fixtures/markdown/local-image.md"`
 Expected:
-1. The bar shows and the image is missing.
-2. "Show Images…" opens the panel at `Fixtures/markdown`; "Allow" makes the square appear and the bar go away.
-3. After ⌘Q and the same command again, the square shows with no bar.
+1. The bar shows (the 1×1 image failed: the repo is outside the container).
+2. "Show Images…" opens the panel at `Fixtures/markdown`; "Allow" removes the bar.
+3. After ⌘Q and the same command again, there's no bar: the bookmark resolved at launch.
 
-- [ ] **Step 8: Commit**
+Then quit the app and run: `make test-app ONLY=SandboxImageTests`
+Expected: `Executed 2 tests, with 0 failures`, with `testBookmarkedFolderOutsideContainerServesImages` passed, not skipped. If it still skips after the grant (the Debug rebuild changed the code signature and the bookmark no longer resolves), record that in `docs/reviews/m02.md` and repeat the grant and the test without rebuilding in between.
 
-```bash
-git add Packages/TegelKit Renderer/src/markdown.js Renderer/src/sanitize.js Renderer/src/page.js Renderer/package.json Renderer/bun.lock Renderer/test/images.test.js Fixtures/markdown/local-image.md Fixtures/markdown/assets Apps/Markdown/App Apps/Markdown/AppTests/SandboxImageTests.swift Apps/Markdown/AppTests/AppTestSupport.swift
-git commit -m "feat: local images via baseHref, file: img hook, read-access folder, failure reporting and Show Images grant" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-```
+- [ ] **Step 9: Watch the path guards fail**
+
+Replace `isInside`'s body with `path(percentEncoded: false).hasPrefix(root.path(percentEncoded: false))` (the naive string prefix), then run: `swift test --package-path Packages/TegelKit --filter DocumentImageHandlerTests; make test-app ONLY=GrantsTests`
+Expected: FAIL in `testDotDotEscapeIs404` and `testEverythingElseIs404` (the symlink case), and in `testRootContainingComparesPathComponents` (`notes-old`). Restore the body and rerun both: `Executed 3 tests, with 0 failures` and `Executed 1 test, with 0 failures`.
+
+- [ ] **Step 10: Commit** `Packages/TegelKit Renderer/src/markdown.js Renderer/src/page.js Renderer/test/images.test.js Fixtures/markdown/local-image.md Fixtures/markdown/assets Apps/Markdown/App Apps/Markdown/AppTests docs/reviews/m02.md`, "feat: local images through the tegel-doc: scheme handler, grant-root check, failure reporting and Show Images grant"
 
 ---
 
 ### Task 9: Folder window (Pro)
 
-**Prerequisite:** read `DESIGN.md` and `docs/design/app-ui-spec.md` (Steps 2, 7); no UI value outside them.
+**UI spec:** app-ui-spec (Steps 2, 7).
 
 **Files:**
 - Create: `Apps/Markdown/App/FolderModel.swift`, `Apps/Markdown/App/FolderWindow.swift`
@@ -894,17 +1015,27 @@ git commit -m "feat: local images via baseHref, file: img hook, read-access fold
     private(set) var pendingLine: Int?                                         // consumed after the next render
     func start()                      // index off the main actor, then FileWatcher(url: root) → re-index
     func stop()
-    func search() async               // FolderIndex.search in a detached task
+    func search() async               // K11: below
     func open(_ hit: SearchHit)       // selection = hit.item.id; pendingLine = hit.line
 }
 func eventually(_ timeout: Duration = .seconds(3), _ cond: @MainActor () -> Bool) async -> Bool   // AppTestSupport
+```
+- `search()` (K11): cancellation reaches the scan, and a stale result never lands.
+```swift
+func search() async {
+    generation += 1; let gen = generation, q = query, its = items          // private var generation = 0
+    let scan = Task.detached(priority: .userInitiated) { FolderIndex.search(q, in: its) }
+    let found = await withTaskCancellationHandler { await scan.value } onCancel: { scan.cancel() }
+    guard !Task.isCancelled, gen == generation else { return }             // superseded: drop it
+    hits = found
+}
 ```
 - Behaviour:
   - **Open Folder… (⇧⌘O, File menu, `CommandGroup(after: .newItem)`):**
     - Pro: `NSOpenPanel` (folders only, prompt "Open") → `BookmarkStore.save` → append to `Grants.roots` → `openWindow(id: "folder", value: url)`.
     - Free: `openWindow(id: "pro", value: UpsellFeature.folder)`.
   - **Window:** a `NavigationSplitView`.
-    - Sidebar: `List(selection:)` of `relativePath`, with `.searchable(text:, placement: .sidebar, prompt: "Search in Folder")`. A 200 ms debounce comes from `.task(id: query) { try? await Task.sleep(for: .milliseconds(200)); await model.search() }`.
+    - Sidebar: `List(selection:)` of `relativePath`, with `.searchable(text:, placement: .sidebar, prompt: "Search in Folder")`. A 200 ms debounce comes from `.task(id: model.query) { do { try await Task.sleep(for: .milliseconds(200)) } catch { return }; await model.search() }`: a keystroke cancels the previous task, which returns instead of scanning (`try?` would swallow the cancellation and scan anyway).
     - While searching, rows show `relativePath:line` plus the snippet; clicking one calls `open(_:)`.
     - Notices: "Showing the first 5,000 Markdown files." when capped (a footer note); "No Markdown files in this folder." when empty (`ContentUnavailableView`, `folder` symbol).
     - Detail: a `DocumentView` (fed from `TextFileLoader.load` of the selected file) with `baseURL` = the file and `readAccessURL` = `root`. When `pendingLine` is set, render, then `scroll(toLine:)`.
@@ -948,6 +1079,19 @@ func eventually(_ timeout: Duration = .seconds(3), _ cond: @MainActor () -> Bool
         let hit = try XCTUnwrap(m.hits.first); XCTAssertEqual(hit.line, 3)
         m.open(hit); XCTAssertEqual(m.selection, hit.item.id); XCTAssertEqual(m.pendingLine, 3)
     }
+    func testStaleSearchIsDropped() async throws {                  // Review Focus 7; K11
+        let r = try tempDir()
+        _ = try write(Array(repeating: "beta", count: 250).joined(separator: "\n"), "a-beta.md", in: r)   // first in order; fills the 200 limit at once
+        let filler = String(repeating: "filler text line\n", count: 6_000)                              // ≈ 100 KB each
+        for i in 1...300 { _ = try write(filler, "m\(i).md", in: r) }
+        _ = try write("alpha", "z-alpha.md", in: r)                                                      // last: "alpha" scans ≈ 30 MB first
+        let m = FolderModel(root: r); m.start(); defer { m.stop() }
+        _ = await eventually { m.items.count == 302 }
+        m.query = "alpha"; let older = Task { await m.search() }; await Task.yield()   // the older search starts and suspends in its scan
+        m.query = "beta"; await m.search()
+        await older.value
+        XCTAssertEqual(Set(m.hits.map(\.item.relativePath)), ["a-beta.md"]); XCTAssertEqual(m.hits.count, 200)
+    }
 }
 ```
 
@@ -960,26 +1104,25 @@ Expected: FAIL, `cannot find 'FolderModel' in scope`.
 
 - [ ] **Step 4: Run, then check by hand**
 
-Run: `make test-app ONLY=FolderModelTests && make run-app ARGS="-TGForcePro YES -NSQuitAlwaysKeepsWindows YES"`
-Expected: `Executed 4 tests, with 0 failures`. Then, by hand:
+Run: `make test-app ONLY=FolderModelTests`
+Expected: `Executed 5 tests, with 0 failures`.
+
+Then delete `gen == generation` from `search()`'s guard and run `make test-app ONLY=FolderModelTests/testStaleSearchIsDropped`. Expected: FAIL, the hits are `z-alpha.md`'s. Restore the guard and rerun: PASS.
+
+Run: `make run-app ARGS="-TGForcePro YES -NSQuitAlwaysKeepsWindows YES"`, then by hand:
 1. Open Folder… on `Fixtures/markdown` gives a sidebar.
 2. Searching "Mermaid" and clicking a hit opens the file scrolled to that block, highlighted.
 3. `echo "Live line" >> Fixtures/markdown/frontmatter.md` re-renders in under 1 s at the same scroll position. Afterwards run `git checkout Fixtures/markdown/frontmatter.md`.
 4. ⌘Q, then relaunch with the same command: the folder window returns with its sidebar filled.
 5. Relaunch without `-TGForcePro`: Open Folder… opens the Pro window.
 
-- [ ] **Step 5: Commit**
-
-```bash
-git add Apps/Markdown/App Apps/Markdown/AppTests/FolderModelTests.swift Apps/Markdown/AppTests/AppTestSupport.swift
-git commit -m "feat(app): Pro folder mode with sidebar, search jump, live reload and restoration" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-```
+- [ ] **Step 5: Commit** `Apps/Markdown/App Apps/Markdown/AppTests/FolderModelTests.swift Apps/Markdown/AppTests/AppTestSupport.swift`, "feat(app): Pro folder mode with sidebar, search jump, live reload and restoration"
 
 ---
 
 ### Task 10: Theme picker, Settings tabs and zoom
 
-**Prerequisite:** read `DESIGN.md` (§7 themes, §9 symbols) and `docs/design/app-ui-spec.md` (Steps 3, 4); no UI value outside them.
+**UI spec:** DESIGN.md (§7 themes, §9 symbols) and app-ui-spec (Steps 3, 4).
 
 **Files:**
 - Consumes, no edit: the theme CSS (`Renderer/src/css/{base,paper,ink,studio,print}.css`, `index.html` link order) from plan 09 Task 6, with values in `DESIGN.md` §7; in `main` since Drop B (Mon 9 Nov). `page.js` already sets `data-theme` (plan 01 Task 5).
@@ -1078,15 +1221,10 @@ Expected: FAIL on ink (`testInkIsSerifPaperAndStudioAreSans`). Then `make render
 Run: `swift test --package-path Packages/TegelKit --filter ThemeTests && make test-app ONLY=ZoomTests`
 Expected: `Executed 5 tests, with 0 failures`, then `Executed 1 test, with 0 failures`.
 
-Then run `make run-app FILES="Fixtures/markdown/gfm-kitchen-sink.md" ARGS="-TGForcePro YES"`. For each theme × light/dark (switch with System Settings ▸ Appearance), run `mkdir -p docs/reviews/m02 && screencapture -x -o -w docs/reviews/m02/theme-<name>-<light|dark>.png` and click the reader window. Check by hand that ⌘+ / ⌘− / ⌘0 change the text size and that Settings ▸ Appearance shows the same value.
+Then run `make run-app FILES="Fixtures/markdown/gfm-kitchen-sink.md" ARGS="-TGForcePro YES"`. For each theme × light/dark (switch with System Settings ▸ Appearance), run `mkdir -p docs/reviews/m02-design && screencapture -x -o -w docs/reviews/m02-design/theme-<name>-<light|dark>.png` and click the reader window. Check by hand that ⌘+ / ⌘− / ⌘0 change the text size and that Settings ▸ Appearance shows the same value.
 Expected: 6 PNGs showing fixture text only, inputs for Task 17's design review.
 
-- [ ] **Step 5: Commit**
-
-```bash
-git add Packages/TegelKit/Tests/TegelKitTests/ThemeTests.swift Apps/Markdown/App Apps/Markdown/AppTests/ZoomTests.swift docs/reviews/m02
-git commit -m "feat(app): theme picker in Settings ▸ Appearance, View menu and toolbar; page zoom; ThemeTests on plan 09's CSS" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-```
+- [ ] **Step 5: Commit** `Packages/TegelKit/Tests/TegelKitTests/ThemeTests.swift Apps/Markdown/App Apps/Markdown/AppTests/ZoomTests.swift docs/reviews/m02-design`, "feat(app): theme picker in Settings ▸ Appearance, View menu and toolbar; page zoom; ThemeTests on plan 09's CSS"
 
 ---
 
@@ -1098,8 +1236,9 @@ git commit -m "feat(app): theme picker in Settings ▸ Appearance, View menu and
 - Test: `Packages/TegelKit/Tests/TegelKitTests/PDFExporterTests.swift`
 
 **Interfaces:**
-- Produces (contract): `PaperSize`, `PDFExporter.export(_ renderer: RendererWebView, to url: URL, paper: PaperSize) async throws`.
+- Produces (contract): `PaperSize`, `PDFExporter.export(_ renderer: RendererWebView, to url: URL, paper: PaperSize) async throws`, which is `try await makePDFData(renderer, paper: paper).write(to: url)` (not `.atomic`: the save panel grants the file, not its folder).
 - Produces (additions):
+  - `public static func makePDFData(_ renderer: RendererWebView, paper: PaperSize) async throws -> Data` on `PDFExporter` (K18). Task 12 calls it so the export check sits between printing and writing; plan 08's upsell preview turns it into at most two page images with `PDFDocument(data:)` and `PDFPage.thumbnail(of:for:)`.
   - `extension PaperSize { public var points: CGSize }`: a4 = 595.28×841.89, letter = 612×792.
   - `public enum PDFExportError: Error, Equatable { case printFailed }`.
 - print.css keeps only the `@page` and break rules. Colour in print (light-only pages, code backgrounds, print sizes) belongs to plan 09 Task 6 (`DESIGN.md` §7).
@@ -1108,17 +1247,19 @@ git commit -m "feat(app): theme picker in Settings ▸ Appearance, View menu and
     - `pre, table, svg, blockquote, img, .mermaid-error { break-inside: avoid }`
     - `h1, h2, h3, h4, h5, h6 { break-after: avoid }`
     - `pre, pre code { white-space: pre-wrap; overflow-wrap: anywhere }`
-- Approach ([F6]; save-to-file through [`jobSavingURL`](https://developer.apple.com/documentation/appkit/nsprintinfo/attributekey/jobsavingurl) with `jobDisposition = .save`):
+- Approach for `makePDFData` ([F6]; save-to-file through [`jobSavingURL`](https://developer.apple.com/documentation/appkit/nsprintinfo/attributekey/jobsavingurl) with `jobDisposition = .save`):
+  - WebKit has no public in-memory paginated print. `WKPrintingView` must be driven by its own `NSPrintOperation` (it asserts `currentOperation` is the one it stored), and `createPDF` makes one tall page. So the bytes pass through one file in a private folder that never outlives the call.
+  0. Create `FileManager.default.temporaryDirectory/tegel-pdf-<UUID>` with `posixPermissions: 0o700`; `defer` removes it.
   1. Copy `NSPrintInfo.shared`.
      - `paperSize = paper.points`; all four margins `0` (CSS `@page` owns the margins).
      - `horizontalPagination = .fit`; `verticalPagination = .automatic`.
-     - `jobDisposition = .save`; `dictionary()[NSPrintInfo.AttributeKey.jobSavingURL] = url`.
+     - `jobDisposition = .save`; `dictionary()[NSPrintInfo.AttributeKey.jobSavingURL] = <private folder>/out.pdf`.
   2. `let op = renderer.webView.printOperation(with: info)` (macOS 11+, [printOperation(with:)](https://developer.apple.com/documentation/webkit/wkwebview/printoperation(with:))).
      - `showsPrintPanel = false`, `showsProgressPanel = false`.
      - `op.view?.frame = renderer.webView.bounds`.
   3. If `webView.window == nil`, host it in an offscreen borderless `NSWindow` sized to `paper.points` until done.
-  4. `op.runModal(for: window, delegate: bridge, didRun: #selector(Bridge.printOperationDidRun(_:success:contextInfo:)), contextInfo: nil)`. The `Bridge: NSObject` resumes a `CheckedContinuation`.
-  5. Throw `.printFailed` unless `success` is true and the file exists.
+  4. `op.run()`, synchronous (CR-P2-25): under `swift test` no `NSApplication` is running, so a sheet's `didRun` callback would never fire and the tests would hang.
+  5. Throw `.printFailed` unless `run()` returned true and the file exists; return `Data(contentsOf:)` of it.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1200,6 +1341,16 @@ import PDFKit
         let body = try XCTUnwrap(sizes.max { $0.value < $1.value }?.key)
         XCTAssertTrue((9...14).contains(body), "body font \(body) pt")
     }
+    func testMakePDFDataIsPaginatedAndLeavesNoFile() async throws {   // K18: the upsell preview's path
+        let r = RendererWebView(); _ = try await r.render(longDocument(), options: RenderOptions(mode: .print, theme: .paper, baseURL: nil))
+        let tmp = FileManager.default.temporaryDirectory.path(percentEncoded: false)
+        let before = Set(try FileManager.default.contentsOfDirectory(atPath: tmp))
+        let data = try await PDFExporter.makePDFData(r, paper: .a4)
+        let left = Set(try FileManager.default.contentsOfDirectory(atPath: tmp)).subtracting(before).filter { $0.hasPrefix("tegel-pdf-") }
+        let d = try XCTUnwrap(PDFDocument(data: data))
+        XCTAssertGreaterThan(d.pageCount, 1); XCTAssertEqual(left, [])
+        XCTAssertNotNil(d.page(at: 1)?.thumbnail(of: CGSize(width: 120, height: 170), for: .mediaBox))
+    }
 }
 ```
 
@@ -1208,33 +1359,31 @@ import PDFKit
 Run: `swift test --package-path Packages/TegelKit --filter PDFExporterTests`
 Expected: FAIL, `cannot find 'PDFExporter' in scope`.
 
-- [ ] **Step 3: Implement `PDFExporter`, `PaperSize.points`, `PDFExportError` and print.css as specified, then `make renderer`**
+- [ ] **Step 3: Implement `PDFExporter` (`makePDFData`, then `export` on top of it), `PaperSize.points`, `PDFExportError` and print.css as specified, then `make renderer`**
 
 - [ ] **Step 4: Run**
 
 Run: `swift test --package-path Packages/TegelKit --filter PDFExporterTests`
-Expected: `Executed 9 tests, with 0 failures`. If a test fails, apply its rule below and don't weaken any assertion:
+Expected: `Executed 10 tests, with 0 failures`. If a test fails, apply its rule below and don't weaken any assertion:
+- **Pages come out blank, or `run()` never returns:** use `op.runModal(for: window, delegate: bridge, didRun: #selector(Bridge.printOperationDidRun(_:success:contextInfo:)), contextInfo: nil)`, with a `Bridge: NSObject` that resumes a `CheckedContinuation`, and run `PDFExporterTests` in plan 01's hosted `TegelKitHostTests` scheme instead of `swift test` (CR-P2-25). Record which path shipped in m02.md.
 - **`testMarginsAndReadableBodySize` fails on the margins:** WebKit ignored `@page` margins. Set NSPrintInfo margins to top/bottom 57 pt and left/right 45 pt, and change print.css to `@page { margin: 0 }`.
 - **`testHeadingsNeverEndAPage` fails:** add `page-break-after: avoid` next to `break-after`. If it still fails, mark it `XCTExpectFailure("WebKit ignores break-after: avoid; see docs/reviews/m02.md")` and record it as a P2 in m02.md.
 - **`testArabicAndEnglishTextSurviveExtraction` fails because the Arabic comes out reversed:** that's a real defect for copy and search in PDF readers. Stop and report it; don't loosen the test.
+
+Then comment out the `defer` that removes the private folder and rerun `--filter testMakePDFDataIsPaginatedAndLeavesNoFile`. Expected: FAIL, `left` names one `tegel-pdf-…`. Restore the `defer` and rerun: PASS.
 
 - [ ] **Step 5: Tighten the page-count range**
 
 Note the observed `pageCount` from Step 4. Replace `25...60` with `observed×0.85...observed×1.15` (rounded), then rerun.
 Expected: PASS. Record the observed count in `docs/reviews/m02.md` under "PDF calibration (macOS 15.7 Intel)".
 
-- [ ] **Step 6: Commit**
-
-```bash
-git add Renderer/src/css/print.css Packages/TegelKit/Sources/TegelKit Packages/TegelKit/Tests/TegelKitTests/PDFExporterTests.swift docs/reviews/m02.md
-git commit -m "feat(tegelkit): paginated A4/Letter PDFExporter via printOperation with print.css" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-```
+- [ ] **Step 6: Commit** `Renderer/src/css/print.css Packages/TegelKit/Sources/TegelKit Packages/TegelKit/Tests/TegelKitTests/PDFExporterTests.swift docs/reviews/m02.md`, "feat(tegelkit): paginated A4/Letter PDFExporter via printOperation with print.css"
 
 ---
 
 ### Task 12: Export as PDF command (Pro)
 
-**Prerequisite:** read `DESIGN.md` and `docs/design/app-ui-spec.md` (Steps 1, 3, 4); no UI value outside them.
+**UI spec:** app-ui-spec (Steps 1, 3, 4).
 
 **Files:**
 - Modify: `AppCommands.swift`, `ReaderController.swift`, `SettingsView.swift` (General tab), `DocumentView.swift` (toolbar Export item, Task 7)
@@ -1242,7 +1391,7 @@ git commit -m "feat(tegelkit): paginated A4/Letter PDFExporter via printOperatio
 - Test: `Apps/Markdown/AppTests/PaperDefaultTests.swift`
 
 **Interfaces:**
-- Consumes: `PDFExporter.export`, `PaperSize`, `RendererWebView`, `ProGate.effectiveTheme`, `Grants`.
+- Consumes: `PDFExporter.makePDFData`, `PaperSize`, `RendererWebView.loadedImages(outside:)`, `ProGate.effectiveTheme`, `Grants`.
 - Produces:
   - `func defaultPaper(for locale: Locale) -> PaperSize`: `.letter` when `locale.measurementSystem == .us`, else `.a4`.
   - `@AppStorage("TGPaperSize")`, defaulting to `defaultPaper(for: .current)`, with a picker "PDF paper size" offering "A4" and "Letter" in the Settings General tab (`gearshape`), which this task adds as the first tab.
@@ -1251,9 +1400,14 @@ git commit -m "feat(tegelkit): paginated A4/Letter PDFExporter via printOperatio
   1. Free → `openWindow(id: "pro", value: UpsellFeature.pdf)`.
   2. Pro → `NSSavePanel` as a sheet: `allowedContentTypes = [.pdf]`, `nameFieldStringValue = "<file name without extension>.pdf"`, `canCreateDirectories = true`.
   3. Render in a fresh offscreen `RendererWebView`: mode `.print`, the effective theme, the same `baseURL` and `readAccessURL` as on screen.
-  4. Export with `PDFExporter.export`.
-  5. On error, an `NSAlert` with the message "The PDF couldn't be saved." and `error.localizedDescription` as informative text.
-  - This is the app's only file write.
+  4. `let data = try await PDFExporter.makePDFData(renderer, paper:)`.
+  5. **Outside-folder check (K4, S3 option A):** `let outside = renderer.loadedImages(outside: <the document's folder>)`. It runs after printing, so it covers every image the print loaded, hidden or not. If it isn't empty, an `NSAlert` as a sheet:
+     - Message: "This PDF includes images from outside the document's folder."
+     - Informative text: "Export only if you meant to include these files:", then one path per line (`(path as NSString).abbreviatingWithTildeInPath`).
+     - Buttons, added in this order: "Cancel" (default, so Return and Esc both cancel) and "Export".
+     - "Cancel" ends the flow; nothing is written.
+  6. `try data.write(to: url)` (not `.atomic`: the save panel grants the file, not its folder). This is the app's only file write.
+  7. On error, an `NSAlert` with the message "The PDF couldn't be saved." and `error.localizedDescription` as informative text.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1284,18 +1438,21 @@ Expected: `Executed 2 tests, with 0 failures`. Then export both files in A4 and 
 
 Record the result in `docs/reviews/m02.md`. Without `-TGForcePro`, ⇧⌘E opens the Pro window.
 
-- [ ] **Step 5: Commit**
+Then the outside-folder check, with a hidden 1 px image outside the document's folder:
+Run: `T=$(mktemp -d) && mkdir "$T/docs" && cp Fixtures/markdown/assets/square.png "$T/outside.png" && printf 'Invoice\n\n<span style="display:inline-block;width:1px;height:1px;overflow:hidden">![](../outside.png)</span>\n' > "$T/docs/page.md" && make run-app FILES="$T/docs/page.md" ARGS="-TGForcePro YES"`
+Expected, by hand:
+1. The image bar shows; "Show Images…" → choose `$T` → the bar goes.
+2. ⇧⌘E → save as `out.pdf` → the alert lists `…/outside.png`. "Cancel": no `out.pdf` exists.
+3. ⇧⌘E again → "Export": `out.pdf` exists.
+Record the result in m02.md. Task 8's `testHiddenOutsideFolderImageIsListedForExport` pins the list itself.
 
-```bash
-git add Apps/Markdown/App Apps/Markdown/AppTests/PaperDefaultTests.swift docs/reviews/m02.md
-git commit -m "feat(app): Pro Export as PDF with save panel and locale paper default" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-```
+- [ ] **Step 5: Commit** `Apps/Markdown/App Apps/Markdown/AppTests/PaperDefaultTests.swift docs/reviews/m02.md`, "feat(app): Pro Export as PDF with save panel and locale paper default"
 
 ---
 
 ### Task 13: Copy Diagnostics
 
-**Prerequisite:** read `DESIGN.md` and `docs/design/app-ui-spec.md` (Step 3, Help menu); no UI value outside them.
+**UI spec:** app-ui-spec (Step 3, Help menu).
 
 **Files:**
 - Create: `Packages/TegelKit/Sources/TegelKit/Diagnostics.swift`
@@ -1324,7 +1481,7 @@ public enum Diagnostics {
   - `sandboxed`: `ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] != nil`. No Apple doc states this, so the hosted test pins it.
   - `rendererVersion`: the trimmed `Bundle.module` `Renderer/renderer-version.txt`, or `"unknown"`.
   - `licence`: the caller's summary.
-    - Plan 02 passes `"Pro (debug override)"` or `"Free"`; plan 03 passes a `LicenseState` summary.
+    - Plan 02 passes `ProGate.overrideLabel` when the Debug override is on (inside `#if DEBUG`), otherwise `"Free"`; plan 03 passes a `LicenseState` summary.
     - **The key is never an input.**
 - `build.js` writes `renderer-version.txt`. Its content is the first 12 hex characters of the SHA-256 over every other output file, sorted by relative path, each hashed as `path + "\0" + bytes`.
 - Help ▸ "Copy Diagnostics" runs `NSPasteboard.general.clearContents()` and then `setString(Diagnostics.report(.current(licence:)), forType: .string)`.
@@ -1373,12 +1530,7 @@ Expected: bun fails with ENOENT on `renderer-version.txt`; swift fails with `can
 Run: `(cd Renderer && bun test) && swift test --package-path Packages/TegelKit --filter DiagnosticsTests && make test-app ONLY=SandboxDiagnosticsTests`
 Expected: bun `0 fail`; `Executed 3 tests, with 0 failures`; `** TEST SUCCEEDED **`. Then in the app, Help ▸ Copy Diagnostics followed by `pbpaste` prints 6 lines, with `Sandbox: on`.
 
-- [ ] **Step 5: Commit**
-
-```bash
-git add Packages/TegelKit Renderer/build.js Renderer/test/version.test.js Apps/Markdown/App/AppCommands.swift Apps/Markdown/AppTests/SandboxDiagnosticsTests.swift
-git commit -m "feat: Copy Diagnostics (version, macOS, arch, sandbox, renderer hash, licence summary)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-```
+- [ ] **Step 5: Commit** `Packages/TegelKit Renderer/build.js Renderer/test/version.test.js Apps/Markdown/App/AppCommands.swift Apps/Markdown/AppTests/SandboxDiagnosticsTests.swift`, "feat: Copy Diagnostics (version, macOS, arch, sandbox, renderer hash, licence summary)"
 
 ---
 
@@ -1437,18 +1589,13 @@ Expected: `Executed 1 test, with 0 failures`. Then by hand:
 3. A `.png` drop does nothing.
 4. Open two fixtures, ⌘Q, relaunch: File ▸ Open Recent lists both and reopens them under the sandbox.
 
-- [ ] **Step 5: Commit**
-
-```bash
-git add Apps/Markdown/App Apps/Markdown/AppTests/DropRouterTests.swift
-git commit -m "feat(app): window drag-and-drop for files and folders" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-```
+- [ ] **Step 5: Commit** `Apps/Markdown/App Apps/Markdown/AppTests/DropRouterTests.swift`, "feat(app): window drag-and-drop for files and folders"
 
 ---
 
 ### Task 15: Welcome window and Quick Look setup
 
-**Prerequisite:** read `DESIGN.md` and `docs/design/app-ui-spec.md` (Step 5, Welcome); no UI value outside them.
+**UI spec:** app-ui-spec (Step 5, Welcome).
 
 One first-run window. It absorbs plan 08 Task 11's Quick Look guide, so the app has no second onboarding window; plan 08 Task 11 keeps only the deep-link verification on macOS 14/15/27 and the copy review.
 
@@ -1521,24 +1668,19 @@ Expected: `same`. XcodeGen copies `.md` files under `Apps/Markdown/App` as resou
 Run: `xcodegen generate && make test-app && make run-app ARGS="-TGWelcomeShown NO"`
 Expected: `** TEST SUCCEEDED **`. Then by hand:
 1. Welcome appears with no document Open panel on top. If the panel covers it, register `NSShowAppCentricOpenPanelInsteadOfUntitledFile = false` in `UserDefaults.register(defaults:)` and check again.
-2. The Quick Look paragraph shows the macOS 15 path. "Open System Settings…" lands on Login Items & Extensions; save `screencapture -x -w docs/reviews/m02/welcome-settings-15.png`.
+2. The Quick Look paragraph shows the macOS 15 path. "Open System Settings…" lands on Login Items & Extensions; save `screencapture -x -w docs/reviews/m02-design/welcome-settings-15.png`.
 3. "Open Sample" opens `Welcome.md` read-only; "Open…" shows the standard open panel; Return closes Welcome.
 4. ⌘Q, then `make run-app`: no Welcome. Help ▸ Welcome to Tegel Markdown opens it.
 
 The Arabic sample is checked in Task 16, once the `ar` localisation exists. The macOS 14 copy, the macOS 14 launch trigger and the deep link on 14 and 27 are checked remotely (Task 17's pending list; plan 08 Task 11 Step 2).
 
-- [ ] **Step 6: Commit**
-
-```bash
-git add Packages/TegelKit/Sources/TegelKit/QuickLookSetup.swift Packages/TegelKit/Tests/TegelKitTests/QuickLookSetupTests.swift Apps/Markdown/App docs/reviews/m02
-git commit -m "feat(app): Welcome window with the Quick Look guide and QuickLookSetup deep link" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-```
+- [ ] **Step 6: Commit** `Packages/TegelKit/Sources/TegelKit/QuickLookSetup.swift Packages/TegelKit/Tests/TegelKitTests/QuickLookSetupTests.swift Apps/Markdown/App docs/reviews/m02-design`, "feat(app): Welcome window with the Quick Look guide and QuickLookSetup deep link"
 
 ---
 
 ### Task 16: Localisation (en, nl, fr, ar)
 
-**Prerequisite:** read `DESIGN.md` (voice; §11 banned patterns) and `docs/design/app-ui-spec.md` (Step 8, Arabic UI mirror); no UI value outside them.
+**UI spec:** DESIGN.md (voice; §11 banned patterns) and app-ui-spec (Step 8, Arabic UI mirror).
 
 **Files:**
 - Create: `Apps/Markdown/App/Localizable.xcstrings`
@@ -1547,7 +1689,7 @@ git commit -m "feat(app): Welcome window with the Quick Look guide and QuickLook
   - app settings `LOCALIZATION_PREFERS_STRING_CATALOGS: YES` and `SWIFT_EMIT_LOC_STRINGS: YES`;
   - Info.plist `CFBundleLocalizations: [en, nl, fr, ar]`.
 - Test: `Apps/Markdown/AppTests/LocalizationTests.swift`
-- Create: `docs/reviews/m02/ar-ui.png`
+- Create: `docs/reviews/m02-design/ar-ui.png`
 
 **Interfaces:**
 - Consumes: every user-facing string literal from Tasks 1–15. SwiftUI `Text`/`Button` literals are extracted automatically. AppKit strings (panels, alerts) use `String(localized:)`.
@@ -1601,7 +1743,7 @@ Mark brand-only keys `shouldTranslate: false`. The founder reviews the ar and fr
 Run: `make test-app ONLY=LocalizationTests && make run-app FILES="Fixtures/markdown/rtl-arabic.md" ARGS='-AppleLanguages "(ar)" -TGForcePro YES'`
 Expected: `Executed 3 tests, with 0 failures`.
 
-Then open `Fixtures/markdown` as a folder, show the find bar and the inspector, and run `screencapture -x -w docs/reviews/m02/ar-ui.png` (click the folder window). Check and record pass/fail per item in `docs/reviews/m02.md`:
+Then open `Fixtures/markdown` as a folder, show the find bar and the inspector, and run `screencapture -x -w docs/reviews/m02-design/ar-ui.png` (click the folder window). Check and record pass/fail per item in `docs/reviews/m02.md`:
 - sidebar on the right, inspector on the left, toolbar mirrored;
 - find-bar Previous/Next mirrored, text fields right-aligned;
 - the Pro window, Welcome and Settings mirrored;
@@ -1610,134 +1752,73 @@ Then open `Fixtures/markdown` as a folder, show the find bar and the inspector, 
 
 Repeat the run with `"(nl)"` and `"(fr)"` and check that nothing is truncated.
 
-- [ ] **Step 5: Commit**
-
-```bash
-git add project.yml Apps/Markdown/App Apps/Markdown/AppTests/LocalizationTests.swift docs/reviews/m02
-git commit -m "feat(i18n): en/nl/fr/ar string catalog with placeholder and RTL checks" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-```
+- [ ] **Step 5: Commit** `project.yml Apps/Markdown/App Apps/Markdown/AppTests/LocalizationTests.swift docs/reviews/m02-design`, "feat(i18n): en/nl/fr/ar string catalog with placeholder and RTL checks"
 
 ---
 
-### Task 17: Remote checks, 9-stage pipeline, merge
+### Task 17: Remote checks, Procedure P, merge
 
 **Files:**
 - Modify (only if needed): `.github/workflows/ci.yml`. Its macOS `workflow_dispatch` job must run `swift test --package-path Packages/TegelKit` on `macos-15` and `macos-26`. Hosted app tests stay local, because they need a signed sandboxed host.
-- Create: `docs/reviews/m02.md` (already started in Tasks 11–12), `docs/reviews/design-m02.md`
-
-**If a stage can't run:** record in m02.md which stage, why, and what ran instead. Never skip one silently.
+- Modify: `docs/reviews/m02.md` (created in Task 1). Create: `docs/reviews/design-m02.md`
 
 - [ ] **Step 1: Remote arm64 runs** (local evidence is Intel/macOS 15.7 only)
 
-First read the Actions minutes used: `gh api /users/Frequence-xx/settings/billing/usage --jq '[.usageItems[] | select(.product=="actions")]'` (or the GitHub billing page). Record the summed `quantity` (minutes) for the current month in m02.md; the free quota is on the billing page. GitHub's current REST docs (27 Oct) document `/settings/billing/usage`, not the older `/billing/actions`. If what's left can't cover the two dispatches below at the macOS multiplier shown on the billing page, don't dispatch: ask the user.
+GitHub dispatches a workflow only if it exists on the default branch, and `--ref` then runs the branch's copy (K13).
+- Run: `git fetch origin && git ls-tree --name-only origin/main .github/workflows/`. Expected: `ci.yml` (plan 01) and `design-shots.yml` (plan 09 Drop B) are listed.
+- If `ci.yml` needs the change above, it lands on `main` first: `git switch main`, make the edit, run stage 3 (code review) on that one diff, `git commit` + `git push origin main` (D14), `git switch m02-app1-features && git rebase main`. The branch then carries it too.
+
+Read the CI minutes as plan 05 Task 3 Step 3 defines (B20). If what's left can't cover the two dispatches below, don't dispatch: ask the user.
 
 Run: `git push -u origin m02-app1-features && gh workflow run ci.yml --ref m02-app1-features && gh workflow run design-shots.yml --ref m02-app1-features -f run_app_shots=true && gh run watch`
 - These two dispatches are the milestone's macOS runs: one matrix run each, not one per push. Re-dispatch only after a fix to the code under test, and read the minutes again first.
 - This needs `gh auth login` by the user. Without it, ask the user to press "Run workflow" for the branch under Actions.
-- Expected: `ci.yml` green on `macos-15` and `macos-26` (arm64), including `PDFExporterTests` (FB20581927 is a recent WebKit bug, so `macos-26` matters most), `ThemeTests`, `LocalImageTests` and `FindTests`. `design-shots.yml` uploads `design-shots-macos-26`; download it with `gh run download -D docs/reviews/m02/runner` for Step 8.
+- Expected: `ci.yml` green on `macos-15` and `macos-26` (arm64), including `PDFExporterTests` (FB20581927 is a recent WebKit bug, so `macos-26` matters most), `ThemeTests`, `DocumentImageHandlerTests`, `LocalImageTests` and `FindTests`. `design-shots.yml` uploads `design-shots-macos-26`; download it with `gh run download -D docs/reviews/m02-design/runner` for Step 2.
 - Record the run URLs in m02.md.
 - macOS 27 isn't tested in this milestone. Add a "Pending remote checks (lease L2, Thu 26 Nov 09:00 → Fri 27 Nov 09:00; third in its order, after plan 05's matrix and plan 03's acceptance)" list to m02.md: PDF suite, local images under the sandbox, folder restore, Arabic UI, all on macOS 27 arm64. On L2's last leg (macOS 14, if offered): Welcome's first-launch trigger and its macOS 14 Quick Look copy.
 
-- [ ] **Step 2: Stage 1, bloat audit (pre)**
+- [ ] **Step 2: Run Procedure P stages 1–10 (master §11)** for id `m02`, branch `m02-app1-features`; the record is `docs/reviews/m02.md`. Deltas:
+- **Stage 4 `/cso` scope** (the diff touches bookmarks, file access, the export path and renderer JS/CSS):
+  - `BookmarkStore`: grant lifetime, the 20 cap, stale and unmounted handling.
+  - `DocumentImageHandler`: serves only regular `UTType.image` files inside the grant root (`isInside`: path components after resolving symlinks); `..`, `%2E%2E`, symlinks out, sibling prefixes and non-images get 404; no root (Quick Look) serves nothing.
+  - Export: every handler-served image outside the document's folder is listed before the PDF is written; "Cancel" writes nothing. `makePDFData`'s private folder is 0700 and gone when the call returns.
+  - `markdown.js`: the `baseHref` rewrite touches only relative image `src`. (The `fileImages` hook and the CSP are plan 01's, under its own stage 4.)
+  - `page.js`: `image:` error strings are never inserted as HTML; `scrollToLine` and `data-line` stay harmless with hostile raw HTML; `data-theme` can't be set by content.
+  - `FolderIndex`: symlinks, the read cap via `TextFileLoader`, search cancellation. The window open path: no whole-file read (Task 1).
+  - `Diagnostics`: no key, no paths. Welcome: opens only `QuickLookSetup.settingsURL` or the Settings home, and bundled samples.
+  - Quick Look: plan 01's hostile-Markdown tests (in `make check`).
+- **Stage 10 design review** (the m02 gate in `DESIGN.md` §12): capture in **light, dark and Arabic UI** into `docs/reviews/m02-design/`, with `scripts/window-shot.sh "Tegel Markdown" docs/reviews/m02-design/<name>-<light|dark>.png` (plan 09 Task 12) and `ARGS='-AppleLanguages "(ar)"'` for the Arabic UI:
+  - the window × paper/ink/studio (Task 10's PNGs count);
+  - Arabic UI with an English document; English UI with `docs/design/samples/ar-spec.md`;
+  - the folder window; Settings, each tab (General and Appearance; plan 03 adds Licence and Updates); the Pro window; Welcome; the export confirmation (Task 12);
+  - the Quick Look panel, and Quick Look at 260 px;
+  - PDF page 1 of an English and an Arabic export (`sips -s format png`);
+  - the `macos-26` runner set from Step 1 (`docs/reviews/m02-design/runner/`).
 
-Run the code-upgrade Bloat Audit (`~/.claude/skills/code-upgrade/bloat-audit.md`) over `git diff $(git merge-base HEAD main)...HEAD` and the touched files. Strip self-introduced bloat; queue pre-existing findings as questions.
+  Write `docs/reviews/design-m02.md` with the sections Inputs (paths), Findings (P0/P1/P2), Guard output, Verdict. Pass criteria: `design.test.js` and `DesignRenderTests` green; RTL mirror correct; every toolbar item labelled in the VoiceOver rotor; Liquid Glass only on system chrome. Fix every P0/P1 in the owning task's files and re-run that task's tests.
 
-- [ ] **Step 3: Stage 2, baseline**
+Expected: every stage recorded in m02.md (or named as not run, with the reason and the substitute); two consecutive cubic rounds with no new P0/P1.
 
-Run: `git status && make check`
-Expected: clean tree, all green. Record the bun/swift/app test counts in m02.md.
+- [ ] **Step 3: Commit** `docs/reviews/m02.md docs/reviews/design-m02.md docs/reviews/m02-design`, "docs(review): M02 Procedure P and design-review record"
 
-- [ ] **Step 4: Stage 3, cold code review**
-
-Run gstack `/review` (or a code-review subagent) on `git diff <base>...HEAD`, prioritising bugs, security and correctness.
-
-- [ ] **Step 5: Stage 4, `/cso`** (the diff touches bookmarks, file access, the export path, the sanitiser and renderer HTML/JS/CSS). Scope:
-- `BookmarkStore`: grant lifetime, the 20 cap, stale and unmounted handling.
-- `readAccessURL`: how wide the WebKit read access is; whether a hostile document can reach files outside the granted root, or exfiltrate anything, given there's no network and the CSP is unchanged (or, if CR-1 was triggered, the `tegel-doc:` handler and its CSP change).
-- `sanitize.js` / `markdown.js`: the `fileImages` hook keeps `file:` only on `img[src]`; `<a href="file:…">` stays stripped; the `baseHref` rewrite touches only relative image `src`.
-- `page.js`:
-  - `image:` error strings are never inserted as HTML;
-  - `scrollToLine` and `data-line` stay harmless with hostile raw HTML;
-  - `data-theme` can't be set by content.
-- `FolderIndex`: symlinks, and the read cap via `TextFileLoader`.
-- `PDFExporter`: writes only to the save-panel URL and leaves no temp files.
-- `Diagnostics`: no key, no paths.
-- Welcome: opens only `QuickLookSetup.settingsURL` or the Settings home, and bundled samples.
-- Quick Look: re-run plan 01's hostile-Markdown tests (they're in `make check`).
-
-- [ ] **Step 6: Stage 5, adversarial challenge**
-
-Run `/codex` in challenge mode on the same diff (or the closest agent fallback, and say which).
-
-- [ ] **Step 7: Stages 6–7, consolidate, then patch and re-review**
-
-Merge and dedupe the findings into m02.md as P0/P1/P2, each with a fix commit or a reason. Fix every P0 and P1 and the actionable P2s, then re-run the targeted tests and `make check`.
-
-- [ ] **Step 8: Design review** (the m02 gate in `DESIGN.md` §12; CLAUDE.md "Verification")
-
-Capture the m02 gate set in **light, dark and Arabic UI** into `docs/reviews/m02/`, using `scripts/window-shot.sh "Tegel Markdown" docs/reviews/m02/<name>-<light|dark>.png` (plan 09 Task 12) and `ARGS='-AppleLanguages "(ar)"'` for the Arabic UI:
-- the window × paper/ink/studio (Task 10's PNGs count);
-- Arabic UI with an English document; English UI with `docs/design/samples/ar-spec.md`;
-- the folder window; Settings, each tab (General and Appearance; plan 03 adds Licence and Updates); the Pro window; Welcome;
-- the Quick Look panel, and Quick Look at 260 px;
-- PDF page 1 of an English and an Arabic export (`sips -s format png`);
-- the `macos-26` runner set from Step 1 (`docs/reviews/m02/runner/`).
-
-Run gstack `/design-review` on them. Write `docs/reviews/design-m02.md` with the sections Inputs (paths), Findings (P0/P1/P2), Guard output, Verdict.
-Expected: `design.test.js` and `DesignRenderTests` green; no P0/P1 left; the gate's pass criteria met (RTL mirror correct, every toolbar item labelled in the VoiceOver rotor, Liquid Glass only on system chrome). Fix every P0/P1 in the owning task's files and re-run that task's tests.
-
-- [ ] **Step 9: Stage 8, bloat audit (post)**
-
-The same audit over the final cumulative diff.
-
-- [ ] **Step 10: Stage 9, `/review` + cubic until two consecutive clean rounds**
-
-Run: `cubic review -b $(git merge-base HEAD main) -j`. Read `issues`, fix, and re-run after each batch.
-Expected: two consecutive rounds with no new P0/P1. Record each round in m02.md.
-
-- [ ] **Step 11: Commit the review record**
-
-```bash
-git add docs/reviews/m02.md docs/reviews/design-m02.md docs/reviews/m02 .github/workflows/ci.yml
-git commit -m "docs(review): M02 nine-stage pipeline and design-review record" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-```
-
-- [ ] **Step 12: Merge and push** (D14 authorises pushing to this private repo)
-
-Run: `git checkout main && git pull --ff-only && git merge --no-ff m02-app1-features -m "merge: M02 App 1 reader features" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && make check && git push origin main`
-Expected: `make check` green on `main`; the push succeeds. Then run `graphify update .` (CLAUDE.md Tools).
+- [ ] **Step 4: Procedure P stage 11: merge and push** with the message `merge: M02 App 1 reader features`.
+Expected: `make check` green on `main`; the push succeeds; `graphify update .` runs.
 
 ---
 
 ## Self-review
 
-- **Coverage:** Pro seam (1); folder mode (2–5, 9); outline and find (6, 7); local images / P4 (8); theme picker, Settings tabs and zoom (10; theme CSS is plan 09's); PDF (11, 12); Diagnostics §6.4 (13); drag-and-drop and Open Recent (14); Welcome and `QuickLookSetup` (15); en/nl/fr/ar D6 (16); remote arm64 checks, pipeline, design review, merge (17). The Free/Pro split is enforced in Tasks 1, 9, 10, 12 and 14.
-- **Gaps left on purpose:** folder drops on the Dock icon (Task 14); folders in Open Recent (`DocumentGroup` recents hold documents only); renderer-made strings stay English (CR-2).
-- **Types:** `RenderOptions(mode:theme:baseURL:)`, `scroll(toLine:)`, `find(_:backwards:)`, `readAccessURL`, `FolderIndex.maxFiles`/`markdownExtensions`, `Grants.root(containing:)`, `ProGate.effectiveTheme`, `UpsellFeature`/`ProUpsellView(feature:)`, `Zoom.step`, `QuickLookSetup.settingsPath(macOSMajor:)` and `defaultPaper(for:)` keep one signature throughout. Test helpers are plan 01's `fixtureURL(_:)` and `js(_:_:)` plus this plan's `hosted`, `tempDir`, `write`. `SearchHit.line` and `data-line` are both 1-based file lines.
-
-## Contract additions (no change to existing items; for master §3)
-
-- **RendererWebView:** `public var readAccessURL: URL?`, `public func scroll(toLine: Int) async -> Bool`, `public func find(_: String, backwards: Bool = false) async -> Bool`.
-- **FolderIndex:** `markdownExtensions`, `maxFiles = 5_000`. **BookmarkStore:** `maxEntries = 20`; `save` dedupes; `resolveAll` starts access and prunes, and is called once per launch.
-- **PaperSize / PDF:** `PaperSize.points`, `PDFExportError.printFailed`. **Diagnostics:** `DiagnosticsInfo` and `Diagnostics.current(licence:bundle:)` / `report(_:)`.
-- **QuickLookSetup** (plan 08's interface, built here for Welcome): `settingsURL`, `SettingsPath`, `settingsPath(macOSMajor:)`.
-- **App:** `ProUpsellView(feature:)` in its own file, shown in the `pro` window (`WindowGroup(for: UpsellFeature.self)`); `UpsellFeature` lives in the app until plan 08 Task 12 moves it into TegelStore. Settings is a `TabView` (General | Appearance; plan 03 adds Licence | Updates). `Window("Welcome to Tegel Markdown", id: "welcome")`, `TGWelcomeShown`, `TGZoom`.
-- **Renderer:**
-  - a `data-line` attribute;
-  - `window.tegel.scrollToLine`;
-  - `"image: <src>"` entries in `errors` (not in Quick Look mode);
-  - with `baseHref`, a relative `img` `src` becomes `new URL(src, baseHref).href`;
-  - `addHooks(purify, { fileImages: true })` keeps `file:` only on `img[src]`;
-  - `renderer-version.txt` in the bundle.
+- **Gaps left on purpose:** folder drops on the Dock icon (Task 14); folders in Open Recent (`DocumentGroup` recents hold documents only); renderer-made strings stay English (CR-2); Quick Look shows no local images (K4).
 
 ## Contract change requests
 
-- **CR-1 (pre-approved, conditional: only if Task 8, Step 6 fails; consolidation CR 02-1): serve document images through a `WKURLSchemeHandler` instead of `file:`.**
-  - **Change:**
-    - The CSP becomes `img-src 'self' file: data: tegel-doc:`. A renderer CSP change runs pipeline stage 4 (`/cso`) before the task goes on.
-    - App windows pass `baseHref` as `tegel-doc://<absolute folder path>/`; Quick Look keeps `file:` [F5]. The `fileImages` hook then also keeps `tegel-doc:` on `img[src]` (DOMPurify's default URI list drops it).
-    - The handler serves only files whose `UTType` conforms to `.image` and that sit under `Grants.roots` or the document's own folder. Anything else gets a 404.
-  - **Reason:** WebKit's helper processes may be unable to read user folders in a sandboxed app even after the app holds a security-scoped grant. A scheme handler reads with the app's own grant, so risk P4 closes deterministically. It's about 30 lines and adds no dependency.
+- **CR-1 (accepted as K4, applied unconditionally in Task 8): document images go through a `WKURLSchemeHandler`, never `file:`.** For master §3:
+  - §3.2: with `baseHref` (a `tegel-doc:` URL of the document), a relative `img` `src` becomes `new URL(src, baseHref).href`. CSP `img-src 'self' data: tegel-doc:` and the `fileImages` branch that keeps `tegel-doc:` on `img[src]` only are plan 01's.
+  - §3.3 `RendererWebView`: `readAccessURL` is the grant root the handler serves images from (nil → the document's folder; no `baseURL` → nothing); add `public func loadedImages(outside folder: URL) -> [URL]`.
+  - §3.3 TegelKit: add `extension URL { public func isInside(_ root: URL) -> Bool }`.
+  - **Reason:** WebKit's helper processes can't be relied on to read user folders in a sandboxed app, and a "common ancestor" read root is `/` (S3, S12, CX1, CR-P2-16, CR-P2-24). The handler reads with the app's own grant and enforces the root.
 - **CR-2: add a language option to the renderer.**
   - **Change:** add `lang?: string` to `window.tegel.render` opts and `RenderOptions.language: String?`.
   - **Reason:** the renderer's own strings (truncation notice, Mermaid error label, front-matter summary) would follow the UI language (D6). Without it, the Arabic, Dutch and French UIs show those few strings in English inside the document view. Plan 02 ships without it; it can land in v1.0.1.
+- **CR-3: `PDFExporter.makePDFData(_:paper:) async throws -> Data`** (Task 11); `export(_:to:paper:)` writes its result. Task 12 and plan 08's upsell preview (K18) call it.
+- **CR-4 (K18): `UpsellFeature` stays app-side** in `ProUpsellView.swift`; master §3.3 drops its TegelStore declaration and `UpsellPolicy`.

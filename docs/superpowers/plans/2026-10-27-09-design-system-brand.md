@@ -33,12 +33,15 @@
 
 ## Global Constraints
 
-- **Branch:** `m09-design`. BASE is the SHA from `git merge-base HEAD main` at Task 0. Commits use `git add <paths>`, and every message ends with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
-- **Build Mac:** Intel iMac19,1, macOS 15.7, Xcode 26.3 (17C529), bun at `~/.local/bin/bun`. Never claim macOS 26/27 or Apple Silicon behaviour from a local run; name the machine that produced each piece of evidence (CLAUDE.md).
+Master §2/§3 and CLAUDE.md apply (build Mac and evidence rules, product rules 1–9 including imagery, audio and holiday theming, approvals, Procedure P). This plan's deltas:
+
+- **Branch:** `m09-design`. Both review bases are `$DA` from Task 5 Step 1, the merge-base right after `main` (with plan 01) is merged in, so plan 01's reviewed diff stays out of scope.
+- **Commits:** a step written "Commit `<paths>`: `<msg>`" means `git add <paths> && git commit -m "<msg>" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`. Never `git add -A`.
+- **Build Mac tools:** Xcode 26.3 (17C529), bun at `~/.local/bin/bun`.
 - **Liquid Glass evidence** comes only from the GitHub `macos-26` runner (arm64) [V16]. No Scaleway lease is booked for it; the only pre-launch leases are L1 (G0) and L2 (Thu 26 Nov).
-- **Renderer CSP, verbatim and unchanged:** `default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' file: data:; font-src 'self'`. Fonts come only from the system, through generic families or `local()` [V3].
+- **Renderer CSP:** master §3's, verbatim (`default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: tegel-doc:; font-src 'self'`); this plan never changes it. Fonts come only from the system, through generic families or `local()` [V3].
+- **Document direction (plan 01, CR-P1-2):** `dir="auto"` sits on top-level blocks only; nested `li`, `th`, `td` and `p` inherit their container's direction. Theme CSS reads direction with `:dir()`, never with a `[dir="rtl"]` or `[dir="ltr"]` selector, which misses every block whose direction comes from `dir="auto"` (guarded in Task 6).
 - **No bundled font files and no web fonts** on the site or in the apps. A face would have to earn its place in a recorded decision, and none has.
-- **Imagery** is text, code, diagrams and geometric shapes only. No faces, figures, animals, mascots or figurative Delft motifs. Arabic sample text is never Qur'an or hadith (rule 3). No audio anywhere (rule 4). No holiday theming (rule 5).
 - **Letter-spacing:** every shipped CSS file has zero non-zero `letter-spacing` (guarded). Tracking comes from the system's optical sizes (apple-design typography Rule 2), and Arabic must never be tracked.
 - **Colour tokens** are 6-digit hex, so Mermaid can consume them [V17].
 - **Contrast floors:** body text ≥ 7:1; muted text, links and syntax ≥ 4.5:1; non-text UI and focus ≥ 3:1. These are computed by the guards, never asserted by hand.
@@ -121,10 +124,10 @@
 | `docs/design/proto/` | Prototype renders (PNG) and hero variants (HTML) | 4, 10 |
 | `Apps/Markdown/App/AppIcon.icon/` | `icon.json` + `Assets/*.svg` | 11 |
 | `project.yml` | `ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon` on the Markdown app target | 11 |
-| `.github/workflows/design-shots.yml` | `workflow_dispatch` on `macos-14` and `macos-26`: font probe, icon render, app screenshots | 11 |
+| `.github/workflows/design-shots.yml` | `workflow_dispatch` only: one build on `macos-26` with Xcode 26.3, then font probe, icon render and app screenshots on `macos-14` and `macos-26` from that artefact | 11 |
 | `scripts/window-shot.sh` | Capture one app window by owner name, with or without the native shadow | 12 |
 | `docs/design/templates/{gallery,caption}.html` | PH gallery 1270×760 frame; demo caption band 1920×120 | 12 |
-| `docs/reviews/design-m09.md`, `docs/reviews/m09.md` | Design review and 9-stage pipeline results | 13, 14 |
+| `docs/reviews/design-m09.md`, `docs/reviews/m09.md` | Design review and 9-stage pipeline results | 5, 13, 14 |
 
 ---
 
@@ -134,7 +137,7 @@
 
 **Files:** none.
 
-- [ ] **Step 1:** Run `git switch -c m09-design main && git merge-base HEAD main`. Record the SHA as BASE for `docs/reviews/m09.md` (Task 14).
+- [ ] **Step 1:** Run `git switch -c m09-design main`.
 - [ ] **Step 2:** Run `git status --short` (expected: empty). If `Renderer/` exists, also run `make check`, and record the pass/fail counts as the baseline.
 
 ### Task 1: `DESIGN.md` (Tue 27 – Wed 28 Oct)
@@ -220,7 +223,7 @@
     - `font-variant-numeric: tabular-nums` in tables and prices (WDG 4.5);
     - `text-wrap: balance` on headings [V6];
     - `hanging-punctuation: first last` on prose [V6].
-- [ ] **Step 6: Write §7 Renderer themes:** the tables in Task 6's Interfaces block, copied verbatim. They are the copy-ready contract for plan 02.
+- [ ] **Step 6: Write §7 Renderer themes.** It names `Renderer/src/css/{base,paper,ink,studio,print}.css` (Task 6) as the only home of every theme value, lists the required `--tg-*` token names and the three theme characters from Design direction, and states the rules the CSS follows: dark blocks are `screen and` + `:not([data-mode="print"])`, direction is read with `:dir()`, and Urdu needs `lang="ur"` for Nastaliq. It copies no table: plan 02 reads the CSS.
 - [ ] **Step 7: Write §8 Motion** (hig-foundations motion "make motion optional"; apple-design animation-patterns review checklist).
   - **App:** system animations only. No custom animation longer than 0.25 s; none on document load. Outline jumps use `scroll-behavior: smooth` only under `prefers-reduced-motion: no-preference`.
   - **Site:** no motion that the user didn't trigger, and no scroll reveals. Hover/focus colour transitions are ≤ 150 ms and removed under reduced motion (WDG 6.1).
@@ -280,9 +283,7 @@
     - D-2: the Pro prompt is a `Window`, not a sheet;
     - D-3: plan 02's `68ch` becomes em measures [V5];
     - D-4: the ink Arabic face (open until Task 10).
-- [ ] **Step 13: Check, then commit.**
-  - Run `grep -c '^## ' DESIGN.md` (expected `13`) and `grep -n -i -E 'lorem|TBD|TODO' DESIGN.md docs/design/decisions.md` (expected: no output).
-  - `git add DESIGN.md docs/design/decisions.md && git commit -m "docs(design): DESIGN.md single source of truth and decisions log" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`
+- [ ] **Step 13: Check, then commit.** Run `grep -n -i -E 'lorem|TBD|TODO' DESIGN.md docs/design/decisions.md`. Expected: no output. Commit `DESIGN.md docs/design/decisions.md`: "docs(design): DESIGN.md single source of truth and decisions log"
 
 ### Task 2: Site tokens and the first design guards (TDD, Wed 28 Oct)
 
@@ -342,7 +343,7 @@ test('UI strings and templates contain no emoji', () => {
   - Temporarily add `letter-spacing: .02em` to `tokens.css`: the letter-spacing test fails.
   - Temporarily add `background: linear-gradient(red, blue)`: the banned-pattern test fails.
   - Revert all three; PASS again. Note the three failure lines in the commit body.
-- [ ] **Step 6: Commit.** `git add Renderer/test/design.test.js site/static/css/tokens.css && git commit -m "test(design): contrast, letter-spacing, banned-pattern and emoji guards; site tokens" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`
+- [ ] **Step 6: Commit** `Renderer/test/design.test.js site/static/css/tokens.css`: "test(design): contrast, letter-spacing, banned-pattern and emoji guards; site tokens"
 
 ### Task 3: App UI spec (Thu 29 – Fri 30 Oct)
 
@@ -465,7 +466,7 @@ test('UI strings and templates contain no emoji', () => {
 - [ ] **Step 8: Arabic UI mirror** (hig-foundations right-to-left).
   - SwiftUI mirrors layout under the `ar` locale: the sidebar moves to the right, the inspector to the left, and toolbar order reverses. `sidebar.trailing` flips automatically.
   - Don't flip the app icon, the logo or the `#` glyph. Shortcuts are unchanged.
-  - Document direction is independent of UI direction (`dir="auto"` per block, master §3.2).
+  - Document direction is independent of UI direction: `dir="auto"` on each top-level block, inherited by the blocks nested in it (master §3.2, plan 01 CR-P1-2).
   - Screenshot list for review: the AR UI with an EN document, and the EN UI with an AR document.
 - [ ] **Step 9: Accessibility and Liquid Glass.**
   - **Accessibility:** VoiceOver labels for every toolbar item and outline row, and a full keyboard path through Welcome, Settings and the Pro window.
@@ -487,8 +488,8 @@ test('UI strings and templates contain no emoji', () => {
   | Outline, find | yes | no |
   | Size | user | `preferredContentSize` 820×900 (plan 01) |
 
-- [ ] **Step 11: Check.** Run `grep -c '┌' docs/design/app-ui-spec.md` (expected ≥ 4 wireframes: window, folder, Welcome, Pro) and `grep -n -E '\b(MDG|hig-)' docs/design/app-ui-spec.md | wc -l` (expected ≥ 15 citations).
-- [ ] **Step 12: Commit.** `git add docs/design/app-ui-spec.md && git commit -m "docs(design): app UI spec: windows, menus, Settings, Welcome, Pro, states, RTL, Liquid Glass, Quick Look" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`
+- [ ] **Step 11: Check.** Run `grep -n -i -E 'lorem|TBD|TODO' docs/design/app-ui-spec.md`. Expected: no output.
+- [ ] **Step 12: Commit** `docs/design/app-ui-spec.md`: "docs(design): app UI spec: windows, menus, Settings, Welcome, Pro, states, RTL, Liquid Glass, Quick Look"
 
 ### Task 4: Site spec and the OG template (Fri 30 – Sat 31 Oct)
 
@@ -558,30 +559,20 @@ sips -g pixelWidth -g pixelHeight docs/design/proto/og-v1.png
 ```
 
   Expected: `pixelWidth: 1200`, `pixelHeight: 630`. Open the PNG with the Read tool and check that it shows the logo, the title and the line in SF Pro.
-- [ ] **Step 6: Commit.** `git add docs/design/site-spec.md docs/design/templates/og.html docs/design/proto/og-v1.png && git commit -m "docs(design): site spec, OG template" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`
+- [ ] **Step 6: Commit** `docs/design/site-spec.md docs/design/templates/og.html docs/design/proto/og-v1.png`: "docs(design): site spec, OG template"
 
 ### Task 5: Drop A gate and merge (Mon 2 Nov, after plan 01 merges)
 
 **Files:** Create `docs/reviews/m09.md` (the Drop A section; Task 14 completes it).
 
-Drop A runs pipeline stages 2, 3, 4 and 9 before it merges. Stages 1 and 5–8 run in Task 14.
+Run **Procedure P (master §11)** stages 2, 3, 4 and 9 only: master §11 names this pre-merge subset for Drop A. Stages 1 and 5–8 run in Task 14 over `$DA...HEAD`, which covers Drop A again. Deltas:
 
-- [ ] **Step 1, stage 2 (baseline):** Run `git fetch && git merge main` (this brings in plan 01's `Renderer/`). Resolve conflicts. Then run `DA=$(git merge-base HEAD main)`, the Drop A review base, so plan 01's already-reviewed diff stays out of scope. Then run `git status --short && make check && (cd Renderer && ~/.local/bin/bun test test/design.test.js)`.
-  - Expected: a clean tree and all green. Record the counts.
-  - The letter-spacing guard now also scans plan 01's CSS. If it finds a value, stop and remove it in this task, and note it in the commit.
-- [ ] **Step 2, stage 3:** a cold code review of `git diff $DA...HEAD` with a code-review subagent. Fix every P0/P1.
-- [ ] **Step 3, stage 4:** `/cso`, scoped to:
+- [ ] **Step 1: Merge `main` and set the base.** Run `git fetch && git merge main`, which brings in plan 01's `Renderer/`, Makefile and guards, and resolve conflicts. Then `DA=$(git merge-base HEAD main)`; record it in m09.md. Stage 2 runs `make check && (cd Renderer && ~/.local/bin/bun test test/design.test.js)`. The letter-spacing guard now also scans plan 01's CSS: if it finds a value, remove it in this task and say so in the commit.
+- [ ] **Step 2: Stages 3, 4 and 9 on `git diff $DA...HEAD`.** Stage 9 runs `cubic review -b $DA -j`. The `/cso` scope:
   - `docs/design/templates/og.html`'s inline query script, which must set text through `textContent` only, make no external request and never ship under `site/public`;
   - `site/static/css/tokens.css`;
   - `Renderer/test/design.test.js`, which only reads files.
-  Fix every P0/P1.
-- [ ] **Step 4, stage 9:** run `/review`, then `cubic review -b $DA -j` (the key is `issues`). Fix and repeat until two consecutive rounds show no new P0/P1. No agent writes to the tree during a round.
-- [ ] **Step 5: Record.** Write the Drop A section of `docs/reviews/m09.md`:
-  - the base `$DA`;
-  - the counts and findings from stages 2, 3, 4 and 9;
-  - that stages 1 and 5–8 run in Task 14 over BASE...HEAD, which covers Drop A again.
-  Never skip silently (CLAUDE.md). Commit it: `git add docs/reviews/m09.md && git commit -m "docs(review): m09 Drop A stages 2, 3, 4 and 9" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`.
-- [ ] **Step 6: Merge.** `git switch main && git merge --no-ff m09-design -m "Merge m09 Drop A: DESIGN.md, specs, site tokens, guards" && git push origin main && git switch m09-design`.
+- [ ] **Step 3: Record and merge.** Write the Drop A section of m09.md: `$DA`, the counts and findings of stages 2, 3, 4 and 9, and the note that stages 1 and 5–8 run in Task 14. Commit `docs/reviews/m09.md`: "docs(review): m09 Drop A stages 2, 3, 4 and 9". Then merge and push as in P stage 11, with the message "merge: m09 Drop A", and `git switch m09-design`.
 
 ---
 
@@ -597,7 +588,7 @@ Drop A runs pipeline stages 2, 3, 4 and 9 before it merges. Stages 1 and 5–8 r
 
 **Interfaces:**
 - **Consumes:**
-  - master §3.2 (`dir="auto"` blocks, `pre`/`code` LTR);
+  - master §3.2 (`pre`/`code` LTR) and plan 01's direction rule: `dir="auto"` on top-level blocks only, so `li`, `td` and nested `p` take their direction by inheritance, and only `:dir()` sees it;
   - plan 01 `RendererWebView.render(_:options:)` and the `js(_:_:)` test helper;
   - plan 01's unstyled `base.css` (bidi rules only) and its empty `:root[data-theme="paper"] {}`.
 - **Produces** (this plan owns every theme value and token name; plan 02 Task 10 then only wires the picker and ThemeTests):
@@ -712,6 +703,9 @@ for (const t of THEMES) for (const dark of [false, true]) test(`${t} ${dark ? 'd
   const s = synVars(dark);
   for (const k of ['keyword','string','number','comment','title','type','meta','add','del']) expect([t, k, ratio(s[`--tg-syn-${k}`], v['--tg-code-bg']) >= 4.5]).toEqual([t, k, true]);
 });
+test('theme CSS reads direction with :dir(), never a [dir="rtl"|"ltr"] selector', () => {
+  for (const f of files('Renderer/src/css', ['.css'])) expect([f, read(f)]).not.toEqual([f, expect.stringMatching(/\[dir\s*=\s*["']?(rtl|ltr)/i)]);
+});
 ```
 
 - [ ] **Step 2: Write the failing Swift tests.**
@@ -761,8 +755,10 @@ const y0 = top(0); for (let i = 1; i < t.length; i++) if (top(i) > y0 + 1) retur
   - Link `ink.css` and `studio.css` in `index.html` in this order: base, paper, ink, studio, print. Plan 02 Task 10 asks for the same order.
   - Run `make renderer`.
 - [ ] **Step 5: Run both commands again.** Expected: PASS. Record the measured characters per line for each theme in the commit body.
-- [ ] **Step 6: Watch a guard fail.** Temporarily change ink's dark block to plain `@media (prefers-color-scheme: dark)`. `testPrintModeStaysLightInDarkAppearance` must fail for ink. Revert.
-- [ ] **Step 7: Commit.** `git add Renderer/src Renderer/test/design.test.js Packages/TegelKit/Sources/TegelKit/Resources/Renderer Packages/TegelKit/Tests/TegelKitTests/FontCoverageTests.swift Packages/TegelKit/Tests/TegelKitTests/WebView/DesignRenderTests.swift && git commit -m "feat(renderer): paper, ink and studio themes per DESIGN.md: RTL code and ink aliases, em measures, print stays light" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`
+- [ ] **Step 6: Watch the guards fail.**
+  - Temporarily change ink's dark block to plain `@media (prefers-color-scheme: dark)`. `testPrintModeStaysLightInDarkAppearance` must fail for ink. Revert.
+  - Temporarily add `[dir="rtl"] p { line-height: 2 }` to `ink.css`. The `:dir()` guard must fail, naming `Renderer/src/css/ink.css`. Revert; both pass.
+- [ ] **Step 7: Commit** `Renderer/src Renderer/test/design.test.js Packages/TegelKit/Sources/TegelKit/Resources/Renderer Packages/TegelKit/Tests/TegelKitTests/FontCoverageTests.swift Packages/TegelKit/Tests/TegelKitTests/WebView/DesignRenderTests.swift`: "feat(renderer): paper, ink and studio themes per DESIGN.md: RTL code and ink aliases, em measures, print stays light"
 
 ### Task 7: Mermaid follows the theme (TDD, Wed 4 Nov)
 
@@ -771,7 +767,7 @@ const y0 = top(0); for (let i = 1; i < t.length; i++) if (top(i) > y0 + 1) retur
 - Test: `DesignRenderTests.swift` (extend)
 
 **Interfaces:**
-- Consumes: plan 01's render step 4, which keeps `securityLevel: 'strict'`, `startOnLoad: false` and `suppressErrorRendering: true` unchanged.
+- Consumes: plan 01's render step 4, which keeps `securityLevel: 'strict'`, `startOnLoad: false`, `suppressErrorRendering: true` and `htmlLabels: false` unchanged, and inserts every SVG, re-renders included, through its `DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true }, RETURN_DOM_FRAGMENT: true })` pass (S8).
 - Produces:
   - `mermaidVars(): Record<string,string|boolean>` (module-private in `page.js`), which reads `getComputedStyle(document.documentElement)`;
   - each `div.mermaid` keeps its source in `dataset.src`, set as text and never parsed as HTML;
@@ -787,7 +783,7 @@ const y0 = top(0); for (let i = 1; i < t.length; i++) if (top(i) > y0 + 1) retur
 | `fontFamily` | `--tg-font` |
 | `fontSize` | `parseFloat(--tg-size) * 0.875 + 'px'` |
 
-`mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true, theme: 'base', themeVariables: mermaidVars() })`.
+`mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true, htmlLabels: false, theme: 'base', themeVariables: mermaidVars() })`. The fill test below passes only because that svg-profile pass keeps Mermaid's own `<style>`.
 
 - [ ] **Step 1: Write the failing test** `testMermaidFollowsAppearanceChange`.
   - Render `Fixtures/markdown/mermaid-basic.md`, paper, `.darkAqua`.
@@ -796,8 +792,8 @@ const y0 = top(0); for (let i = 1; i < t.length; i++) if (top(i) > y0 + 1) retur
   - Also assert that `document.querySelector('.mermaid').dataset.src` contains `graph TD`, the first diagram in `mermaid-basic.md` (plan 01 Task 2).
 - [ ] **Step 2: Run** `swift test --package-path Packages/TegelKit --filter DesignRenderTests/testMermaidFollowsAppearanceChange`. Expected: FAIL, because Mermaid's default theme fill isn't the token.
 - [ ] **Step 3: Implement** per the Interfaces block, then run `make renderer`.
-- [ ] **Step 4: Run** the test, then the whole `DesignRenderTests` class, then `cd Renderer && ~/.local/bin/bun test`. Expected: PASS; plan 01's renderer tests unchanged.
-- [ ] **Step 5: Commit.** `git add Renderer/src/page.js Packages/TegelKit/Sources/TegelKit/Resources/Renderer Packages/TegelKit/Tests/TegelKitTests/WebView/DesignRenderTests.swift && git commit -m "feat(renderer): Mermaid base theme from --tg tokens; re-render on appearance change" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`
+- [ ] **Step 4: Run** the test, then the whole `DesignRenderTests` class, then `cd Renderer && ~/.local/bin/bun test`, then plan 01's `swift test --package-path Packages/TegelKit --filter HostileInputTests`. Expected: PASS; plan 01's renderer tests unchanged, including the `foreignObject` count of 0.
+- [ ] **Step 5: Commit** `Renderer/src/page.js Packages/TegelKit/Sources/TegelKit/Resources/Renderer Packages/TegelKit/Tests/TegelKitTests/WebView/DesignRenderTests.swift`: "feat(renderer): Mermaid base theme from --tg tokens; re-render on appearance change"
 
 ### Task 8: Sample documents (Wed 4 Nov)
 
@@ -888,7 +884,7 @@ sync:
 - [ ] **Step 4: Check that they render.**
   - Run `make run-app FILES="docs/design/samples/ar-spec.md docs/design/samples/mixed.md"`. Expected: headings and paragraphs right-aligned, code blocks LTR, Mermaid flowing right to left, no Courier-looking Arabic in code.
   - Run `grep -c -P '[\x{1F300}-\x{1FAFF}]' docs/design/samples/*.md`. Expected: 0 for every file.
-- [ ] **Step 5: Commit.** `git add docs/design/samples && git commit -m "docs(design): EN, AR and mixed-direction sample documents" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`
+- [ ] **Step 5: Commit** `docs/design/samples`: "docs(design): EN, AR and mixed-direction sample documents"
 
 ### Task 9: Icon concepts and the legibility sheet (Thu 5 Nov)
 
@@ -929,7 +925,7 @@ ls docs/design/icons/concepts/*.iconset | wc -l
   - each app is still identifiable at 16 px in a 2-tone (greyscale) check.
 
   A concept that fails is marked rejected, with the reason.
-- [ ] **Step 5: Commit.** `git add docs/design/icons docs/design/proto/icons-legibility.png .gitignore && git commit -m "design(icons): Markdown, Data and studio concepts with 16–1024 legibility sheet" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`
+- [ ] **Step 5: Commit** `docs/design/icons docs/design/proto/icons-legibility.png .gitignore`: "design(icons): Markdown, Data and studio concepts with 16–1024 legibility sheet"
 
 ### Task 10: Prototypes and decisions, with a USER CHECKPOINT (Thu 5 – Fri 6 Nov)
 
@@ -973,7 +969,7 @@ ls docs/design/icons/concepts/*.iconset | wc -l
   - Record the answers as `approved`, by "founder", with the date.
   - If there's no answer within 24 h, mark the recommendations `provisional` and continue. A later pick reruns Tasks 11–12 for that item only.
 - [ ] **Step 5: Apply decided changes.** If D-4 or D-8 differs from the current CSS, edit `ink.css`, `studio.css` or `base.css` and re-run Task 6's commands. Expected: PASS.
-- [ ] **Step 6: Commit.** `git add docs/design/proto docs/design/decisions.md Packages/TegelKit/Tests/TegelKitTests/WebView/DesignRenderTests.swift Renderer/src Packages/TegelKit/Sources/TegelKit/Resources/Renderer && git commit -m "design: prototypes and recorded decisions D-1, D-4..D-8" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`
+- [ ] **Step 6: Commit** `docs/design/proto docs/design/decisions.md Packages/TegelKit/Tests/TegelKitTests/WebView/DesignRenderTests.swift Renderer/src Packages/TegelKit/Sources/TegelKit/Resources/Renderer`: "design: prototypes and recorded decisions D-1, D-4..D-8"
 
 ### Task 11: App icon build, guard and runner evidence (TDD, Fri 6 – Sat 7 Nov)
 
@@ -1018,31 +1014,54 @@ test.skipIf(process.platform !== 'darwin')('every app icon compiles to all ten m
 - [ ] **Step 6: Check the macOS 14/15 fallback** (build Mac, macOS 15.7).
   - Run `qlmanage -t -s 512 -o docs/design/proto "<built app>"`. Then `iconutil -c iconset "<built app>/Contents/Resources/AppIcon.icns" -o /tmp/ai.iconset && ls /tmp/ai.iconset | wc -l` → `10`.
   - Read the thumbnail. Expected: the chosen glyph on its ground, inside the macOS shape (the Xcode-generated image [V12]).
-- [ ] **Step 7: Write `design-shots.yml`.**
-  - Trigger: `workflow_dispatch` only. Matrix `os: [macos-14, macos-26]` [V16].
-  - Step 1, font probe:
+- [ ] **Step 7: Write `design-shots.yml`** (K13). `workflow_dispatch` only, with the input `run_app_shots: boolean`, and `permissions: { contents: read }`. Every `uses:` is pinned to a commit SHA, with the tag in a comment (resolved 27 Oct via the GitHub API):
+
+  | Action | Tag | Commit SHA |
+  |---|---|---|
+  | `actions/checkout` | v7.0.1 | `3d3c42e5aac5ba805825da76410c181273ba90b1` |
+  | `actions/upload-artifact` | v7.0.2 | `cf430e030ddbb5b0abf93d22962f4752f3646cd9` |
+  | `actions/download-artifact` | v8.0.2 | `9000827ccba6bdab643e8b6fd33ac0654aef8333` |
+
+  - **Job `build`**, on `macos-26`:
+    1. checkout, then `sudo xcode-select -s /Applications/Xcode_26.3.app && xcodebuild -version`: the build Mac's Xcode, not the image's newer default;
+    2. xcodegen 2.46.0 from its release zip behind the sha256 check, with the same env values and lines as plan 01's `ci.yml`;
+    3. `make build`;
+    4. `tar -cf app.tar -C build/Build/Products/Debug "Tegel Markdown.app"` (an artefact drops file modes; the tar keeps them), uploaded as `app`.
+  - **Job `shots`**, `needs: build`, matrix `os: [macos-14, macos-26]` [V16]. The `macos-14` image has no Xcode 26 (runner-images README, checked 27 Oct), so this job never builds. It checks out, downloads `app`, runs `tar -xf app.tar`, then:
+    1. the font probe:
 
 ```bash
 ls /System/Library/Fonts /System/Library/Fonts/Supplemental | grep -E 'GeezaPro|Damascus|ArialHB|NotoNastaliq|Al Nile|Charter|NewYork|SFArabic|SFHebrew' > fonts.txt
 ```
 
-  - Step 2: `xcodegen generate`, then build Debug unsigned with `CODE_SIGNING_ALLOWED=NO`.
-  - Step 3: `qlmanage -t -s 1024 -o shots "<built app>"`, and `swift -e` code that writes `NSWorkspace.shared.icon(forFile:)` at 16, 32, 128 and 512 to PNG.
-  - Step 4, when `run_app_shots` is set: open `docs/design/samples/en-spec.md` and `ar-spec.md` in the app and run `screencapture -x shots/window-<n>.png`. If the runner blocks capture (TCC), the step logs that and continues.
-  - Step 5: upload `fonts.txt` and `shots/` as `design-shots-${{ matrix.os }}`.
-- [ ] **Step 8: Run it** on the runners. This needs `gh auth login` by the user (CLAUDE.md Tools); if that hasn't happened, ask, and record the step as blocked.
+    2. `qlmanage -t -s 1024 -o shots "Tegel Markdown.app"`, and `swift -e` code that writes `NSWorkspace.shared.icon(forFile:)` at 16, 32, 128 and 512 to PNG;
+    3. when `run_app_shots` is set: open `docs/design/samples/en-spec.md` and `ar-spec.md` in the app and run `screencapture -x shots/window-<n>.png`. If the runner blocks capture (TCC), the step logs that and continues;
+    4. upload `fonts.txt` and `shots/` as `design-shots-${{ matrix.os }}`.
+
+  Run `make test-shell`. Expected: `env_test: PASS` and exit 0, so plan 01's guard accepts every pin. Then temporarily change one `uses:` to `@v7.0.1` and re-run. Expected: exit 1, listing that `design-shots.yml` line. Revert.
+- [ ] **Step 8: Commit** `Apps/Markdown/App/AppIcon.icon project.yml Renderer/test/design.test.js .github/workflows/design-shots.yml`: "feat(icon): Tegel Markdown AppIcon.icon with ten-size actool guard; design-shots workflow"
+- [ ] **Step 9: Land the workflow on `main`, then run it on the branch.** GitHub dispatches only workflows that exist on the default branch. This needs `gh auth login` by the user (CLAUDE.md Tools); if that hasn't happened, ask, and record the step as blocked.
 
 ```bash
-git push origin m09-design && gh workflow run design-shots.yml --ref m09-design -f run_app_shots=false
-gh run watch "$(gh run list --workflow design-shots.yml -L1 --json databaseId -q '.[0].databaseId')" && gh run download -D docs/design/proto/runner
+git switch main && git pull --ff-only && git checkout m09-design -- .github/workflows/design-shots.yml
+git commit -m "ci: design-shots workflow, dispatch only" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+  Before pushing, a cold code-review subagent reviews `git show HEAD` for: SHAs equal to the table, `permissions: contents: read`, `workflow_dispatch` only, no secrets, the checksum before `unzip`, `xcode-select` before `make build`, and no build step in `shots`. Expected: no P0/P1; fix and amend until clean. The branch doesn't merge `main` back: it already holds the identical file, so the final merge adds it cleanly and `$DA` stays valid.
+
+```bash
+git push origin main && git switch m09-design && git push origin m09-design
+gh workflow run design-shots.yml --ref m09-design -f run_app_shots=false
+ID=$(gh run list --workflow design-shots.yml --branch m09-design -L1 --json databaseId -q '.[0].databaseId')
+gh run watch "$ID" && gh run download "$ID" -n design-shots-macos-14 -n design-shots-macos-26 -D docs/design/proto/runner
 ```
 
   Expected:
+  - the `build` job prints `Xcode 26.3`, and both `shots` legs start from its artefact;
   - `docs/design/proto/runner/design-shots-macos-26/` contains the Liquid Glass icon renders;
   - `fonts.txt` lists Damascus and GeezaPro on both runners.
 
-  Record the results in `decisions.md` D-4/D-5, naming the machine. If `macos-14` has been retired, record "n/a: image retired".
-- [ ] **Step 9: Commit.** `git add Apps/Markdown/App/AppIcon.icon project.yml Renderer/test/design.test.js .github/workflows/design-shots.yml docs/design/proto docs/design/decisions.md && git commit -m "feat(icon): Tegel Markdown AppIcon.icon with ten-size actool guard; design-shots workflow" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`
+  Record the results in `decisions.md` D-4/D-5, naming the machine. GitHub's runner-images notice ends `macos-14` support on 2 Nov: if that leg gets no runner, cancel it and record "n/a: image retired". Commit `docs/design/proto docs/design/decisions.md`: "design(icon): runner icon renders and font probe".
 
 ### Task 12: Screenshot, caption, gallery and OG system (Sat 7 Nov)
 
@@ -1089,7 +1108,7 @@ ffmpeg -hide_banner -y -loop 1 -t 3 -i docs/design/proto/win-en-light.png -loop 
 ```
 
   Expected: `video,1920,1080` and no audio stream (rule 4).
-- [ ] **Step 5: Commit.** `git add scripts/window-shot.sh docs/design/templates docs/design/proto/gallery-sample.png docs/design/proto/caption-sample.png && git commit -m "design: window-shot script, PH gallery and caption-band templates" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`
+- [ ] **Step 5: Commit** `scripts/window-shot.sh docs/design/templates docs/design/proto/gallery-sample.png docs/design/proto/caption-sample.png`: "design: window-shot script, PH gallery and caption-band templates"
 
 ### Task 13: Design review gate runbook and the m09 design review (Sun 8 Nov)
 
@@ -1110,74 +1129,22 @@ ffmpeg -hide_banner -y -loop 1 -t 3 -i docs/design/proto/win-en-light.png -loop 
 
 - [ ] **Step 1:** Write the table into DESIGN.md §12.
 - [ ] **Step 2: Run the m09 review.** Use `/design-review` on Task 9's legibility sheet, `theme-*.png`, `hero-*.png`, `og-v1.png`, `gallery-sample.png` and the runner icon renders. Record the result in `docs/reviews/design-m09.md`. Fix every P0/P1 in the owning task's files, and re-run that task's tests.
-- [ ] **Step 3: Self-review this plan with the plan-design-review lens.** Record the seven ratings and their gaps in `design-m09.md`:
-
-  | Pass | Score | Note |
-  |---|---|---|
-  | Information architecture | 8/10 | single + folder + inspector |
-  | States | 8/10 | table in Task 3 |
-  | Journey | 8/10 | Welcome → Space → window → Pro only on intent |
-  | AI slop | 9/10 | guarded list |
-  | Design system | 9/10 | |
-  | Responsive and accessibility | 8/10 | |
-  | Unresolved decisions | 7/10 | D-1, D-4…D-8 until the founder answers |
-
-  Gaps to name: Settings has no wireframe (the Form is standard); Data app specifics are deferred to plan 06.
-- [ ] **Step 4: Commit.** `git add DESIGN.md docs/reviews/design-m09.md && git commit -m "docs(design): review gates for m01–m06; m09 design review" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`
+- [ ] **Step 3: Commit** `DESIGN.md docs/reviews/design-m09.md`: "docs(design): review gates for m01–m06; m09 design review"
 
 ### Task 14: 9-stage pipeline, merge (Mon 9 Nov)
 
 **Files:** Modify `docs/reviews/m09.md` (Task 5 created it with the Drop A section).
 
-The diff touches renderer HTML/JS (`page.js`, `index.html`), so stage 4 runs `/cso`.
+Run **Procedure P (master §11)** with id `m09`, branch `m09-design` and `BASE=$DA` from m09.md (Task 5), not a fresh merge-base: Drop A is already on `main`, and `$DA` keeps plan 01's diff out while covering Drop A again. The diff touches renderer HTML/JS (`page.js`, `index.html`), so stage 4 runs. Deltas:
 
-- [ ] **Step 1, stage 1 (bloat, pre):** run the `code-upgrade` Bloat Audit on `git diff BASE...HEAD` and the touched files. Strip any bloat this plan introduced; queue pre-existing findings as questions.
-- [ ] **Step 2, stage 2 (baseline):** `git status --short`, then `make check && (cd site && ~/.local/bin/bun test) && (cd Renderer && ~/.local/bin/bun test test/design.test.js)`. Record the counts.
-- [ ] **Step 3, stage 3:** a cold code review of `git diff BASE...HEAD` (gstack `/review` or a code-review subagent).
-- [ ] **Step 4, stage 4:** `/cso` covering `page.js`, the `@font-face local()` aliases under the CSP, `design-shots.yml` (no secrets, `workflow_dispatch` only) and `window-shot.sh`.
-- [ ] **Step 5, stage 5:** a `/codex` challenge on these questions:
-  - can a document still print dark?
-  - can a missing local face break Arabic joining?
-  - can a Mermaid re-render inject markup?
-- [ ] **Step 6, stage 6 (consolidate):** dedupe and classify every finding as P0, P1 or P2.
-- [ ] **Step 7, stage 7 (patch + re-review):** fix every P0/P1 and the actionable P2s, then re-run the affected tasks' tests.
-- [ ] **Step 8, stage 8 (bloat, post):** re-run the Bloat Audit over the final diff.
-- [ ] **Step 9, stage 9:** run `/review`, then `cubic review -b BASE -j` (the key is `issues`). Repeat until two consecutive rounds show no new P0/P1.
-- [ ] **Step 10:** Complete `docs/reviews/m09.md` below its Drop A section. Include:
-  - stages 1–9 with their counts;
-  - a pointer to the Drop A section from Task 5;
-  - the D-# statuses;
-  - every stage that couldn't run, with the reason and what ran instead.
-
-  Then: `git add docs/reviews/m09.md && git commit -m "docs(review): m09 pipeline results" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`.
-- [ ] **Step 11: Merge.** `git switch main && git merge --no-ff m09-design -m "Merge m09: design system and brand" && git push origin main`. Then run `graphify update .` (CLAUDE.md Tools).
+- [ ] **Step 1: Stage 2** runs `make check && (cd site && ~/.local/bin/bun test) && (cd Renderer && ~/.local/bin/bun test test/design.test.js)`.
+- [ ] **Step 2: Stage 4, `/cso` scope:** `page.js` (the Mermaid re-render and its sanitised insertion), the `@font-face local()` aliases under the CSP, `design-shots.yml` (`workflow_dispatch` only, SHA pins, no secrets, the xcodegen checksum, the artefact hand-off) and `window-shot.sh`.
+- [ ] **Step 3: Stage 5 questions for `/codex`:** can a document still print dark? Can a missing local face break Arabic joining? Can a Mermaid re-render inject markup?
+- [ ] **Step 4: Stage 10 is Task 13**, the m09 design review. Its P0/P1 findings join stage 6.
+- [ ] **Step 5: Record.** Complete m09.md below its Drop A section: stages 1–9 with their counts, a pointer to the Drop A section, the D-# statuses, and every stage that couldn't run, with the reason and what ran instead. Commit `docs/reviews/m09.md`: "docs(review): m09 pipeline results".
+- [ ] **Step 6: Merge and push as in P stage 11**, with the message "merge: m09".
 
 ---
-
-## Self-review (writing-plans)
-
-- **Spec coverage**, deliverable → task:
-
-  | # | Deliverable | Task(s) |
-  |---|---|---|
-  | 1 | DESIGN.md | 1 |
-  | 2 | Renderer themes | 6 (fonts, scale, measure, RTL, code, hljs, print), 7 (Mermaid), 1 Step 6 (copy-ready tables) |
-  | 3 | Icons | 9, 11 |
-  | 4 | App UI | 3 |
-  | 5 | Quick Look look | 3 Step 10, 6 |
-  | 6 | Site | 2, 4 |
-  | 7 | Screenshots, demo, OG | 4, 8, 12 |
-  | 8 | Prototypes and decisions | 10 |
-  | 9 | Guards | 2, 6, 11 |
-  | 10 | Review gates | 13 |
-  | — | Pipeline | 14 |
-
-- **Type consistency:**
-  - `ratio`, `blocks`, `files` and `read` are defined in Task 2 and reused in Tasks 6 and 11.
-  - The token lists in Task 6's Interfaces block match its test arrays.
-  - `TG RTL Code` and `TG Ink Arabic` are spelled the same everywhere.
-  - Test names match the Review Focus lines.
-- **Proportion:** code blocks are limited to tests, alias CSS, two algorithms the signatures don't determine, and fixed copy (the samples).
 
 ## Contract change requests
 
@@ -1209,7 +1176,7 @@ The diff touches renderer HTML/JS (`page.js`, `index.html`), so stage 4 runs `/c
    - toolbar items and SF Symbols per DESIGN.md §9;
    - `ContentUnavailableView` states.
 4. **Plan 02 Task 6:** `.tg-hit` is unchanged. It measures fg-on-highlight ≥ 10.29:1 in every theme.
-5. **Plan 01 `page.js`:** Mermaid `theme: 'base'` with `themeVariables` from tokens, re-rendered on appearance change; `div.mermaid` keeps `data-src` (plan 09 Task 7 makes the edit). **Accepted 27 Oct**; master §3.2 records it.
+5. **Plan 01 `page.js`:** Mermaid `theme: 'base'` with `themeVariables` from tokens, re-rendered on appearance change; `div.mermaid` keeps `data-src` (plan 09 Task 7 makes the edit, keeping `htmlLabels: false` and plan 01's svg-profile sanitise). **Accepted 27 Oct**; master §3.2 records it.
 6. **Plan 03 Task 10:** the "Updates" section moves out of `LicenceSettingsView` into its own `UpdatesSettingsView` tab, `Label("Updates", systemImage: "arrow.triangle.2.circlepath")`, adding "Check Now" and "Last checked".
 7. **Plan 04 Task 6:**
    - `build.js` writes `public/site.css` as `static/css/tokens.css` + `static/site.css`, and doesn't copy `static/css/`. The single-stylesheet test stays unchanged.
@@ -1228,3 +1195,4 @@ The diff touches renderer HTML/JS (`page.js`, `index.html`), so stage 4 runs `/c
 10. **Plan 06:** `Apps/Data/App/AppIcon.icon` from D-5's Data pick. Task 11's guard covers it automatically. Plan 06 sets `ASSETCATALOG_COMPILER_APPICON_NAME` on its target.
 11. **Plans 01–06, pipeline tasks:** add the design-review gate step from DESIGN.md §12, with output `docs/reviews/design-<milestone>.md`. Plans 01 and 03 were added on 27 Oct: their UI is the Quick Look preview, the Licence and Updates tabs, and the Sparkle prompts.
 12. **`project.yml`** (plan 01 owns it): plan 09 Task 11 adds `ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon` to the Markdown app target.
+13. **Master §3.2, the Mermaid SVG pass.** Task 7's fill test needs Mermaid's own `<style>` to survive sanitising. The master's `{svg, svgFilters, html} + FORBID_TAGS` pass strips it now that `FORBID_TAGS` includes `style`. This plan relies on plan 01's `{ USE_PROFILES: { svg: true, svgFilters: true } }` pass; plan 01's contract change request 1 asks the master to match.

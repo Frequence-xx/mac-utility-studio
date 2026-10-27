@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A Polar sandbox purchase activates, validates and deactivates Tegel Markdown Pro end to end. Sparkle updates 1.0.0-b1 → 1.0.0-b2 from R2. `scripts/release.sh` gives a notarised, stapled DMG that passes Gatekeeper on a clean Mac.
+**Goal:** A Polar sandbox purchase activates, validates and deactivates Tegel Markdown Pro end to end. Sparkle updates 1.0.0-b1 → 1.0.0-b2 through a signed feed served locally (betas never reach the public R2 feed, K7). `scripts/release.sh` gives a notarised, stapled DMG that passes Gatekeeper on a clean Mac.
 
 **Architecture:** TegelStore (second library in `Packages/TegelKit`) holds a pure grace policy, a URLSession Polar client, a Security.framework Keychain store and an `@Observable` `LicenseManager` that feeds the app's existing `isPro` seam. Polar values reach Info.plist through xcconfig (D16), and Sparkle 2.10.1 comes in over SPM. One bash release script runs native tools (xcodebuild, notarytool, stapler, hdiutil, codesign, spctl), then `generate_appcast`, then a `wrangler r2 object put --remote` upload.
 
@@ -15,21 +15,21 @@
 
 ## Global Constraints
 
-- macOS deployment target **14.0**. Universal binary (arm64 + x86_64). Swift 6 language mode; swift-tools 6.0.
-- Build Mac: Intel iMac19,1, macOS 15.7, Xcode 26.3, Swift 6.2.4. **arm64 or macOS 26/27 evidence comes only from the Scaleway M1 or GitHub runners, and is labelled with the machine.**
-- **No telemetry, no accounts.** Network use is limited to the Polar licence calls and the Sparkle appcast/DMG. `SUEnableSystemProfiling` stays off (default `NO`).
-- **Licence:** validate at launch; **30-day grace** from the last successful validation; **2 activations** [F3e]. **A 404 never locks on the spot** [F3d]. The app sends no API token.
-- **Price:** App 1 **$19 once, 2 Macs**. The sandbox product uses $19. The live $14 intro price is plan 05 (D15). Licence limits are stated before purchase; 14-day refund (§5 rule 5).
-- **No riba:** BNPL disabled in the checkout (§5 rule 3). Polar can't toggle methods [F3g], so it is inspected and recorded.
-- **D5 entitlements:** `app-sandbox`, `files.user-selected.read-write`, `files.bookmarks.app-scope`, `network.client`, plus Sparkle's mach-lookup exception [F4]. The Quick Look extension gets no Sparkle and no TegelStore.
+Master "Global constraints", master §3.3 (the TegelStore contract) and CLAUDE.md apply. This plan's deltas:
+
+- **Licence rules pinned here:** 30-day grace; **2 activations** [F3e]; a 404 never locks on the spot [F3d]; the app sends no API token.
+  - Pro holds only while `-1 day ≤ now − lastValidatedAt ≤ grace`. A clock set back further, or a stamp from the future, gives `.lapsed` until the next successful validation (K5). This replaces the earlier rule that a clock moved backwards stays Pro.
+  - A validation succeeds only on a 200 that decodes to `status == "granted"` with the stored activation id. Anything else is a failure: grace, never a lock.
+- **Sandbox product:** $19, 2 Macs (the live $14 intro price is plan 05, D15). Polar can't toggle payment methods [F3g], so BNPL is inspected and recorded (product rule 7).
+- **D5 entitlements:** `app-sandbox`, `files.user-selected.read-write`, `files.bookmarks.app-scope`, `network.client`, plus Sparkle's mach-lookup exception [F4]. The Quick Look extension gets no Sparkle and no TegelStore. `scripts/entitlements/<target>.plist` is the allowlist `release.sh` enforces (K7).
 - **D16:** `Debug.xcconfig` → sandbox; `Release.xcconfig` → production (placeholder until plan 05). The Info.plist keys are exactly `TGPolarAPIBase`, `TGPolarOrganizationID`, `TGPolarCheckoutURL`, `TGPolarPortalURL`, `TGPolarBenefitID`.
 - **Benefit binding (D1, ships in 1.0.0):** a key unlocks only the app whose Polar benefit issued it. `validate` sends `benefit_id`; `activate` checks `license_key.benefit_id`, and on a mismatch releases the activation and throws `PolarError.wrongProduct`. One benefit id per app.
-- **D12:** DMG via `hdiutil`. DMG and appcast on R2 bucket `tegel-downloads` behind `https://downloads.tegelapps.com`.
-- **Sparkle 2.10.1 exactly** [F4]. `SUFeedURL` = `https://downloads.tegelapps.com/markdown/appcast.xml`.
-- **Secrets:** `.env` by key **name**; values are never printed, logged or committed. The Keychain holds the `tegel-notary` profile and the Sparkle EdDSA private key. Backups and the `.p8` live **outside** the repo.
-- **Ask the user first (H11):** enabling R2 (it may need a card), publishing any DMG/appcast to R2, DNS on live `tegelapps.com`, anything in **production** Polar (untouched until plan 05). Polar sandbox and local builds need no confirmation.
+- **D12 and Sparkle:** DMG via `hdiutil`; DMG and appcast on R2 bucket `tegel-downloads` behind `https://downloads.tegelapps.com`. **Sparkle 2.10.1 exactly** [F4]; `SUFeedURL` = `https://downloads.tegelapps.com/markdown/appcast.xml`; signed feed (`SURequireSignedFeed` and `SUVerifyUpdateBeforeExtraction` both true, K7); `SUEnableSystemProfiling` stays off.
+- **Betas are private (K7):** b1 and b2 are `--sandbox --no-upload` builds, served to the test account from a local signed feed. Nothing beta ever reaches R2.
+- **`.env` (K1):** every command that touches `.env` starts with `. scripts/lib/env.sh` (plan 01 Task 1) and uses its `envget`, `envset` and `need`. Never `set -a; . ./.env`; keys are passed one at a time (`KEY="$(envget KEY)" cmd`).
+- **Keys at rest (K3):** the Keychain holds the Developer ID key, the `tegel-notary` profile and the Sparkle EdDSA key. After each one-time import, the plaintext key files move to the user's encrypted offline store and are deleted from `$HOME`. `.env` holds no key path.
+- **Ask the user first:** enabling R2 (it may need a card), DNS on live `tegelapps.com`, any upload to R2, the sandbox close-out (Task 15), and anything in **production** Polar (untouched until plan 05).
 - **MoR-agnostic (§13 risk 7):** only `PolarClient.swift` knows Polar. A Lemon Squeezy fallback rewrites that one file.
-- **D14:** merge into `main` after the pipeline passes, then push (authorised).
 
 ## Review Focus
 
@@ -37,39 +37,32 @@ Master Review focus 5 belongs to this plan. Most likely first:
 
 1. **Offline at launch, or Polar 5xx** → Pro stays on within 30 days of the last 200, no launch error. Pinned by `refreshOfflineWithinGraceStaysPro`, `refresh5xxWithinGraceStaysPro`, `initAppliesPolicyToStoredLicence` (Task 7); Task 13 step 11.
 2. **Polar 404** (retired API version, revoked key, activation removed in the portal) → exactly like offline: grace, key kept, a later 200 restores Pro. Pinned by `refresh404WithinGraceNeverLocks`, `refresh404AfterGraceIsLapsedAndKeepsKey`, `refreshAfterLapseWith200RestoresPro` (Task 7); Task 13 step 14.
-3. **Clock moved backwards** (`now < lastValidatedAt`) → Pro, and `lastValidatedAt` is not moved. Pinned by `clockMovedBackwardsStaysProWithoutExtendingLastValidatedAt` (Task 4), `refreshWithClockBackwardsKeepsLastValidatedAt` (Task 7).
+3. **Clock moved backwards** (`now < lastValidatedAt`) → Pro within a 1-day skew; beyond it `.lapsed` until the next 200, and `lastValidatedAt` is never moved by a failure. Pinned by `smallBackwardSkewStaysPro`, `clockMovedBackwardsBeyondSkewIsLapsedWithoutMovingStamp`, `futureStampBeyondSkewIsLapsed` (Task 4), `refreshWithClockBackwardsKeepsLastValidatedAt` (Task 7).
 4. **Activation limit reached, or an unknown key** → specific copy, state stays free, nothing stored. Pinned by `activateMapsErrors` (Task 5), `activateLimitReachedThrowsAndStaysFree` (Task 7); Task 13 step 13.
 5. **Key pasted with spaces or newlines**, including a line break inside the key from a wrapped email → normalised before it is sent or stored. Pinned by `normalisedKeyStripsAllWhitespace`, `activateSendsNormalisedKeyAndComputerNameThenStores` (Task 7).
 
-Also pinned: any 200 from validate is success even if the body drifts, since we send no `Polar-Version` (`validateAny200IsSuccessWithNilExpiry`). A deactivate racing a refresh can't resurrect a licence (`refreshDoesNotResurrectLicenceDeletedMidFlight`). A key for another Tegel app is rejected, its activation released and nothing stored (`activateWrongBenefitDeactivatesAndThrows`, `activateWrongProductThrowsAndStaysFree`; Task 13 step 13). The release guards (dirty tree, missing key, placeholder values, bad args) are covered by `scripts/release_test.sh`.
+Also pinned:
+- A 200 counts only with `status == "granted"` and the stored activation id; a block page, a stub or a drifted body is a failure that goes through grace (`validate200WithoutGrantedMatchingActivationIsFailure`).
+- A deactivate racing a refresh can't resurrect a licence (`refreshDoesNotResurrectLicenceDeletedMidFlight`).
+- One activate/deactivate at a time (`concurrentActivateSendsOneRequest`), and a Keychain save failure releases the new activation (`activateKeychainSaveFailureRollsBack`).
+- A key for another Tegel app is rejected, its activation released and nothing stored (`activateWrongBenefitDeactivatesAndThrows`, `activateWrongProductThrowsAndStaysFree`; Task 13 step 13).
+- The release guards (dirty tree, missing key, placeholder values, bad args, private betas, `--print-config` paths, `--from-dmg` checks, the entitlement allowlist) are covered by `scripts/release_test.sh`.
 
 ## H2 dependency (Developer ID)
 
 Everything runs before H2 lands except these, which stay **BLOCKED until Task 3 is done**:
 - Task 11 step 5 (signed archive check);
-- Task 12 step 6 (first real `release.sh` run);
-- all of Task 13 (the b1/b2 releases, Gatekeeper, the Sparkle update, and the purchase on a notarised build).
+- Task 12 step 7 (first real `release.sh` run);
+- all of Task 13 (the private b1/b2 builds, Gatekeeper, the Sparkle update, and the purchase on a notarised build).
 
 The licence flow is still exercised before H2 on a Debug build against the sandbox (Task 9). If H2 isn't done by Mon 16 Nov, the launch slips week for week (master P5).
 
 ## Conventions used in every task
 
-Run from the repo root `R=~/Development/mac-utility-studio`. Define these in the shell first:
-
-```bash
-R=~/Development/mac-utility-studio
-envget() { sed -n "s/^$1=//p" "$R/.env" | head -1; }                       # read; never echo the result
-envset() { { grep -v "^$1=" "$R/.env"; printf '%s=%s\n' "$1" "$2"; } > "$R/.env.tmp" && mv "$R/.env.tmp" "$R/.env" && chmod 600 "$R/.env"; }
-envhas() { grep -qE "^$1=.+" "$R/.env" && echo "$1 saved" || echo "$1 MISSING"; }
-build()  { xcodegen generate >/dev/null && xcodebuild build -scheme markdown -configuration "$1" -destination 'platform=macOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO -quiet "${@:2}"; }
-plist()  { /usr/libexec/PlistBuddy -c "Print :$2" "$(echo build/Build/Products/$1/*.app)/Contents/Info.plist"; }
-ST="swift test --package-path Packages/TegelKit"
-```
-
-Commits end with the trailer as a second `-m`:
-```bash
-git commit -m "<type>(<scope>): <summary>" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-```
+- **Shell:** every command runs from the repo root. Each Bash call is a fresh shell, so no block relies on a function or variable from another block.
+- **`.env`:** any command that reads or writes `.env` starts with `. scripts/lib/env.sh` (plan 01 Task 1). It gives `envget KEY` (prints the value, so its output only ever goes into a variable or a pipe, never to the log), `envset KEY VALUE` (quoted, atomic, mode 600) and `need KEY…` (exit 1 with `missing .env key: KEY`; prints names only). "Saved" checks are `need KEY && echo saved`.
+- **Swift tests:** `swift test --package-path Packages/TegelKit --filter <Suite>`.
+- **Commits:** "Commit: `<paths>`, `<message>`" means `git add <paths> && git commit -m "<message>" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`.
 
 **GUI steps** are marked *(GUI)*. The user does them, or Claude does them through the computer-use skill. Playwright is used for web dashboards only.
 
@@ -84,36 +77,38 @@ Needs H3 (studio inbox) and H5 (sandbox org). Sandbox only, so no confirmation i
 
 **Interfaces:**
 - Consumes: `.env` `STUDIO_EMAIL` (H3).
-- Produces these `.env` names, used by Tasks 8, 9 and 13: `POLAR_EMAIL`, `POLAR_SANDBOX_ORGANIZATION_ID`, `POLAR_SANDBOX_BENEFIT_ID_MARKDOWN`, `POLAR_SANDBOX_PRODUCT_ID_MARKDOWN`, `POLAR_SANDBOX_CHECKOUT_URL_MARKDOWN`, `POLAR_SANDBOX_PORTAL_URL`, `POLAR_SANDBOX_TEST_LICENSE_KEY`, and `POLAR_SANDBOX_OTHER_LICENSE_KEY` (step 10, used by Task 13).
+- Produces these `.env` names, used by Tasks 8, 9, 13 and 15: `POLAR_EMAIL`, `POLAR_SANDBOX_ORGANIZATION_ID`, `POLAR_SANDBOX_BENEFIT_ID_MARKDOWN`, `POLAR_SANDBOX_PRODUCT_ID_MARKDOWN`, `POLAR_SANDBOX_CHECKOUT_URL_MARKDOWN`, `POLAR_SANDBOX_PORTAL_URL`, `POLAR_SANDBOX_TEST_LICENSE_KEY`, and `POLAR_SANDBOX_OTHER_LICENSE_KEY` (step 10, used by Task 13).
 
-- [ ] **Step 1: Sign up.** Playwright `browser_navigate` to `https://sandbox.polar.sh/start` and sign up with the H3 inbox (`envget STUDIO_EMAIL`); the **user** enters the emailed code. Then `envset POLAR_EMAIL "$(envget STUDIO_EMAIL)"`. Result: `envhas POLAR_EMAIL` → `POLAR_EMAIL saved`.
-- [ ] **Step 2: Create the org.** Name `Tegel`, slug `tegelapps` (or the nearest free slug). Copy the organization ID from org settings and `envset POLAR_SANDBOX_ORGANIZATION_ID <id>`. Check that the saved id is well formed (step 9 proves it is the right org):
+- [ ] **Step 1: Sign up.** Playwright `browser_navigate` to `https://sandbox.polar.sh/start` and sign up with the H3 inbox (`. scripts/lib/env.sh; envget STUDIO_EMAIL`); the **user** enters the emailed code. Then `. scripts/lib/env.sh; envset POLAR_EMAIL "$(envget STUDIO_EMAIL)"; need POLAR_EMAIL && echo saved` → `saved`.
+- [ ] **Step 2: Create the org.** Name `Tegel`, slug `tegelapps` (or the nearest free slug). Copy the organization ID from org settings and `. scripts/lib/env.sh; envset POLAR_SANDBOX_ORGANIZATION_ID '<id>'`. Check that the saved id is well formed (step 9 proves it is the right org):
   ```bash
+  . scripts/lib/env.sh
   curl -s -o /dev/null -w '%{http_code}\n' -X POST https://sandbox-api.polar.sh/v1/customer-portal/license-keys/validate \
     -H 'Content-Type: application/json' -d "{\"key\":\"NOPE\",\"organization_id\":\"$(envget POLAR_SANDBOX_ORGANIZATION_ID)\"}"
   ```
   Expected: `404` (key not found). `422` means the id was saved wrong.
-- [ ] **Step 3: Create the benefit.** Benefits → New → type **License Keys**: description `Tegel Markdown licence`, no expiry, no usage limit, **activation limit 2**, **customer can deactivate activations ON** (`enable_customer_admin`) [F3e]. Then `envset POLAR_SANDBOX_BENEFIT_ID_MARKDOWN <id>`.
+- [ ] **Step 3: Create the benefit.** Benefits → New → type **License Keys**: description `Tegel Markdown licence`, no expiry, no usage limit, **activation limit 2**, **customer can deactivate activations ON** (`enable_customer_admin`) [F3e]. Then `. scripts/lib/env.sh; envset POLAR_SANDBOX_BENEFIT_ID_MARKDOWN '<id>'`.
 - [ ] **Step 4: Create the product.** Products → New → `Tegel Markdown`, **one-time, $19 USD**, with the benefit from step 3 attached.
   - Description (states the limits before purchase, rule 5): `One-time purchase. One licence activates Tegel Markdown Pro on up to 2 Macs. 14-day refund.`
-  - Then `envset POLAR_SANDBOX_PRODUCT_ID_MARKDOWN <id>`.
-- [ ] **Step 5: Create a checkout link** for the product, then `envset POLAR_SANDBOX_CHECKOUT_URL_MARKDOWN <url>`. Check: `curl -s -o /dev/null -w '%{http_code}\n' -L "$(envget POLAR_SANDBOX_CHECKOUT_URL_MARKDOWN)"` → `200`.
+  - Then `. scripts/lib/env.sh; envset POLAR_SANDBOX_PRODUCT_ID_MARKDOWN '<id>'`.
+- [ ] **Step 5: Create a checkout link** for the product, then `. scripts/lib/env.sh; envset POLAR_SANDBOX_CHECKOUT_URL_MARKDOWN '<url>'`. Check: `. scripts/lib/env.sh; curl -s -o /dev/null -w '%{http_code}\n' -L "$(envget POLAR_SANDBOX_CHECKOUT_URL_MARKDOWN)"` → `200`.
 - [ ] **Step 6: Find the portal URL.** Polar documents `https://polar.sh/<slug>/portal` for production but no sandbox URL (polar.sh/docs/features/customer-portal/navigate-customers.md).
   - Test: `curl -s -o /dev/null -w '%{http_code}\n' https://sandbox.polar.sh/tegelapps/portal` → `200`, and Playwright shows an email sign-in form.
   - If it isn't 200, take the portal link from the dashboard's customer-portal settings instead.
-  - Then `envset POLAR_SANDBOX_PORTAL_URL <url>`.
+  - Then `. scripts/lib/env.sh; envset POLAR_SANDBOX_PORTAL_URL '<url>'`.
 - [ ] **Step 7: Test purchase, with a BNPL look.**
   - Open the checkout link in Playwright.
-  - Email = `envget POLAR_EMAIL`. Sandbox emails reach org members only (polar.sh/docs/integrate/sandbox.md).
+  - Email = the `POLAR_EMAIL` value. Sandbox emails reach org members only (polar.sh/docs/integrate/sandbox.md).
   - **Before paying**, set the billing country to **Netherlands**, then to **United States**, and list every payment method offered. Save `browser_take_screenshot` to `local-docs/m03/bnpl-sandbox.png`.
   - If any pay-later method appears (Klarna, Afterpay, Affirm, Riverty, "pay in 3"), **stop and tell the user** (product rule 7).
   - Pay with `4242 4242 4242 4242`, any future expiry, any CVC.
   - Result: the order shows in Sales.
 - [ ] **Step 8: Get the key.**
   - Note whether the order email to `POLAR_EMAIL` contains the key; the docs only promise it in the portal (polar.sh/docs/features/benefits/license-keys.md).
-  - Copy the key from the portal and `envset POLAR_SANDBOX_TEST_LICENSE_KEY <key>`. Never echo it.
+  - Copy the key from the portal and `. scripts/lib/env.sh; envset POLAR_SANDBOX_TEST_LICENSE_KEY '<key>'`. Never echo it.
 - [ ] **Step 9: Check that the 2-Mac limit is enforced server-side** [F3a, F3c, F3e]. The response bodies contain the key, so they go to a temp file that is deleted:
   ```bash
+  . scripts/lib/env.sh
   O=$(envget POLAR_SANDBOX_ORGANIZATION_ID); K=$(envget POLAR_SANDBOX_TEST_LICENSE_KEY); A=https://sandbox-api.polar.sh/v1/customer-portal/license-keys; T=$(mktemp)
   act()   { curl -s -o "$T" -w '%{http_code}\n' -X POST "$A/activate" -H 'Content-Type: application/json' -d "{\"key\":\"$K\",\"organization_id\":\"$O\",\"label\":\"$1\"}"; }
   deact() { curl -s -o /dev/null -w '%{http_code}\n' -X POST "$A/deactivate" -H 'Content-Type: application/json' -d "{\"key\":\"$K\",\"organization_id\":\"$O\",\"activation_id\":\"$1\"}"; }
@@ -124,7 +119,7 @@ Needs H3 (studio inbox) and H5 (sandbox org). Sandbox only, so no confirmation i
 - [ ] **Step 10: A key from another app (the D1 test fixture).** Task 13 step 13 uses it to prove the benefit binding.
   - Benefits → New → **License Keys**: description `Tegel Test Other licence`, activation limit 2, `enable_customer_admin` ON.
   - Products → New → `Tegel Test Other (not for sale)`, one-time $19, with only that benefit attached. Create a checkout link and buy it as in step 7 (test card; the BNPL look isn't repeated).
-  - Copy the key from the portal and `envset POLAR_SANDBOX_OTHER_LICENSE_KEY <key>`. Never echo it. Result: `envhas POLAR_SANDBOX_OTHER_LICENSE_KEY` → `POLAR_SANDBOX_OTHER_LICENSE_KEY saved`.
+  - Copy the key from the portal and `. scripts/lib/env.sh; envset POLAR_SANDBOX_OTHER_LICENSE_KEY '<key>'`. Never echo it. Result: `. scripts/lib/env.sh; need POLAR_SANDBOX_OTHER_LICENSE_KEY && echo saved` → `saved`.
 
 No commit: the outputs are gitignored. Task 4 adds the new key names to `.env.example`.
 
@@ -141,19 +136,22 @@ Needs plan 04's Cloudflare account and the `tegelapps.com` zone, plus H4's card.
 - [ ] **Step 1: Enable R2** in the dashboard (Playwright).
   - Ask the user first: "Enable R2 on the Cloudflare account? It may ask for a card; our use stays inside the free tier."
   - After a yes, enable it. If it asks for a payment method and none is on file, that's H4 (user) [F8: unverified whether the free tier needs a card]. Result: the R2 Overview loads.
-- [ ] **Step 2: Create the bucket** `tegel-downloads`: automatic location, Standard class, r2.dev public URL **left disabled**. Then `envset R2_BUCKET tegel-downloads`.
+- [ ] **Step 2: Create the bucket** `tegel-downloads`: automatic location, Standard class, r2.dev public URL **left disabled**. Then `. scripts/lib/env.sh; envset R2_BUCKET tegel-downloads`.
 - [ ] **Step 3: Connect the domain.**
   - Ask the user first: "Connect `downloads.tegelapps.com` to bucket `tegel-downloads` (adds a DNS record on tegelapps.com)?"
   - Then: bucket → Settings → Custom Domains → Connect → `downloads.tegelapps.com`, **minimum TLS 1.2** (the default is 1.0, per developers.cloudflare.com/workers/wrangler/commands/r2/).
-  - `envset R2_PUBLIC_BASE_URL https://downloads.tegelapps.com`.
+  - `. scripts/lib/env.sh; envset R2_PUBLIC_BASE_URL https://downloads.tegelapps.com`.
   - Check: `dig +short downloads.tegelapps.com | head -1` prints an address, and the dashboard shows the domain as Active.
 - [ ] **Step 4: Create the token.** R2 → Manage API tokens → Create:
   - permission **Object Read & Write**, applied to **`tegel-downloads` only**;
-  - `envset CLOUDFLARE_R2_API_TOKEN <token>`; then `envhas CLOUDFLARE_ACCOUNT_ID`, and if MISSING, `envset` it from the dashboard.
+  - `. scripts/lib/env.sh; envset CLOUDFLARE_R2_API_TOKEN '<token>'`; then `. scripts/lib/env.sh; need CLOUDFLARE_ACCOUNT_ID && echo saved`, and if it exits 1, copy the id from the dashboard and `. scripts/lib/env.sh; envset CLOUDFLARE_ACCOUNT_ID '<id>'`.
+  - This bucket-scoped token is the only credential any R2 upload uses (K2). Plan 04's Pages deploy token has no R2 permission.
 - [ ] **Step 5: Verify the token and the `--remote` flag.** Wrangler v4 runs "in local mode by default" (developers.cloudflare.com/workers/wrangler/migration/update-v3-to-v4/). Run this in a temp dir so the local state doesn't land in the repo:
   ```bash
+  . scripts/lib/env.sh
+  TOKEN=$(envget CLOUDFLARE_R2_API_TOKEN); ACCT=$(envget CLOUDFLARE_ACCOUNT_ID)   # read before leaving the repo; not exported
   cd "$(mktemp -d)" && printf ok > probe.txt
-  w() { CLOUDFLARE_API_TOKEN="$(envget CLOUDFLARE_R2_API_TOKEN)" CLOUDFLARE_ACCOUNT_ID="$(envget CLOUDFLARE_ACCOUNT_ID)" bunx wrangler@4.151.2 r2 object "$@"; }
+  w() { CLOUDFLARE_API_TOKEN="$TOKEN" CLOUDFLARE_ACCOUNT_ID="$ACCT" bunx wrangler@4.151.2 r2 object "$@"; }
   w put tegel-downloads/probe-local.txt --file probe.txt
   w put tegel-downloads/probe-remote.txt --file probe.txt --content-type text/plain --remote
   for k in probe-local probe-remote; do curl -s -o /dev/null -w "$k %{http_code}\n" "https://downloads.tegelapps.com/$k.txt"; done
@@ -161,7 +159,7 @@ Needs plan 04's Cloudflare account and the `tegelapps.com` zone, plus H4's card.
   w delete tegel-downloads/probe-remote.txt --remote
   ```
   Expected: `probe-local 404`, `probe-remote 200`, `tls1.1 000`.
-  - If the remote `put` fails with an auth error, the bucket-scoped token doesn't work with wrangler. Replace it with an account API token limited to **Workers R2 Storage: Edit**, re-run, and note which token type is in use in Task 13's acceptance doc.
+  - If the remote `put` fails with an auth error, the bucket-scoped token doesn't work with wrangler. **Don't widen it** to an account-level R2 token (K2 rejects that). Stop, record the error, and ask the user how to proceed.
 
 No commit; Task 4 adds `CLOUDFLARE_R2_API_TOKEN`, `R2_BUCKET` and `R2_PUBLIC_BASE_URL` to `.env.example`.
 
@@ -169,11 +167,12 @@ No commit; Task 4 adds `CLOUDFLARE_R2_API_TOKEN`, `R2_BUCKET` and `R2_PUBLIC_BAS
 
 **Schedule:** the user enrols by **Fri 6 Nov**; certificate and API key by **Mon 16 Nov**; Claude's steps on Tue 17 Nov.
 
-**Files:** none in the repo; writes `.env` keys and the Keychain.
+**Files:** none in the repo; writes `.env` keys, the Keychain and the user's encrypted offline key store (K3).
 
 **Interfaces:**
-- Produces these `.env` names, used by Tasks 11–13: `APPLE_DEVELOPER_ID_IDENTITY`, `APPLE_TEAM_ID`, `ASC_API_KEY_ID`, `ASC_API_ISSUER_ID` (Team keys only), `ASC_API_KEY_PATH`, `NOTARY_KEYCHAIN_PROFILE`.
-- Keychain profile: `tegel-notary`.
+- Produces these `.env` names, used by Tasks 11–13: `APPLE_DEVELOPER_ID_IDENTITY`, `APPLE_TEAM_ID`, `ASC_API_KEY_ID`, `ASC_API_ISSUER_ID` (Team keys only), `NOTARY_KEYCHAIN_PROFILE`. No key path: the `.p8` doesn't stay on disk.
+- Keychain: the Developer ID identity and the `tegel-notary` profile.
+- The offline key store, `TegelKeys` (default: an encrypted APFS image the user keeps on external media). Task 10 adds the Sparkle key to it.
 
 - [ ] **Step 1: the certificate, check first, then create.** H2 may already be done when this plan runs.
   - Check: `security find-identity -v -p codesigning | grep -c '"Developer ID Application:'`. `1` → done; go to step 2.
@@ -184,33 +183,56 @@ No commit; Task 4 adds `CLOUDFLARE_R2_API_TOKEN`, `R2_BUCKET` and `R2_PUBLIC_BAS
     security import ~/.tegel-signing/*.cer -k ~/Library/Keychains/login.keychain-db
     ```
   - Check again → `1`.
+  - **First use (CR-P2-27):** the first `codesign` with this key (Task 11 step 5) raises a Keychain prompt, "codesign wants to sign using key …". The **user** types the login password and clicks **Always Allow**, once. Record the date in `docs/gates/m03-acceptance.md` (Task 13 step 16). Until then a non-interactive `release.sh` would stall on that prompt.
 - [ ] **Step 2: Save the identity and team id without printing them.**
   ```bash
+  . scripts/lib/env.sh
   ID=$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application: [^"]*\)"/\1/p' | head -1)
   envset APPLE_DEVELOPER_ID_IDENTITY "$ID"; T=${ID##*(}; envset APPLE_TEAM_ID "${T%)}"; unset ID T
-  envhas APPLE_DEVELOPER_ID_IDENTITY; envhas APPLE_TEAM_ID
+  need APPLE_DEVELOPER_ID_IDENTITY APPLE_TEAM_ID && echo saved
   ```
-  Expected: two `… saved` lines.
+  Expected: `saved`. The identity contains spaces and parentheses, which `envset`'s quoting handles (K1).
 - [ ] **Step 3 (user + Claude): the App Store Connect API key.**
   - User: App Store Connect → Users and Access → Integrations → **Team Keys** (role Developer), or an Individual key. Download the `.p8` once.
-  - Claude: `mkdir -p ~/.tegel-secrets && chmod 700 ~/.tegel-secrets`, move the file to `~/.tegel-secrets/AuthKey_<KEYID>.p8`, `chmod 600` it, and `envset ASC_API_KEY_PATH`, `ASC_API_KEY_ID`, and `ASC_API_ISSUER_ID` (**Team keys only**).
-  - Check: `stat -f %Lp "$(envget ASC_API_KEY_PATH)"` → `600`.
+  - Claude: `mkdir -p ~/.tegel-secrets && chmod 700 ~/.tegel-secrets`, move the file to `~/.tegel-secrets/AuthKey_<KEYID>.p8` and `chmod 600` it. Then `. scripts/lib/env.sh; envset ASC_API_KEY_ID '<KEYID>'` and, **Team keys only**, `envset ASC_API_ISSUER_ID '<issuer>'`.
 - [ ] **Step 4: Store the notary credentials.** `--issuer` is "Required for Team API Keys. Do not provide for Individual API Keys" (`xcrun notarytool store-credentials --help` on Xcode 26.3).
   ```bash
-  ISS=$(envget ASC_API_ISSUER_ID)
-  xcrun notarytool store-credentials tegel-notary --key "$(envget ASC_API_KEY_PATH)" --key-id "$(envget ASC_API_KEY_ID)" ${ISS:+--issuer "$ISS"}
+  . scripts/lib/env.sh
+  KID=$(envget ASC_API_KEY_ID); ISS=$(envget ASC_API_ISSUER_ID)
+  xcrun notarytool store-credentials tegel-notary --key ~/.tegel-secrets/"AuthKey_$KID.p8" --key-id "$KID" ${ISS:+--issuer "$ISS"}
   envset NOTARY_KEYCHAIN_PROFILE tegel-notary
   xcrun notarytool history --keychain-profile tegel-notary >/dev/null && echo notary-ok
   ```
   Expected: the credentials validate and are saved to the Keychain, then `notary-ok`.
-  - **Fallback:** if the account can't create API keys, run `xcrun notarytool store-credentials tegel-notary --apple-id <id> --team-id "$(envget APPLE_TEAM_ID)"`; the user types an app-specific password at the secure prompt.
+  - **Fallback:** if the account can't create API keys, run `. scripts/lib/env.sh; xcrun notarytool store-credentials tegel-notary --apple-id <id> --team-id "$(envget APPLE_TEAM_ID)"`; the user types an app-specific password at the secure prompt.
+- [ ] **Step 5: Keys at rest (K3).** The Keychain now holds both keys, so the plaintext files leave `$HOME`.
+  1. **Watch the check fail first:**
+     ```bash
+     find ~/.tegel-signing ~/.tegel-secrets -type f \( -name '*.key' -o -name '*.p8' -o -name '*.p12' \) 2>/dev/null
+     ```
+     Expected: two paths, `devid-application.key` and `AuthKey_<KEYID>.p8`.
+  2. **Ask the user where the encrypted store lives** (USER item K3). Default: an AES-256 encrypted APFS image on external media, with its passphrase in the user's password manager. For the default, the **user** runs this in Terminal, because both commands prompt for the passphrase:
+     `hdiutil create -size 20m -fs APFS -encryption AES-256 -volname TegelKeys ~/TegelKeys.dmg && hdiutil attach ~/TegelKeys.dmg`
+  3. Claude copies each file, checks the copy, deletes the original, and confirms nothing broke:
+     ```bash
+     for f in $(find ~/.tegel-signing ~/.tegel-secrets -type f \( -name '*.key' -o -name '*.p8' -o -name '*.p12' \)); do
+       cp -p "$f" /Volumes/TegelKeys/ && cmp -s "$f" "/Volumes/TegelKeys/${f##*/}" && rm "$f"
+     done
+     ls /Volumes/TegelKeys; hdiutil detach /Volumes/TegelKeys
+     find ~/.tegel-signing ~/.tegel-secrets -type f \( -name '*.key' -o -name '*.p8' -o -name '*.p12' \) 2>/dev/null | wc -l
+     security find-identity -v -p codesigning | grep -c '"Developer ID Application:'
+     xcrun notarytool history --keychain-profile tegel-notary >/dev/null && echo notary-ok
+     ```
+     Expected: the two file names, then `0`, `1`, `notary-ok`.
+     - If `notary-ok` fails, the profile stored only the `.p8` path. Copy the file back, record it, and ask the user before going on.
+  4. The **user** moves `~/TegelKeys.dmg` to the external media and deletes the local copy.
 
 No commit.
 
 ### Task 4: Branch, TegelStore target, value types, LicensePolicy (Tue 17 Nov)
 
 **Files:**
-- Modify: `.env.example` (new names only)
+- Modify: `.env.example` (new names; the two key-path lines go, K3)
 - Modify: `Packages/TegelKit/Package.swift`
 - Create: `Packages/TegelKit/Sources/TegelStore/License.swift`
 - Create: `Packages/TegelKit/Tests/TegelStoreTests/TestSupport.swift`
@@ -227,7 +249,9 @@ No commit.
   public enum LicenseState: Sendable, Equatable { case free; case pro(StoredLicense); case lapsed(StoredLicense) }
   public enum LicensePolicy { public static let grace: TimeInterval = 30 * 86_400
                               public static func state(stored: StoredLicense?, now: Date) -> LicenseState }
+                              // .pro iff -1 day ≤ now − lastValidatedAt ≤ grace; otherwise .lapsed (K5)
   ```
+- New, internal: `static let skew: TimeInterval = 86_400` on `LicensePolicy` (no contract change).
 - Test support: `let t0 = Date(timeIntervalSince1970: 1_800_000_000)` and `let lic = StoredLicense(key: "K-1", activationID: "act_1", lastValidatedAt: t0)`. Tests use the internal memberwise inits via `@testable import TegelStore`.
 
 - [ ] **Step 1: Branch and env names.**
@@ -235,8 +259,8 @@ No commit.
   - Add these names, without values, to `.env.example`:
     - under `# --- Polar`: `POLAR_SANDBOX_PRODUCT_ID_MARKDOWN`, `POLAR_SANDBOX_BENEFIT_ID_MARKDOWN`, `POLAR_SANDBOX_PORTAL_URL`, `POLAR_SANDBOX_TEST_LICENSE_KEY`, `POLAR_SANDBOX_OTHER_LICENSE_KEY`;
     - under `# --- Cloudflare`: `CLOUDFLARE_R2_API_TOKEN`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`.
-  - Check: `grep -cE '^(POLAR_SANDBOX_(PRODUCT_ID|BENEFIT_ID)_MARKDOWN|POLAR_SANDBOX_PORTAL_URL|POLAR_SANDBOX_(TEST|OTHER)_LICENSE_KEY|CLOUDFLARE_R2_API_TOKEN|R2_BUCKET|R2_PUBLIC_BASE_URL)$' .env.example` → `8`.
-  - Commit: `git add .env.example && git commit -m "chore(env): name the m03 Polar sandbox and R2 keys" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`.
+  - Remove the `ASC_API_KEY_PATH` and `SPARKLE_PRIVATE_KEY_BACKUP_PATH` lines: the key files live offline (K3).
+  - Commit: `.env.example`, "chore(env): name the m03 Polar sandbox and R2 keys; drop key paths (K3)".
 - [ ] **Step 2: Write the failing test.**
   ```swift
   import Foundation
@@ -249,29 +273,31 @@ No commit.
       @Test func proAt29Days23Hours() { #expect(LicensePolicy.state(stored: lic, now: t0 + 29 * 86_400 + 23 * 3_600) == .pro(lic)) }
       @Test func proAtExactly30Days() { #expect(LicensePolicy.state(stored: lic, now: t0 + LicensePolicy.grace) == .pro(lic)) }
       @Test func lapsedAt30DaysPlusOneSecond() { #expect(LicensePolicy.state(stored: lic, now: t0 + LicensePolicy.grace + 1) == .lapsed(lic)) }
-      @Test func clockMovedBackwardsStaysProWithoutExtendingLastValidatedAt() {
+      @Test func smallBackwardSkewStaysPro() { #expect(LicensePolicy.state(stored: lic, now: t0 - 3_600) == .pro(lic)) }   // a Mac clock 1 h behind
+      @Test func clockMovedBackwardsBeyondSkewIsLapsedWithoutMovingStamp() {   // K5: was "stays Pro", which made grace unbounded
           let state = LicensePolicy.state(stored: lic, now: t0 - 400 * 86_400)
-          #expect(state == .pro(lic))
-          guard case .pro(let kept) = state else { return }
+          #expect(state == .lapsed(lic))
+          guard case .lapsed(let kept) = state else { return }
           #expect(kept.lastValidatedAt == t0)
+      }
+      @Test func futureStampBeyondSkewIsLapsed() {                           // a forged Keychain item with lastValidatedAt far ahead
+          let forged = StoredLicense(key: "K-1", activationID: "act_1", lastValidatedAt: t0 + 86_401)
+          #expect(LicensePolicy.state(stored: forged, now: t0) == .lapsed(forged))
       }
   }
   ```
-- [ ] **Step 3: Run it to verify it fails.** `$ST --filter LicensePolicyTests`. Expected: FAIL, `error: no such module 'TegelStore'`.
+- [ ] **Step 3: Run it to verify it fails.** `swift test --package-path Packages/TegelKit --filter LicensePolicyTests`. Expected: FAIL, `error: no such module 'TegelStore'`.
 - [ ] **Step 4: Implement.**
   - `Package.swift`: add `.library(name: "TegelStore", targets: ["TegelStore"])`, `.target(name: "TegelStore")` and `.testTarget(name: "TegelStoreTests", dependencies: ["TegelStore"])`.
-  - `License.swift`: the four types above.
+  - `License.swift`: the four types above, plus the internal `skew`.
   - `state`:
     - `nil` → `.free`;
-    - `now.timeIntervalSince(last) <= grace` → `.pro(stored)` (a negative interval, i.e. the clock moved back, also lands here, unchanged);
-    - otherwise `.lapsed(stored)`.
+    - `let age = now.timeIntervalSince(stored.lastValidatedAt)`; `-skew <= age && age <= grace` → `.pro(stored)`;
+    - otherwise `.lapsed(stored)`. Policy never changes the stamp; only a 200 in `LicenseManager.refresh` moves it, which also restores Pro.
   - `fromInfoPlist` reads the five `TG*` strings with `bundle.object(forInfoDictionaryKey:)`. It calls `preconditionFailure("Info.plist: <key> missing or not a URL")` on absence, and also on an empty `TGPolarBenefitID`: a build-config bug must fail loudly (Task 8 and `release.sh` check the values).
-- [ ] **Step 5: Run it to verify it passes.** `$ST --filter LicensePolicyTests`. Expected: `✔ Test run with 6 tests … passed`.
-- [ ] **Step 6: Commit.**
-  ```bash
-  git add Packages/TegelKit/Package.swift Packages/TegelKit/Sources/TegelStore/License.swift Packages/TegelKit/Tests/TegelStoreTests
-  git commit -m "feat(store): add TegelStore with LicensePolicy and 30-day grace" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-  ```
+- [ ] **Step 5: Run it to verify it passes.** Same command. Expected: `✔ Test run with 8 tests … passed`.
+- [ ] **Step 6: Watch the skew guard fail.** Temporarily drop the lower bound (`age <= grace` alone, the old rule) and re-run. Expected: 2 failures, `clockMovedBackwardsBeyondSkewIsLapsedWithoutMovingStamp` and `futureStampBeyondSkewIsLapsed`. Restore the bound; the run is back to 8 passed.
+- [ ] **Step 7: Commit:** `Packages/TegelKit/Package.swift Packages/TegelKit/Sources/TegelStore/License.swift Packages/TegelKit/Tests/TegelStoreTests`, "feat(store): add TegelStore with LicensePolicy, 30-day grace and 1-day skew".
 
 ### Task 5: PolarClient (Tue 17 Nov)
 
@@ -279,9 +305,9 @@ No commit.
 - "If the header is omitted, Polar uses Current", and "a malformed, unknown, or removed version returns `404 Not Found`" (polar.sh/docs/api-reference/2026-10/versioning.md).
 - **Pinning** guarantees that every install that never updates gets 404 about 9 months after release. With the 30-day grace, that install then loses Pro: a broken perpetual licence.
 - **Omitting** fails only if Polar changes these endpoints' fields in a new Current version. The client limits that exposure:
-  - it reads only `id`, `license_key.benefit_id` (activate) and `expires_at`;
-  - it treats any 200 on validate as success;
-  - every failure path goes through grace.
+  - it reads only `id`, `license_key.benefit_id` (activate), and `status`, `activation.id` and `expires_at` (validate);
+  - every failure path goes through grace, so a drift costs nothing for 30 days.
+- **Validate decodes (K5):** a 200 counts only if `status == "granted"` (the schema's only value, polar.sh/docs/api-reference/customer-portal/license-keys/validate, checked 27 Oct) and `activation.id` equals the stored activation id. A proxy block page, a naive stub or a drifted body is a failure, never a success. The quarterly check below catches a rename before the 30 days run out.
 - Each quarter, while the new version sits in "Next" for 3 months, run Task 1 step 9 with `-H 'Polar-Version: <Next>'` (see Contract change requests).
 
 **Files:**
@@ -297,6 +323,7 @@ No commit.
       public func activate(key: String, label: String) async throws -> String          // activation id; license_key.benefit_id ≠ config.benefitID
                                                                                        //   → deactivates that activation, throws .wrongProduct
       public func validate(key: String, activationID: String) async throws -> Date?     // body adds benefit_id; expires_at; throws PolarError
+                                                                                       //   a 200 without status "granted" + this activation id → .http(200)
       public func deactivate(key: String, activationID: String) async throws }
   public enum PolarError: Error, Equatable { case limitReached, notFound, http(Int), network, wrongProduct }
   ```
@@ -360,16 +387,27 @@ No commit.
       }
       @Test(arguments: ["2027-01-01T00:00:00.000000Z", "2027-01-01T00:00:00Z"])
       func validateSendsExactBodyAndReturnsExpiry(expiresAt: String) async throws {
-          let (client, host) = stubbedClient(respond(200, #"{"status":"granted","expires_at":"\#(expiresAt)"}"#))
+          let (client, host) = stubbedClient(respond(200, #"{"status":"granted","activation":{"id":"act_1"},"expires_at":"\#(expiresAt)"}"#))
           #expect(try await client.validate(key: "K-1", activationID: "act_1") == Date(timeIntervalSince1970: 1_798_761_600))
           let (req, body) = try #require(StubURLProtocol.requests(host: host).first)
           #expect(req.url?.path == "/v1/customer-portal/license-keys/validate")
           #expect(body == ["key": "K-1", "organization_id": "org-1", "activation_id": "act_1", "benefit_id": "ben-1"])
       }
-      @Test(arguments: [#"{"expires_at":null}"#, #"{"status":"granted"}"#, "not json"])
-      func validateAny200IsSuccessWithNilExpiry(body: String) async throws {
+      @Test(arguments: [#"{"status":"granted","activation":{"id":"act_1"},"expires_at":null}"#,
+                        #"{"status":"granted","activation":{"id":"act_1"}}"#])
+      func validateGrantedWithoutExpiryReturnsNil(body: String) async throws {
           let (client, _) = stubbedClient(respond(200, body))
           #expect(try await client.validate(key: "K-1", activationID: "act_1") == nil)
+      }
+      @Test(arguments: ["not json",                                              // proxy block page
+                        #"{"status":"granted"}"#,                                // no activation
+                        #"{"status":"granted","activation":null}"#,
+                        #"{"status":"granted","activation":{"id":"act_other"}}"#,
+                        #"{"status":"revoked","activation":{"id":"act_1"}}"#,
+                        #"{"activation":{"id":"act_1"}}"#])
+      func validate200WithoutGrantedMatchingActivationIsFailure(body: String) async {   // K5: a failure goes through grace
+          let (client, _) = stubbedClient(respond(200, body))
+          await #expect(throws: PolarError.http(200)) { try await client.validate(key: "K-1", activationID: "act_1") }
       }
       @Test(arguments: [(404, PolarError.notFound), (500, .http(500))])
       func validateMapsErrors(status: Int, expected: PolarError) async {
@@ -393,19 +431,16 @@ No commit.
       }
   }
   ```
-- [ ] **Step 2: Run it to verify it fails.** `$ST --filter PolarClientTests`. Expected: FAIL, `error: cannot find 'PolarClient' in scope`.
+- [ ] **Step 2: Run it to verify it fails.** `swift test --package-path Packages/TegelKit --filter PolarClientTests`. Expected: FAIL, `error: cannot find 'PolarClient' in scope`.
 - [ ] **Step 3: Implement `PolarClient` and `PolarError`** in `PolarClient.swift`. The three calls share one private `post(_ path: String, _ body: [String: String]) async throws -> (Int, Data)`:
   - `POST apiBase/v1/customer-portal/license-keys/<activate|validate|deactivate>` with a JSON body, `Content-Type: application/json`, and `organization_id` from the config. Body fields exactly per [F3a–c].
   - A URLSession throw or a non-HTTP response → `.network`. `403` → `.limitReached`. `404` → `.notFound`. Any other non-2xx → `.http(code)`.
-  - `activate` decodes `{id, license_key: {benefit_id}}`. A 200 without `id` → `.http(200)`. With an `id` but no `license_key.benefit_id` → `try? await deactivate(key:activationID:)` (best effort, so API drift never eats a device slot), then `.http(200)` (fails closed; the quarterly `Polar-Version` check above catches the drift). A `benefit_id` ≠ `config.benefitID` → the same best-effort deactivate, then throw `.wrongProduct`.
+  - `activate` decodes `{id, license_key: {benefit_id}}`. A 200 without `id` → `.http(200)`. With an `id` but no `license_key.benefit_id` → `try? await deactivate(key:activationID:)` (best effort, so API drift never eats a device slot), then `.http(200)` (fails closed; the quarterly `Polar-Version` check above catches the drift). A `benefit_id` ≠ `config.benefitID` → the same best-effort deactivate, then throw `.wrongProduct`. `// ponytail: best-effort release, no retry queue; the user frees a stuck slot in the Polar portal.`
   - `validate` adds `"benefit_id": config.benefitID` to its body; Polar answers 404 on a mismatch (plan 06 DF6), which goes through grace like any 404.
-  - `validate` treats **any 200 as success**. It parses `expires_at` with `ISO8601DateFormatter` using `[.withInternetDateTime, .withFractionalSeconds]`, then falls back to the plain options (Polar returns microseconds; checked on the build Mac). An unparseable or absent value → `nil`.
-- [ ] **Step 4: Run it to verify it passes.** `$ST --filter PolarClientTests`. Expected: `✔ Test run with 11 tests … passed`.
-- [ ] **Step 5: Commit.**
-  ```bash
-  git add Packages/TegelKit/Sources/TegelStore/PolarClient.swift Packages/TegelKit/Tests/TegelStoreTests/TestSupport.swift Packages/TegelKit/Tests/TegelStoreTests/PolarClientTests.swift
-  git commit -m "feat(store): add PolarClient for licence activate/validate/deactivate" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-  ```
+  - `validate` decodes `{status, activation: {id}?, expires_at?}` from a 200. It returns only when `status == "granted"` and `activation?.id == activationID`; anything else, including a body that isn't JSON, throws `.http(200)`. It parses `expires_at` with `ISO8601DateFormatter` using `[.withInternetDateTime, .withFractionalSeconds]`, then falls back to the plain options (Polar returns microseconds; checked on the build Mac). An unparseable or absent value → `nil`.
+- [ ] **Step 4: Run it to verify it passes.** Same command. Expected: `✔ Test run with 12 tests … passed`.
+- [ ] **Step 5: Watch the decode guard fail.** Temporarily make `validate` return `nil` on any 200 (the old rule) and re-run. Expected: `validate200WithoutGrantedMatchingActivationIsFailure` fails for all 6 arguments. Restore; back to 12 passed.
+- [ ] **Step 6: Commit:** `Packages/TegelKit/Sources/TegelStore/PolarClient.swift Packages/TegelKit/Tests/TegelStoreTests/TestSupport.swift Packages/TegelKit/Tests/TegelStoreTests/PolarClientTests.swift`, "feat(store): add PolarClient; validate requires status granted and the stored activation".
 
 ### Task 6: KeychainStore (Wed 18 Nov)
 
@@ -418,6 +453,7 @@ No commit.
 - Consumes: `StoredLicense`.
 - Produces (§3.3 verbatim): `public struct KeychainStore: Sendable { public init(service: String); public func load() -> StoredLicense?; public func save(_ l: StoredLicense) throws; public func delete() throws }`.
 - Errors are `NSError(domain: NSOSStatusErrorDomain, code: Int(status))`, so no new type.
+- New, internal: `var failSaves = false`. When set, `save` throws `NSError(domain: NSOSStatusErrorDomain, code: Int(errSecInteractionNotAllowed))` without touching the Keychain. `// ponytail: test seam; nothing else makes SecItemAdd fail on demand` (Task 7's rollback test uses it).
 
 - [ ] **Step 1: Write the failing test.**
   ```swift
@@ -446,21 +482,18 @@ No commit.
       }
   }
   ```
-- [ ] **Step 2: Run it to verify it fails.** `$ST --filter KeychainStoreTests`. Expected: FAIL, `error: cannot find 'KeychainStore' in scope`.
+- [ ] **Step 2: Run it to verify it fails.** `swift test --package-path Packages/TegelKit --filter KeychainStoreTests`. Expected: FAIL, `error: cannot find 'KeychainStore' in scope`.
 - [ ] **Step 3: Implement `KeychainStore`.**
   - Item: `kSecClassGenericPassword`, `kSecAttrService` = service, `kSecAttrAccount` = `"licence"`, value = the JSON-encoded `StoredLicense`.
   - Use the file-based login keychain: the data-protection keychain needs a provisioning profile.
   - `save` = `SecItemDelete`, then `SecItemAdd`.
   - `load` = `SecItemCopyMatching` + decode. Any failure → `nil`.
   - `delete` treats `errSecItemNotFound` as success.
+  - `failSaves` as in Interfaces.
 - [ ] **Step 4: Run it to verify it passes, and check cleanup.**
-  - `$ST --filter KeychainStoreTests`. Expected: `✔ Test run with 2 tests … passed`.
+  - Same command. Expected: `✔ Test run with 2 tests … passed`.
   - Then `security dump-keychain 2>/dev/null | grep -c 'com.tegelapps.tests'` → `0` (no leftovers; this prints attributes only, no secrets).
-- [ ] **Step 5: Commit.**
-  ```bash
-  git add Packages/TegelKit/Sources/TegelStore/KeychainStore.swift Packages/TegelKit/Tests/TegelStoreTests/TestSupport.swift Packages/TegelKit/Tests/TegelStoreTests/KeychainStoreTests.swift
-  git commit -m "feat(store): add KeychainStore for the stored licence" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-  ```
+- [ ] **Step 5: Commit:** `Packages/TegelKit/Sources/TegelStore/KeychainStore.swift Packages/TegelKit/Tests/TegelStoreTests/TestSupport.swift Packages/TegelKit/Tests/TegelStoreTests/KeychainStoreTests.swift`, "feat(store): add KeychainStore for the stored licence".
 
 ### Task 7: LicenseManager (Wed 18 Nov)
 
@@ -477,12 +510,18 @@ No commit.
       public func activate(key: String) async throws; public func deactivate() async throws; public func refresh(now: Date = .now) async }
   ```
   - `isPro` is computed: `true` only for `.pro`.
-- New, internal: `static func normalisedKey(_ raw: String) -> String`. It removes **all** whitespace and newlines, not just the ends: Polar keys contain none, so this also fixes a key wrapped across lines in an email.
-- Test helper, in this test file: `@MainActor func makeManager(stored: StoredLicense?, _ handler: @escaping StubHandler = respond(200, #"{"id":"act_1","license_key":{"benefit_id":"ben-1"}}"#)) throws -> (LicenseManager, KeychainStore, String)`. It uses a `uniqueService()` store, pre-saves `stored`, and builds the client with `stubbedClient`.
+  - K5: one `activate`/`deactivate` at a time. A call made while another is in flight throws `CancellationError()` and sends nothing (the UI disables its buttons while busy, so only code can hit this).
+- New, internal:
+  - `static func normalisedKey(_ raw: String) -> String`. It removes **all** whitespace and newlines, not just the ends: Polar keys contain none, so this also fixes a key wrapped across lines in an email.
+  - `static var computerName: String { (SCDynamicStoreCopyComputerName(nil, nil) as String?) ?? "Mac" }`, the activation label (`import SystemConfiguration`). Not `Host.current()`, which does a blocking DNS lookup that can stall offline (CR-P2-26).
+- Test helpers, in this test file:
+  - `let granted = respond(200, #"{"status":"granted","activation":{"id":"act_1"}}"#)`, a validate 200 for `lic`.
+  - `@MainActor func makeManager(stored: StoredLicense?, _ handler: @escaping StubHandler = respond(200, #"{"id":"act_1","license_key":{"benefit_id":"ben-1"}}"#), failSaves: Bool = false) throws -> (LicenseManager, KeychainStore, String)`. It uses a `uniqueService()` store with `failSaves` set, pre-saves `stored` (before setting the flag), and builds the client with `stubbedClient`.
 
 - [ ] **Step 1: Write the failing test.** Each test also deletes its Keychain store at the end (`defer { try? store.delete() }`, omitted below).
   ```swift
   import Foundation
+  import SystemConfiguration
   import Testing
   @testable import TegelStore
 
@@ -503,8 +542,29 @@ No commit.
           try await m.activate(key: " K-1\n")
           let (_, body) = try #require(StubURLProtocol.requests(host: host).first)
           #expect(body["key"] == "K-1")
-          #expect(body["label"] == (Host.current().localizedName ?? "Mac"))
+          #expect(body["label"] == ((SCDynamicStoreCopyComputerName(nil, nil) as String?) ?? "Mac"))
           #expect(store.load()?.key == "K-1"); #expect(store.load()?.activationID == "act_9"); #expect(m.isPro)
+      }
+      @Test func concurrentActivateSendsOneRequest() async throws {           // K5: one mutation in flight
+          let held: StubHandler = { _, _ in                                    // holds the first request so the second call lands mid-flight
+              Thread.sleep(forTimeInterval: 0.2); return (200, Data(#"{"id":"act_1","license_key":{"benefit_id":"ben-1"}}"#.utf8)) }
+          let (m, store, host) = try makeManager(stored: nil, held)
+          async let a: Void = m.activate(key: "K-1")
+          async let b: Void = m.activate(key: "K-1")
+          var cancelled = 0
+          do { try await a } catch is CancellationError { cancelled += 1 }
+          do { try await b } catch is CancellationError { cancelled += 1 }
+          #expect(cancelled == 1)
+          #expect(StubURLProtocol.requests(host: host).count == 1)
+          #expect(store.load()?.activationID == "act_1"); #expect(m.isPro)
+      }
+      @Test func activateKeychainSaveFailureRollsBack() async throws {         // K5: no orphaned slot when the save fails
+          let (m, store, host) = try makeManager(stored: nil, respond(200, #"{"id":"act_9","license_key":{"benefit_id":"ben-1"}}"#), failSaves: true)
+          await #expect(throws: (any Error).self) { try await m.activate(key: "K-1") }
+          let reqs = StubURLProtocol.requests(host: host)
+          #expect(reqs.map { $0.0.url?.lastPathComponent } == ["activate", "deactivate"])
+          #expect(reqs.last?.1["activation_id"] == "act_9")
+          #expect(m.state == .free); #expect(store.load() == nil)
       }
       @Test func activateLimitReachedThrowsAndStaysFree() async throws {
           let (m, store, _) = try makeManager(stored: nil, respond(403))
@@ -517,7 +577,7 @@ No commit.
           #expect(m.state == .free); #expect(store.load() == nil)
       }
       @Test func refresh200StampsLastValidatedAt() async throws {
-          let (m, store, _) = try makeManager(stored: lic, respond(200))
+          let (m, store, _) = try makeManager(stored: lic, granted)
           await m.refresh(now: t0 + 10 * 86_400)
           #expect(store.load()?.lastValidatedAt == t0 + 10 * 86_400); #expect(m.isPro)
       }
@@ -542,13 +602,13 @@ No commit.
           #expect(m.state == .lapsed(lic)); #expect(!m.isPro); #expect(store.load() == lic)
       }
       @Test func refreshAfterLapseWith200RestoresPro() async throws {
-          let (m, _, _) = try makeManager(stored: lic, respond(200))
+          let (m, _, _) = try makeManager(stored: lic, granted)
           await m.refresh(now: t0 + 40 * 86_400)
           #expect(m.state == .pro(StoredLicense(key: "K-1", activationID: "act_1", lastValidatedAt: t0 + 40 * 86_400)))
       }
-      @Test func refreshWithClockBackwardsKeepsLastValidatedAt() async throws {
+      @Test func refreshWithClockBackwardsKeepsLastValidatedAt() async throws {   // within the 1-day skew
           let (m, store, _) = try makeManager(stored: lic, offline)
-          await m.refresh(now: t0 - 86_400)
+          await m.refresh(now: t0 - 3_600)
           #expect(m.state == .pro(lic)); #expect(store.load()?.lastValidatedAt == t0)
       }
       @Test func refreshWithoutLicenceMakesNoRequest() async throws {
@@ -570,37 +630,40 @@ No commit.
       @Test func refreshDoesNotResurrectLicenceDeletedMidFlight() async throws {
           let service = uniqueService(), store = KeychainStore(service: service)
           try store.save(lic)
-          let (client, _) = stubbedClient { _, _ in try? KeychainStore(service: service).delete(); return (200, Data("{}".utf8)) }
+          let (client, _) = stubbedClient { _, _ in try? KeychainStore(service: service).delete(); return (200, Data(#"{"status":"granted","activation":{"id":"act_1"}}"#.utf8)) }
           let m = LicenseManager(client: client, keychain: store)
           await m.refresh(now: t0 + 86_400)
           #expect(store.load() == nil); #expect(m.state == .free)
       }
   }
   ```
-- [ ] **Step 2: Run it to verify it fails.** `$ST --filter LicenseManagerTests`. Expected: FAIL, `error: cannot find 'LicenseManager' in scope`.
+- [ ] **Step 2: Run it to verify it fails.** `swift test --package-path Packages/TegelKit --filter LicenseManagerTests`. Expected: FAIL, `error: cannot find 'LicenseManager' in scope`.
 - [ ] **Step 3: Implement `LicenseManager`.**
   - **`init`:** `state = LicensePolicy.state(stored: keychain.load(), now: .now)`. This is synchronous, so Pro is on at launch before any network call.
+  - **Serialising (K5):** `private var mutating = false`. `activate` and `deactivate` start with `guard !mutating else { throw CancellationError() }; mutating = true; defer { mutating = false }`. Both run on the main actor, so the flag is set before the first `await`.
   - **`activate`:**
     1. Normalise the key.
-    2. Call `client.activate(key:label:)` with `label: Host.current().localizedName ?? "Mac"`.
+    2. Call `client.activate(key:label:)` with `label: Self.computerName`.
     3. `keychain.save(StoredLicense(key:activationID:lastValidatedAt: .now))`, then `state = .pro`.
-    - Errors propagate unchanged, and nothing is stored on error. That includes `.wrongProduct`, whose activation `PolarClient` has already released.
+    4. If the save throws: `try? await client.deactivate(key:activationID:)` (best-effort rollback, so a failed save never eats a slot), then rethrow the save error. `// ponytail: no retry queue; a slot left by a failed rollback is freed in the Polar portal.`
+    - Polar errors propagate unchanged, and nothing is stored on error. That includes `.wrongProduct`, whose activation `PolarClient` has already released.
   - **`refresh(now:)`:**
     1. With no stored licence: `state = .free`, no request.
     2. Otherwise call `validate`.
     3. After the `await`, check that `keychain.load()?.activationID` still equals the activation it started with. If not, a deactivate/activate ran mid-flight: set `state` from the current Keychain and return.
-    4. On 200: stamp `lastValidatedAt = now`, `try? save`, `state = .pro`.
-    5. On **any** error (404, 5xx, network): `state = LicensePolicy.state(stored:now:)`, and **neither the Keychain nor the stamp is touched**.
+    4. On success (a decoded `granted` 200 for this activation): stamp `lastValidatedAt = now`, `try? save`, `state = .pro`. This is the only path that moves the stamp, and it restores Pro from `.lapsed`.
+    5. On **any** error (404, 5xx, network, a 200 that fails the decode): `state = LicensePolicy.state(stored:now:)`, and **neither the Keychain nor the stamp is touched**.
     - `expires_at` is ignored: Polar 404s expired keys [F3b].
+    - `refresh` takes no part in the `mutating` flag; step 3 already handles a mutation that lands mid-flight.
   - **`deactivate`:** call `client.deactivate`. Then `.notFound` and success both `keychain.delete()` and set `state = .free`. Every other error is rethrown, and the licence is kept.
 - [ ] **Step 4: Run it to verify it passes.**
-  - `$ST --filter LicenseManagerTests`. Expected: `✔ Test run with 16 tests … passed`.
-  - Then `$ST --filter TegelStoreTests`. Expected: `35 tests … passed`.
-- [ ] **Step 5: Commit.**
-  ```bash
-  git add Packages/TegelKit/Sources/TegelStore/LicenseManager.swift Packages/TegelKit/Tests/TegelStoreTests/LicenseManagerTests.swift
-  git commit -m "feat(store): add LicenseManager with grace on every failure, 404 included" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-  ```
+  - `swift test --package-path Packages/TegelKit --filter LicenseManagerTests`. Expected: `✔ Test run with 18 tests … passed`.
+  - Then `swift test --package-path Packages/TegelKit --filter TegelStoreTests`. Expected: `40 tests … passed` (8 + 12 + 2 + 18).
+- [ ] **Step 5: Watch both K5 guards fail.** One at a time, re-running `--filter LicenseManagerTests` after each, then restoring:
+  - delete the `guard !mutating` line → `concurrentActivateSendsOneRequest` fails (2 requests, 0 cancelled);
+  - delete the rollback `deactivate` → `activateKeychainSaveFailureRollsBack` fails (requests `["activate"]`).
+  - Restored: 18 passed.
+- [ ] **Step 6: Commit:** `Packages/TegelKit/Sources/TegelStore/LicenseManager.swift Packages/TegelKit/Tests/TegelStoreTests/LicenseManagerTests.swift`, "feat(store): add LicenseManager; grace on every failure, serialised mutations, save rollback".
 
 ### Task 8: Polar values from xcconfig into Info.plist; link TegelStore (Thu 19 Nov)
 
@@ -620,16 +683,21 @@ No commit.
   - the placeholder token `REPLACE_IN_PLAN_05` in four Release settings (`TG_POLAR_ORGANIZATION_ID`, `TG_POLAR_CHECKOUT_URL_MARKDOWN`, `TG_POLAR_PORTAL_URL`, `TG_POLAR_BENEFIT_ID_MARKDOWN`), which Task 12 and plan 05 key on.
 - `release.sh --sandbox` reuses `Config/PolarSandbox.xcconfig` via `xcodebuild -xcconfig`.
 
-- [ ] **Step 1: Write the failing check.**
+- [ ] **Step 1: Write the failing check.** One self-contained block (`b` and `p` live only in this shell):
   ```bash
-  build Debug && plist Debug TGPolarAPIBase && [ "$(plist Debug TGPolarBenefitID)" = "$(envget POLAR_SANDBOX_BENEFIT_ID_MARKDOWN)" ] && echo benefit-ok
-  build Release && plist Release TGPolarAPIBase && plist Release TGPolarOrganizationID && plist Release TGPolarBenefitID
-  build Release -xcconfig Config/PolarSandbox.xcconfig && plist Release TGPolarAPIBase
+  . scripts/lib/env.sh
+  xcodegen generate >/dev/null
+  b() { xcodebuild build -scheme markdown -configuration "$1" -destination 'platform=macOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO -quiet "${@:2}"; }
+  p() { /usr/libexec/PlistBuddy -c "Print :$2" "build/Build/Products/$1/Tegel Markdown.app/Contents/Info.plist"; }
+  b Debug && p Debug TGPolarAPIBase && [ "$(p Debug TGPolarBenefitID)" = "$(envget POLAR_SANDBOX_BENEFIT_ID_MARKDOWN)" ] && echo benefit-ok
+  b Release && p Release TGPolarAPIBase && p Release TGPolarOrganizationID && p Release TGPolarBenefitID
+  b Release -xcconfig Config/PolarSandbox.xcconfig && p Release TGPolarAPIBase
   ```
 - [ ] **Step 2: Run it to verify it fails.** Expected: FAIL, `Print: Entry, ":TGPolarAPIBase", Does Not Exist`.
 - [ ] **Step 3: Implement.**
   - **`//` starts an xcconfig comment**, so write URLs as `https:/$()/host…`. Generate the sandbox file from `.env` without echoing values:
     ```bash
+    . scripts/lib/env.sh
     u() { envget "$1" | sed 's|://|:/$()/|'; }
     printf 'TG_POLAR_API_BASE = https:/$()/sandbox-api.polar.sh\nTG_POLAR_ORGANIZATION_ID = %s\nTG_POLAR_CHECKOUT_URL_MARKDOWN = %s\nTG_POLAR_PORTAL_URL = %s\nTG_POLAR_BENEFIT_ID_MARKDOWN = %s\n' \
       "$(envget POLAR_SANDBOX_ORGANIZATION_ID)" "$(u POLAR_SANDBOX_CHECKOUT_URL_MARKDOWN)" "$(u POLAR_SANDBOX_PORTAL_URL)" "$(envget POLAR_SANDBOX_BENEFIT_ID_MARKDOWN)" > Config/PolarSandbox.xcconfig
@@ -641,7 +709,7 @@ No commit.
     - `TG_POLAR_PORTAL_URL = https:/$()/polar.sh/REPLACE_IN_PLAN_05/portal`;
     - `TG_POLAR_BENEFIT_ID_MARKDOWN = REPLACE_IN_PLAN_05`.
   - Add the dependency and the five `info.properties` to `project.yml`.
-- [ ] **Step 4: Run it to verify it passes.** Same commands. Expected, in order:
+- [ ] **Step 4: Run it to verify it passes.** Same block. Expected, in order:
   1. `https://sandbox-api.polar.sh`
   2. `benefit-ok`
   3. `https://api.polar.sh`
@@ -649,11 +717,7 @@ No commit.
   5. `REPLACE_IN_PLAN_05`
   6. `https://sandbox-api.polar.sh`
   - Then `make check` still passes with the plan 01/02 baseline counts.
-- [ ] **Step 5: Commit.**
-  ```bash
-  git add Config/PolarSandbox.xcconfig Config/Debug.xcconfig Config/Release.xcconfig project.yml
-  git commit -m "build: feed Polar sandbox/production values into Info.plist via xcconfig (D16)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-  ```
+- [ ] **Step 5: Commit:** `Config/PolarSandbox.xcconfig Config/Debug.xcconfig Config/Release.xcconfig project.yml`, "build: feed Polar sandbox/production values into Info.plist via xcconfig (D16)".
 
 ### Task 9: App wiring: `isPro` from LicenseManager, Licence tab, refresh loop (Thu 19 Nov)
 
@@ -673,7 +737,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   - `struct LicenceSettingsView: View`, reading `@Environment(LicenseManager.self)`;
   - the App injects `.environment(license)` and `.environment(\.isPro, license.isPro)` (OR'd with plan 02's `#if DEBUG` override, which stays Debug-only) on every scene.
 
-- [ ] **Step 1: Write the failing check (GUI).** Run `build Debug` with signing on (drop `CODE_SIGNING_ALLOWED=NO`) and open the app. Expected FAIL: Settings has no **Licence** tab, and Pro features follow only the Debug override.
+- [ ] **Step 1: Write the failing check (GUI).** Run `make build` (plan 01: Debug, ad-hoc signed) and open `build/Build/Products/Debug/Tegel Markdown.app`. Expected FAIL: Settings has no **Licence** tab, and Pro features follow only the Debug override.
 - [ ] **Step 2: Implement.**
   - **App init:**
     - `let m = LicenseManager(client: PolarClient(config: .fromInfoPlist()))`, `_license = State(initialValue: m)`;
@@ -690,30 +754,28 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   | error `.network` | "Couldn't reach the licence server. Check your connection and try again." |
   | error `.http(n)` | "The licence server returned error \(n). Try again later." |
   | error `.wrongProduct` | "This key is for another Tegel app. Each app has its own key on your Polar purchases page." |
+  | any other error (a Keychain save failure, whose activation `LicenseManager` has already released) | "Tegel couldn't save the licence on this Mac. Try again." |
 
+  - A `CancellationError` shows nothing: it only means another licence action was already running.
   - The activation label is the computer name; `LicenseManager` sends it (Task 7).
   - Add the tab `.tabItem { Label("Licence", systemImage: "key") }` to the Settings `TabView`.
 - [ ] **Step 3: Run the smoke test (GUI), on the build Mac with a Debug build against the sandbox.**
-  1. `envget POLAR_SANDBOX_TEST_LICENSE_KEY | sed 's/^/  /;s/$/\n/' | pbcopy`. This puts the key on the clipboard with leading spaces and a trailing newline, without printing it.
+  1. `. scripts/lib/env.sh; envget POLAR_SANDBOX_TEST_LICENSE_KEY | sed 's/^/  /;s/$/\n/' | pbcopy`. This puts the key on the clipboard with leading spaces and a trailing newline, without printing it.
   2. Paste it, then click Activate. Expected: "Pro is active on this Mac", and folder mode is enabled.
-  3. Sandbox dashboard → the order's licence key → activations. Expected: one activation whose label equals `scutil --get ComputerName`. This also confirms `Host.current()` works inside the sandbox.
+  3. Sandbox dashboard → the order's licence key → activations. Expected: one activation whose label equals `scutil --get ComputerName`. This also confirms `SCDynamicStoreCopyComputerName` works inside the sandbox.
   4. Disconnect the network, quit, relaunch. Expected: still Pro, no error. Reconnect.
   5. Deactivate this Mac. Expected: the free copy shows, and the dashboard shows 0 activations.
   6. Type the key `TEGEL-0000` and Activate. Expected: the `.notFound` copy.
   7. `make test-app ONLY=LocalizationTests`. Expected: `Executed 3 tests, with 0 failures` (every new string has NL/FR/AR). Then relaunch with `-AppleLanguages '(nl)'`, then `(fr)`, then `(ar)`. Expected: the Licence tab shows no English, and the AR layout is right-to-left.
-- [ ] **Step 4: Run `make check`.** Expected: baseline + 35 TegelStore tests, all passing.
-- [ ] **Step 5: Commit.**
-  ```bash
-  git add Apps/Markdown/App/LicenceSettingsView.swift Apps/Markdown/App/MarkdownApp.swift Apps/Markdown/App/Localizable.xcstrings <settings-tabview-file>
-  git commit -m "feat(app): Licence settings tab; LicenseManager feeds isPro; 24 h refresh" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-  ```
+- [ ] **Step 4: Run `make check`.** Expected: baseline + 40 TegelStore tests, all passing.
+- [ ] **Step 5: Commit:** `Apps/Markdown/App/LicenceSettingsView.swift Apps/Markdown/App/MarkdownApp.swift Apps/Markdown/App/Localizable.xcstrings <settings-tabview-file>`, "feat(app): Licence settings tab; LicenseManager feeds isPro; 24 h refresh".
 
 ### Task 10: Sparkle 2.10.1 and EdDSA keys (Fri 20 Nov)
 
 **Files:**
 - Modify: `project.yml`:
   - `packages: Sparkle: {url: https://github.com/sparkle-project/Sparkle, exactVersion: 2.10.1}`, and the dependency `- package: Sparkle` on the `markdown` app target only;
-  - `info.properties`: `SUFeedURL`, `SUPublicEDKey`, `SUEnableInstallerLauncherService: true`, `SUEnableAutomaticChecks: true`;
+  - `info.properties`: `SUFeedURL`, `SUPublicEDKey`, `SUEnableInstallerLauncherService: true`, `SUEnableAutomaticChecks: true`, `SURequireSignedFeed: true`, `SUVerifyUpdateBeforeExtraction: true` (K7; Sparkle 2.9+ and 2.7.3+ respectively, and the first needs the second, per sparkle-project.org/documentation/customization/ and `SPUUpdater.m` at 2.10.1);
   - `entitlements.properties`: `com.apple.security.temporary-exception.mach-lookup.global-name: ["$(PRODUCT_BUNDLE_IDENTIFIER)-spks", "$(PRODUCT_BUNDLE_IDENTIFIER)-spki"]` [F4]. It's a no-op if plan 01 already added it under D5.
 - Modify: `Apps/Markdown/App/MarkdownApp.swift`
 - Create: `Apps/Markdown/App/UpdatesSettingsView.swift`
@@ -725,48 +787,52 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
 - Produces:
   - `let updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)` in the App struct (sparkle-project.org/documentation/programmatic-setup/);
   - `struct UpdatesSettingsView: View` with `init(updater: SPUUpdater)`, the fourth Settings tab (General | Appearance | Licence | Updates). `LicenceSettingsView` stays as Task 9 left it and takes no updater, so App 2 can compile it by path (plan 06);
-  - `.env` `SPARKLE_PUBLIC_ED_KEY` and `SPARKLE_PRIVATE_KEY_BACKUP_PATH`;
-  - a Keychain item with account **`tegelapps`**;
-  - `SPARKLE_BIN=build/SourcePackages/artifacts/sparkle/Sparkle/bin`.
+  - `.env` `SPARKLE_PUBLIC_ED_KEY` (no key path: the private-key backup lives only in the offline store, K3);
+  - a Keychain item with account **`tegelapps`**, and its backup in `TegelKeys` (Task 3 step 5);
+  - the Sparkle tools at `build/SourcePackages/artifacts/sparkle/Sparkle/bin` (`release.sh` uses its own copy under `build/release-dd/`).
 
 - [ ] **Step 1: Write the failing check.**
   ```bash
-  build Debug && for k in SUFeedURL SUEnableInstallerLauncherService SUEnableAutomaticChecks; do plist Debug $k; done
-  xcodebuild build -scheme markdown -configuration Debug -derivedDataPath build -quiet && \
-    codesign -d --entitlements - --xml "$(echo build/Build/Products/Debug/*.app)" 2>/dev/null | grep -oE 'com\.tegelapps\.markdown-sp[ik]s|network\.client' | sort
+  make build
+  A="build/Build/Products/Debug/Tegel Markdown.app"
+  for k in SUFeedURL SUEnableInstallerLauncherService SUEnableAutomaticChecks SURequireSignedFeed SUVerifyUpdateBeforeExtraction; do
+    /usr/libexec/PlistBuddy -c "Print :$k" "$A/Contents/Info.plist"; done
+  codesign -d --entitlements - --xml "$A" 2>/dev/null | grep -oE 'com\.tegelapps\.markdown-sp[ik]s|network\.client' | sort
   ```
-- [ ] **Step 2: Run it to verify it fails.** Expected: FAIL, `Entry, ":SUFeedURL", Does Not Exist`, and no `-spks`/`-spki` lines.
+- [ ] **Step 2: Run it to verify it fails.** Expected: FAIL, `Print: Entry, ":SUFeedURL", Does Not Exist` (and the same for the other four keys). The `-spks`/`-spki` lines already show if plan 01 added the pair under D5.
 - [ ] **Step 3: Implement and generate the keys.**
   - Add the package and the `SUFeedURL`, flag and entitlement entries; then `xcodegen generate && xcodebuild -resolvePackageDependencies -derivedDataPath build | grep Sparkle`. Expected: `Sparkle: https://github.com/sparkle-project/Sparkle @ 2.10.1`.
   - Generate the keys. Flags were verified in Sparkle 2.10.1's `generate_keys/main.swift`: `--account`, `-p` prints the public key, `-x` exports the private key.
     ```bash
+    . scripts/lib/env.sh
     SPARKLE_BIN=build/SourcePackages/artifacts/sparkle/Sparkle/bin
     "$SPARKLE_BIN/generate_keys" --account tegelapps >/dev/null
     envset SPARKLE_PUBLIC_ED_KEY "$("$SPARKLE_BIN/generate_keys" --account tegelapps -p)"
-    mkdir -p ~/.tegel-secrets && chmod 700 ~/.tegel-secrets
-    "$SPARKLE_BIN/generate_keys" --account tegelapps -x ~/.tegel-secrets/sparkle-ed25519-tegelapps.key && chmod 600 ~/.tegel-secrets/sparkle-ed25519-tegelapps.key
-    envset SPARKLE_PRIVATE_KEY_BACKUP_PATH ~/.tegel-secrets/sparkle-ed25519-tegelapps.key
-    envhas SPARKLE_PUBLIC_ED_KEY; envhas SPARKLE_PRIVATE_KEY_BACKUP_PATH
+    need SPARKLE_PUBLIC_ED_KEY && echo saved
     ```
-  - Put the public key, which is public by design, into `project.yml` as `SUPublicEDKey`. **Ask the user to copy the backup file to an off-machine backup**: losing it means no more updates for every installed copy.
+    Expected: `saved`.
+  - **Back up the private key straight into the offline store (K3)**; it never lands in `$HOME`. Losing it means no more updates for every installed copy. The **user** connects the media and runs `hdiutil attach <path>/TegelKeys.dmg` (passphrase prompt). If H2 still blocks Task 3, the store doesn't exist yet: the user first creates it with Task 3 step 5 item 2's command, and Task 3 later adds its two files to it. Then:
+    ```bash
+    build/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys --account tegelapps -x /Volumes/TegelKeys/sparkle-ed25519-tegelapps.key
+    ls /Volumes/TegelKeys; hdiutil detach /Volumes/TegelKeys
+    ```
+    Expected: `sparkle-ed25519-tegelapps.key`, beside Task 3's `AuthKey_<KEYID>.p8` and `devid-application.key` once those exist. The user puts the media away.
+  - Put the public key, which is public by design, into `project.yml` as `SUPublicEDKey`.
   - **App:** `CommandGroup(after: .appInfo) { Button("Check for Updates…") { updaterController.updater.checkForUpdates() } }`.
   - **Settings:** add the tab `UpdatesSettingsView(updater: updaterController.updater)` with `.tabItem { Label("Updates", systemImage: "arrow.triangle.2.circlepath") }` after Licence. Its `Form` holds (plan 09 Settings spec):
     - `Toggle("Check for updates automatically")` bound to `updater.automaticallyChecksForUpdates`. Use local `@State`, read on appear, and write in `onChange`. The runtime API is used only for user changes, per sparkle-project.org/documentation/customization/;
     - a **"Check Now"** button → `updater.checkForUpdates()`;
     - "Last checked: <relative date>" from `updater.lastUpdateCheckDate`, hidden while it is `nil`.
 - [ ] **Step 4: Run it to verify it passes.**
-  - Step 1's commands. Expected:
-    - `https://downloads.tegelapps.com/markdown/appcast.xml`, `true`, `true`;
+  - Step 1's block. Expected:
+    - `https://downloads.tegelapps.com/markdown/appcast.xml`, `true`, `true`, `true`, `true`;
     - then `com.tegelapps.markdown-spki`, `com.tegelapps.markdown-spks`, `network.client`.
-  - `test -d "$(echo build/Build/Products/Debug/*.app)/Contents/Frameworks/Sparkle.framework" && echo embedded` → `embedded`.
-  - `stat -f %Lp "$(envget SPARKLE_PRIVATE_KEY_BACKUP_PATH)"` → `600`.
-  - *(GUI)* The app menu has "Check for Updates…", and Settings shows the tabs General | Appearance | Licence | Updates, with the Licence tab unchanged. Before Task 13, Check Now reports an update error, because no appcast exists yet.
+  - `test -d "build/Build/Products/Debug/Tegel Markdown.app/Contents/Frameworks/Sparkle.framework" && echo embedded` → `embedded`.
+  - `find ~/.tegel-signing ~/.tegel-secrets -type f \( -name '*.key' -o -name '*.p8' -o -name '*.p12' \) 2>/dev/null | wc -l` → `0`.
+  - *(GUI)* The app menu has "Check for Updates…", and Settings shows the tabs General | Appearance | Licence | Updates, with the Licence tab unchanged. Until plan 05 publishes 1.0.0, Check Now reports an update error: the public appcast doesn't exist yet (betas use a local feed, Task 13).
   - `make check` passes, including `LocalizationTests` for the new strings.
-- [ ] **Step 5: Commit.**
-  ```bash
-  git add project.yml Apps/Markdown/App/MarkdownApp.swift Apps/Markdown/App/UpdatesSettingsView.swift Apps/Markdown/App/Localizable.xcstrings <settings-tabview-file>
-  git commit -m "feat(app): Sparkle 2.10.1 updater, menu item and Updates settings tab" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-  ```
+  - The signed-feed guard is watched failing in Task 13 step 7 (a tampered feed offers no update).
+- [ ] **Step 5: Commit:** `project.yml Apps/Markdown/App/MarkdownApp.swift Apps/Markdown/App/UpdatesSettingsView.swift Apps/Markdown/App/Localizable.xcstrings <settings-tabview-file>`, "feat(app): Sparkle 2.10.1 updater with signed feed, menu item and Updates settings tab".
 
 ### Task 11: Developer ID signing settings (Fri 20 Nov)
 
@@ -781,153 +847,212 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   - `ENABLE_HARDENED_RUNTIME = YES`;
   - `OTHER_CODE_SIGN_FLAGS = $(inherited) --timestamp`.
 
-- [ ] **Step 1: Write the failing check.** This runs before H2: it reads settings only.
+- [ ] **Step 1: Write the failing check.** This runs before H2: it reads settings only. It names the two signed targets, because `-alltargets` would also count `MarkdownAppTests` (CR-P2-20).
   ```bash
-  xcodegen generate >/dev/null && xcodebuild -showBuildSettings -alltargets -configuration Release 2>/dev/null \
+  xcodegen generate >/dev/null
+  for t in markdown markdown.quicklook; do xcodebuild -project Tegel.xcodeproj -target "$t" -configuration Release -showBuildSettings 2>/dev/null; done \
     | grep -cE '^\s*(CODE_SIGN_STYLE = Manual|CODE_SIGN_IDENTITY = Developer ID Application|ENABLE_HARDENED_RUNTIME = YES|OTHER_CODE_SIGN_FLAGS = .*--timestamp)$'
   ```
-- [ ] **Step 2: Run it to verify it fails.** Expected: FAIL, a count below `8`.
+- [ ] **Step 2: Run it to verify it fails.** Expected: FAIL, a count below `8`: `6` if plan 01's Release.xcconfig still sets three of the four, since `OTHER_CODE_SIGN_FLAGS` is missing on both targets.
 - [ ] **Step 3: Implement** the four lines in `Config/Release.xcconfig`.
 - [ ] **Step 4: Run it to verify it passes.** Expected: `8` (4 settings × 2 targets). Then `make check` passes: its builds use `CODE_SIGNING_ALLOWED=NO`, so they don't need the certificate.
-- [ ] **Step 5: Signed archive check (BLOCKED until Task 3).**
+- [ ] **Step 5: Signed archive check (BLOCKED until Task 3).** The first `codesign` with the Developer ID key raises the Keychain prompt from Task 3 step 1: the **user** clicks **Always Allow** once (CR-P2-27). Note the date for `docs/gates/m03-acceptance.md`.
   ```bash
+  . scripts/lib/env.sh
   xcodebuild archive -scheme markdown -configuration Release -destination 'generic/platform=macOS' -archivePath build/sig.xcarchive -quiet \
     CODE_SIGN_IDENTITY="$(envget APPLE_DEVELOPER_ID_IDENTITY)" DEVELOPMENT_TEAM="$(envget APPLE_TEAM_ID)"
   A=$(echo build/sig.xcarchive/Products/Applications/*.app)
   for c in "$A" "$A"/Contents/PlugIns/*.appex; do codesign -dvv "$c" 2>&1 | grep -cE '^Authority=Developer ID Application|^Timestamp=|flags=0x10000\(runtime\)'; done
   ```
   Expected: `3` and `3`. The app and the extension are each Developer ID signed, timestamped and hardened.
-- [ ] **Step 6: Commit.**
-  ```bash
-  git add Config/Release.xcconfig
-  git commit -m "build: Developer ID manual signing, hardened runtime, secure timestamp for Release" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-  ```
+- [ ] **Step 6: Commit:** `Config/Release.xcconfig`, "build: Developer ID manual signing, hardened runtime, secure timestamp for Release".
 
 ### Task 12: `scripts/release.sh` (Fri 20 – Sat 21 Nov)
 
 **Files:**
 - Create: `scripts/release.sh` (chmod +x)
+- Create: `scripts/entitlements/markdown.plist`, `scripts/entitlements/markdown.quicklook.plist`
 - Test: `scripts/release_test.sh`
 - Modify: `Makefile` (add a `test-release` target and include it in `check`)
 
 **Interfaces:**
 - Consumes:
-  - `.env` `APPLE_TEAM_ID`, `APPLE_DEVELOPER_ID_IDENTITY`, `NOTARY_KEYCHAIN_PROFILE`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_R2_API_TOKEN`, `R2_BUCKET`;
+  - `scripts/lib/env.sh` (plan 01 Task 1) and the `.env` keys `APPLE_TEAM_ID`, `APPLE_DEVELOPER_ID_IDENTITY`, `NOTARY_KEYCHAIN_PROFILE`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_R2_API_TOKEN`, `R2_BUCKET`;
   - `Config/PolarSandbox.xcconfig` (Task 8);
   - Sparkle Keychain account `tegelapps` (Task 10);
   - Release signing (Task 11).
 - Produces:
-  - **`scripts/release.sh <app> <version> [--sandbox] [--yes] [--no-upload]`**:
-    - `<app>` ∈ `markdown` (plan 06 adds `data`);
+  - **`scripts/release.sh <app> <version> [--sandbox] [--yes] [--no-upload] [--print-config] [--from-dmg <path>]`**:
+    - `<app>` ∈ `markdown`. The `case` sets `SLUG`, `SCHEME`, `NAME` and `VOL`; **after the `case`, every path derives from `$SLUG`** and no line names an app (CR-P0-1). Plan 06 adds `data`; plan 07 adds `select` and `markdown-setapp`;
     - `<version>` matches `^[0-9]+\.[0-9]+\.[0-9]+(-(b|rc)[0-9]+)?$`, so `1.0.0`, `1.0.0-b1` and `1.0.0-rc1` (plans 05–07) all pass;
-    - `--sandbox` builds Release with the sandbox Polar values (betas);
+    - `--sandbox` builds Release with the sandbox Polar values. It requires `--no-upload`: betas are private (K7);
     - `--yes` skips the publish prompt. **Claude passes `--yes` only after the user approved that exact version in chat**;
-    - `--no-upload` stops after the notarised, stapled DMG passes Gatekeeper, and prints the DMG's absolute path as the last stdout line: no appcast, no R2, no prompt. Plans 05, 06 and 07 use it for RCs and pre-publish smoke tests.
-  - **Exit codes:** 2 = usage error, 1 = guard or step failure, 0 = published (or, with `--no-upload`, DMG built).
-  - **Artefacts:** `dist-release/markdown/<version>/` (gitignored); public `https://downloads.tegelapps.com/markdown/TegelMarkdown-<version>.dmg` and `…/markdown/appcast.xml`.
+    - `--no-upload` stops after the notarised, stapled DMG passes Gatekeeper, and prints the DMG's absolute path as the last stdout line: no appcast, no R2, no prompt. Plans 05, 06 and 07 use it for RCs and pre-publish smoke tests;
+    - `--print-config` prints the resolved paths and exits 0, before any guard (no `.env`, clean tree or build needed):
+      ```
+      out=dist-release/markdown/1.0.0
+      dmg=TegelMarkdown-1.0.0.dmg
+      feed=https://downloads.tegelapps.com/markdown/appcast.xml
+      download_prefix=https://downloads.tegelapps.com/markdown/
+      r2=$R2_BUCKET/markdown/
+      ```
+      (`$R2_BUCKET` is printed as written, never resolved);
+    - `--from-dmg <path>` publishes a DMG that an earlier `--no-upload` run built and that was smoke-tested, with **no rebuild** (CR-P2-2). It checks the DMG, prints its `sha256`, then runs the appcast, confirm and upload steps. It can't be combined with `--no-upload`.
+  - **Exit codes:** 2 = usage error, 1 = guard or step failure, 0 = published (or, with `--no-upload` or `--print-config`, done).
+  - **Artefacts:**
+    - `dist-release/$SLUG/<version>/` (gitignored);
+    - `dist-release/$SLUG/appcast.xml`, a copy of the last published feed. It is the base of the next release's appcast; the public feed is never fetched back (K7);
+    - public `https://downloads.tegelapps.com/$SLUG/<NAME>-<version>.dmg` and `…/$SLUG/appcast.xml`.
+  - `scripts/entitlements/<target>.plist`: the allowed entitlements for each signed bundle, named by its bundle id minus `com.tegelapps.` (K7).
+  - `check_ents <bundle> <expected.plist>`, a function in `release.sh`. The script runs `main` only when executed, so `release_test.sh` can source it.
 
-- [ ] **Step 1: Write the failing test** `scripts/release_test.sh`. It uses no network, no signing and no build.
+- [ ] **Step 1: Write the failing test** `scripts/release_test.sh`. It uses no network, no Developer ID and no build; the entitlement cases sign a copy of `/usr/bin/true` ad hoc.
   ```bash
   #!/usr/bin/env bash
   # Guard tests for release.sh. Runs it in throwaway clones so the real tree and .env are never touched.
   set -uo pipefail
   ROOT=$(git rev-parse --show-toplevel); pass=0; fail=0; tmps=(); trap 'rm -rf "${tmps[@]}"' EXIT
+  X=$(mktemp -d); tmps+=("$X")                                # fixtures outside every clone
   KEYS="APPLE_TEAM_ID APPLE_DEVELOPER_ID_IDENTITY NOTARY_KEYCHAIN_PROFILE CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_R2_API_TOKEN R2_BUCKET"
-  fresh() { local t; t=$(mktemp -d); tmps+=("$t"); git clone -q "$ROOT" "$t"
-    cp "$ROOT/scripts/release.sh" "$t/scripts/" && echo 'TG_POLAR_ORGANIZATION_ID = REPLACE_IN_PLAN_05' >> "$t/Config/Release.xcconfig"
-    git -C "$t" add -A && git -C "$t" -c user.name=t -c user.email=t@t commit -qm t
-    for k in $KEYS; do echo "$k=dummy-secret-value"; done > "$t/.env"; D=$t; }
+  U="usage: scripts/release.sh <app> <version> [--sandbox] [--yes] [--no-upload] [--print-config] [--from-dmg <path>]"
+  PC=$'out=dist-release/markdown/1.0.0\ndmg=TegelMarkdown-1.0.0.dmg\nfeed=https://downloads.tegelapps.com/markdown/appcast.xml\ndownload_prefix=https://downloads.tegelapps.com/markdown/\nr2=$R2_BUCKET/markdown/'
+  commit() { git -C "$D" add -A && git -C "$D" -c user.name=t -c user.email=t@t commit -qm t; }
+  fresh() { local t; t=$(mktemp -d); tmps+=("$t"); git clone -q "$ROOT" "$t"; D=$t
+    cp "$ROOT/scripts/release.sh" "$D/scripts/" && echo 'TG_POLAR_ORGANIZATION_ID = REPLACE_IN_PLAN_05' >> "$D/Config/Release.xcconfig"
+    commit; for k in $KEYS; do echo "$k=dummy-secret-value"; done > "$D/.env"; }
   check() { local name=$1 want=$2 sub=$3; shift 3; local out got
     out=$(cd "$D" && ./scripts/release.sh "$@" </dev/null 2>&1); got=$?
     if [[ $got == "$want" && $out == *"$sub"* && $out != *dummy-secret-value* ]]; then ((pass++)); else ((fail++)); echo "FAIL $name (exit $got): $out"; fi; }
-  fresh; check usage        2 "usage: scripts/release.sh <app> <version> [--sandbox] [--yes] [--no-upload]"
-         check unknown-app  2 "unknown app: nope"   nope 1.0.0
-         check bad-version  2 "bad version: 1.0"    markdown 1.0
+  ents() { local name=$1 want=$2 bin=$3 out got
+    out=$(bash -c '. "$1/scripts/release.sh"; check_ents "$2" "$3"' _ "$D" "$bin" "$X/ok.plist" 2>&1); got=$?
+    if [[ $got == "$want" ]]; then ((pass++)); else ((fail++)); echo "FAIL $name (exit $got): $out"; fi; }
+
+  fresh; check usage            2 "$U"
+         check unknown-app      2 "unknown app: nope"      nope 1.0.0
+         check bad-version      2 "bad version: 1.0"       markdown 1.0
+         check bad-flag         2 "$U"                     markdown 1.0.0 --bogus   # so no-upload below proves the flag is parsed
+         check sandbox-public   2 "--sandbox builds are private: add --no-upload"  markdown 1.0.0-b1 --sandbox
+         check from-dmg-no-path 2 "$U"                     markdown 1.0.0 --from-dmg
+         check from-dmg-local   2 "--from-dmg publishes: drop --no-upload"         markdown 1.0.0 --from-dmg x.dmg --no-upload
+         check print-config     0 "$PC"                    markdown 1.0.0 --print-config
   sed -i '' '/^APPLE_TEAM_ID=/d' "$D/.env"
-         check missing-key  1 "missing .env key: APPLE_TEAM_ID" markdown 1.0.0
+         check missing-key      1 "missing .env key: APPLE_TEAM_ID" markdown 1.0.0
   fresh; touch "$D/stray.txt"
-         check dirty-tree   1 "working tree is dirty" markdown 1.0.0
-  fresh; check placeholder  1 "Config/Release.xcconfig still has REPLACE_IN_PLAN_05" markdown 1.0.0
-         check rc-version   1 "Config/Release.xcconfig still has REPLACE_IN_PLAN_05" markdown 1.0.0-rc1   # passes the version regex
-         check no-upload    1 "Config/Release.xcconfig still has REPLACE_IN_PLAN_05" markdown 1.0.0 --no-upload   # flag accepted
-         check bad-flag     2 "usage: scripts/release.sh" markdown 1.0.0 --bogus   # so no-upload above proves the flag is parsed
+         check dirty-tree       1 "working tree is dirty"  markdown 1.0.0
+  fresh; check placeholder      1 "Config/Release.xcconfig still has REPLACE_IN_PLAN_05" markdown 1.0.0
+         check rc-version       1 "Config/Release.xcconfig still has REPLACE_IN_PLAN_05" markdown 1.0.0-rc1   # passes the version regex
+         check no-upload        1 "Config/Release.xcconfig still has REPLACE_IN_PLAN_05" markdown 1.0.0 --no-upload
+  fresh; sed -i '' 's/REPLACE_IN_PLAN_05/x/g' "$D/Config/Release.xcconfig"; commit; touch "$X/Other.dmg" "$X/TegelMarkdown-1.0.0.dmg"
+         check from-dmg-missing 1 "no such DMG: $X/none/TegelMarkdown-1.0.0.dmg" markdown 1.0.0 --from-dmg "$X/none/TegelMarkdown-1.0.0.dmg"
+         check from-dmg-name    1 "expected TegelMarkdown-1.0.0.dmg, got Other.dmg" markdown 1.0.0 --from-dmg "$X/Other.dmg"
+         check from-dmg-stapled 1 "not notarised and stapled: TegelMarkdown-1.0.0.dmg" markdown 1.0.0 --from-dmg "$X/TegelMarkdown-1.0.0.dmg"
+  # Entitlement allowlist (K7): the same set passes; one extra key fails.
+  P=/usr/libexec/PlistBuddy
+  $P -c 'Add :com.apple.security.app-sandbox bool true' "$X/ok.plist" >/dev/null
+  cp "$X/ok.plist" "$X/extra.plist"; $P -c 'Add :com.apple.security.get-task-allow bool true' "$X/extra.plist"
+  for v in ok extra; do cp /usr/bin/true "$X/$v"; codesign -f -s - --entitlements "$X/$v.plist" "$X/$v" 2>/dev/null; done
+  ents ents-match 0 "$X/ok"
+  ents ents-extra 1 "$X/extra"
   echo "release_test: $pass passed, $fail failed"; [[ $fail == 0 ]]
   ```
-- [ ] **Step 2: Run it to verify it fails.** `bash scripts/release_test.sh`. Expected: FAIL, `cp: …/scripts/release.sh: No such file or directory`, … `release_test: 0 passed, 9 failed`.
-- [ ] **Step 3: Implement `scripts/release.sh`.** It runs under `set -euo pipefail` and **never uses `set -x`**. In order:
-  1. **Arguments:**
-     - parse; no args or an unknown flag → the usage line, exit 2;
-     - `case $app in markdown) SCHEME=markdown; DMG_NAME=TegelMarkdown-$V.dmg; VOL="Tegel Markdown";; *) die 2 "unknown app: $app"`;
-     - version regex → `bad version: $V`, exit 2.
-  2. **Guards:**
-     - `cd "$(git rev-parse --show-toplevel)"`;
-     - `need KEY` for each consumed key reads the value with `sed -n "s/^KEY=//p" .env` and `export`s it. An empty value → `missing .env key: KEY`, exit 1. Only the name is ever printed;
-     - `[ -z "$(git status --porcelain)" ] || die 1 "working tree is dirty"`;
-     - without `--sandbox`, `grep -q REPLACE_IN_PLAN_05 Config/Release.xcconfig` → `Config/Release.xcconfig still has REPLACE_IN_PLAN_05; pass --sandbox for a beta`, exit 1.
-  3. **Set up:** `OUT=dist-release/markdown/$V` (wiped); `BUILD=$(git rev-list --count HEAD)` (a monotonic `CFBundleVersion` that Sparkle compares); `xcodegen generate`.
-  4. **Archive:**
-     ```
-     xcodebuild archive -scheme $SCHEME -configuration Release -destination 'generic/platform=macOS' \
-       -derivedDataPath build/release-dd -archivePath "$OUT/$SCHEME.xcarchive" \
-       MARKETING_VERSION=$V CURRENT_PROJECT_VERSION=$BUILD \
-       CODE_SIGN_IDENTITY="$APPLE_DEVELOPER_ID_IDENTITY" DEVELOPMENT_TEAM="$APPLE_TEAM_ID"
-     ```
-     Add `-xcconfig Config/PolarSandbox.xcconfig` when `--sandbox` is passed.
-  5. **Export:**
-     - `ExportOptions.plist` is generated in `$OUT` with `plutil -create xml1` + `-insert`: `method developer-id`, `signingStyle manual`, `signingCertificate "Developer ID Application"`, `teamID $APPLE_TEAM_ID`. Method names were checked against `xcodebuild -help` on Xcode 26.3;
-     - `xcodebuild -exportArchive … -exportPath "$OUT/export"`;
-     - `APP=$(echo "$OUT"/export/*.app)`.
-  6. **Pre-notary checks** (each failure → exit 1):
-     - PlistBuddy `CFBundleShortVersionString == $V` and `CFBundleVersion == $BUILD`;
-     - `TGPolarAPIBase` == `https://sandbox-api.polar.sh` (`--sandbox`) or `https://api.polar.sh`;
-     - `TGPolarBenefitID` is non-empty (D1);
-     - `lipo -archs` on the app and the appex executables contains both `x86_64` and `arm64`;
-     - `codesign --verify --deep --strict --verbose=2 "$APP"`;
-     - `syspolicy_check notary-submission "$APP"`.
-  7. **`notarize <file>`:**
-     - `xcrun notarytool submit "$1" --keychain-profile "$NOTARY_KEYCHAIN_PROFILE" --wait --output-format json > "$OUT/notary-<n>.json"`;
-     - `plutil -extract status raw -o - <json>` must be `Accepted` (plutil reads JSON; checked on the build Mac). Otherwise write `xcrun notarytool log <id> …` to `$OUT/notary-log.json`, then exit 1.
-  8. **App:** `ditto -c -k --keepParent "$APP" "$OUT/app.zip"` → `notarize` → `xcrun stapler staple "$APP"`.
-  9. **DMG:** `ditto "$APP" "$OUT/dmg/$(basename "$APP")"`; `ln -s /Applications "$OUT/dmg/Applications"`; `hdiutil create -volname "$VOL" -srcfolder "$OUT/dmg" -format UDZO -ov "$OUT/$DMG_NAME"`; `codesign --sign "$APPLE_DEVELOPER_ID_IDENTITY" --timestamp` the DMG → `notarize` → `xcrun stapler staple`.
-  10. **Gatekeeper.** All must pass; print the outputs:
-      - `spctl -a -vvv -t exec "$APP"` → `accepted` + `source=Notarized Developer ID`;
-      - `spctl -a -vvv -t open --context context:primary-signature "$OUT/$DMG_NAME"` → the same. `-t install` assesses "installation of an installer package" (`man spctl`), so a DMG uses `-t open`;
-      - `xcrun stapler validate "$OUT/$DMG_NAME"` → `The validate action worked!`;
-      - `syspolicy_check distribution "$APP"` → exit 0.
-      - With `--no-upload`: `printf '%s\n' "$PWD/$OUT/$DMG_NAME"` as the last stdout line, then exit 0.
-  11. **Appcast:**
-      - copy the DMG into `$OUT/feed/`;
-      - `curl -fsS "https://downloads.tegelapps.com/markdown/appcast.xml?v=$BUILD" -o "$OUT/feed/appcast.xml" || rm -f "$OUT/feed/appcast.xml"`. The first release has none; generate_appcast keeps the existing feed's items (`--maximum-versions` defaults to 3);
-      - `build/release-dd/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_appcast --account tegelapps --download-url-prefix https://downloads.tegelapps.com/markdown/ -o "$OUT/feed/appcast.xml" "$OUT/feed"`;
-      - check: `grep "$DMG_NAME" "$OUT/feed/appcast.xml" | grep -q 'sparkle:edSignature='`, then print `appcast signature present`.
-  12. **Confirm** unless `--yes`:
-      - print the DMG name, `du -h`, `shasum -a 256` and the two destination URLs;
-      - `read -r -p "Publish to downloads.tegelapps.com? [y/N] " a || a=`;
-      - anything but `y` → `aborted: nothing uploaded`, exit 1. With no TTY, `read` hits EOF and aborts.
-  13. **Upload**, DMG first so the appcast never points at a missing file:
-      - `CLOUDFLARE_API_TOKEN="$CLOUDFLARE_R2_API_TOKEN" bunx wrangler@4.151.2 r2 object put "$R2_BUCKET/markdown/$DMG_NAME" --file … --content-type application/x-apple-diskimage --cache-control "public, max-age=31536000, immutable" --remote`;
-      - then `appcast.xml` with `--content-type application/xml --cache-control "public, max-age=300" --remote`.
-  14. **Post-upload:**
-      - `curl -fsSI https://downloads.tegelapps.com/markdown/$DMG_NAME | head -1` → `HTTP/2 200`;
-      - `curl -fsS "…/appcast.xml?v=$BUILD" | grep -c "$DMG_NAME"` ≥ 1;
-      - print `published https://downloads.tegelapps.com/markdown/$DMG_NAME`, the public DMG URL that plan 05 writes into `site/config.json`.
+- [ ] **Step 2: Run it to verify it fails.** `bash scripts/release_test.sh`. Expected: FAIL, `cp: …/scripts/release.sh: No such file or directory`, … `release_test: 0 passed, 18 failed`.
+- [ ] **Step 3: Implement.**
+  - **`scripts/entitlements/`** (the allowlist; any change to it is a reviewed commit, never generated from `project.yml`):
+    ```bash
+    P=/usr/libexec/PlistBuddy; A=scripts/entitlements/markdown.plist; Q=scripts/entitlements/markdown.quicklook.plist; G=com.apple.security.temporary-exception.mach-lookup.global-name
+    mkdir -p scripts/entitlements
+    for k in app-sandbox files.user-selected.read-write files.bookmarks.app-scope network.client; do $P -c "Add :com.apple.security.$k bool true" "$A"; done
+    $P -c "Add :$G array" -c "Add :$G: string com.tegelapps.markdown-spks" -c "Add :$G: string com.tegelapps.markdown-spki" "$A"
+    for k in app-sandbox network.client; do $P -c "Add :com.apple.security.$k bool true" "$Q"; done
+    plutil -p "$A"; plutil -p "$Q"
+    ```
+    Expected: the app file holds D5's four keys plus the two mach-lookup names; the Quick Look file holds plan 01's Quick Look set after K4 (`app-sandbox`, `network.client`, no `files.absolute-path` exception). If plan 01's Quick Look set differs, copy plan 01's, never widen it here.
+  - **`scripts/release.sh`** runs under `set -euo pipefail` and **never uses `set -x`**. Its last line is `if [[ ${BASH_SOURCE[0]} == "$0" ]]; then main "$@"; fi`. `check_ents` is:
+    ```bash
+    check_ents() {   # <bundle> <expected.plist>: the signed entitlements must equal the allowlist exactly
+      diff <(codesign -d --entitlements - --xml "$1" 2>/dev/null | plutil -convert xml1 -o - -) <(plutil -convert xml1 -o - "$2") >/dev/null \
+        || die 1 "entitlements of ${1##*/} differ from $2"; }
+    ```
+    `main`, in order:
+    1. **Arguments.**
+       - Parse. No args, an unknown flag or `--from-dmg` without a path → the usage line, exit 2.
+       - `case $app in markdown) SLUG=markdown SCHEME=markdown NAME=TegelMarkdown VOL="Tegel Markdown";; *) die 2 "unknown app: $app";; esac`.
+       - Version regex → `bad version: $V`, exit 2.
+       - `--sandbox` without `--no-upload` → `--sandbox builds are private: add --no-upload`, exit 2. `--from-dmg` with `--no-upload` → `--from-dmg publishes: drop --no-upload`, exit 2.
+       - Derived, from `$SLUG` only: `BASE=https://downloads.tegelapps.com`, `OUT=dist-release/$SLUG/$V`, `DMG_NAME=$NAME-$V.dmg`, `FEED=$BASE/$SLUG/appcast.xml`, `PREFIX=$BASE/$SLUG/`, `PREV=dist-release/$SLUG/appcast.xml`.
+       - `--print-config` → print the five lines in Interfaces, exit 0.
+    2. **Guards.**
+       - `cd "$(git rev-parse --show-toplevel)"`, then `. scripts/lib/env.sh`;
+       - `need` the six keys (exit 1, `missing .env key: KEY`; only the name is printed). Values go into **unexported** shell variables with `envget` (`TEAM`, `IDENTITY`, `PROFILE`, `ACCOUNT`, `R2_TOKEN`, `R2_BUCKET`), and each reaches only the commands that need it;
+       - `[ -z "$(git status --porcelain)" ] || die 1 "working tree is dirty"`;
+       - without `--sandbox`, `grep -q REPLACE_IN_PLAN_05 Config/Release.xcconfig` → `Config/Release.xcconfig still has REPLACE_IN_PLAN_05; pass --sandbox for a beta`, exit 1.
+    3. **`--from-dmg <path>`** replaces steps 4–11 (each failure → exit 1):
+       - `[ -f "$SRC" ] || die 1 "no such DMG: $SRC"`; `[ "${SRC##*/}" = "$DMG_NAME" ] || die 1 "expected $DMG_NAME, got ${SRC##*/}"`;
+       - `xcrun stapler validate "$SRC" >/dev/null 2>&1 || die 1 "not notarised and stapled: $DMG_NAME"`, then step 11's `spctl -t open` check;
+       - `hdiutil attach -nobrowse -readonly -mountpoint "$OUT/mnt" "$SRC"` (detached by a `trap`): the app's `CFBundleShortVersionString == $V`, `TGPolarAPIBase == https://api.polar.sh`, and `BUILD` = its `CFBundleVersion`;
+       - print `sha256 $(shasum -a 256 "$SRC" | cut -d' ' -f1)`. Plan 05 compares it with the smoke-tested file's hash;
+       - `$OUT` is **not** wiped (the DMG usually lives in it); go to step 12.
+    4. **Set up:** `OUT` wiped; `BUILD=$(git rev-list --count HEAD)` (a monotonic `CFBundleVersion` that Sparkle compares); `xcodegen generate`.
+    5. **Archive:**
+       ```
+       xcodebuild archive -scheme $SCHEME -configuration Release -destination 'generic/platform=macOS' \
+         -derivedDataPath build/release-dd -archivePath "$OUT/$SCHEME.xcarchive" \
+         MARKETING_VERSION=$V CURRENT_PROJECT_VERSION=$BUILD \
+         CODE_SIGN_IDENTITY="$IDENTITY" DEVELOPMENT_TEAM="$TEAM"
+       ```
+       Add `-xcconfig Config/PolarSandbox.xcconfig` when `--sandbox` is passed.
+    6. **Export:** `ExportOptions.plist` generated in `$OUT` with `plutil -create xml1` + `-insert` (`method developer-id`, `signingStyle manual`, `signingCertificate "Developer ID Application"`, `teamID`; method names checked against `xcodebuild -help` on Xcode 26.3), then `xcodebuild -exportArchive … -exportPath "$OUT/export"`; `APP=$(echo "$OUT"/export/*.app)`.
+    7. **Pre-notary checks** (each failure → exit 1):
+       - PlistBuddy `CFBundleShortVersionString == $V` and `CFBundleVersion == $BUILD`;
+       - `TGPolarAPIBase` == `https://sandbox-api.polar.sh` (`--sandbox`) or `https://api.polar.sh`; `TGPolarBenefitID` non-empty (D1);
+       - `lipo -archs` on the app and appex executables contains both `x86_64` and `arm64`;
+       - **entitlements (K7):** for `$APP` and each `$APP/Contents/PlugIns/*.appex`, `check_ents "$b" "scripts/entitlements/${id#com.tegelapps.}.plist"`, where `id` is the bundle's `CFBundleIdentifier`;
+       - `codesign --verify --deep --strict --verbose=2 "$APP"`; `syspolicy_check notary-submission "$APP"`.
+    8. **`notarize <file>`:** `xcrun notarytool submit "$1" --keychain-profile "$PROFILE" --wait --output-format json > "$OUT/notary-<n>.json"`; `plutil -extract status raw -o - <json>` must be `Accepted` (plutil reads JSON; checked on the build Mac), otherwise write `xcrun notarytool log <id> …` to `$OUT/notary-log.json` and exit 1.
+    9. **App:** `ditto -c -k --keepParent "$APP" "$OUT/app.zip"` → `notarize` → `xcrun stapler staple "$APP"`.
+    10. **DMG:** `ditto "$APP" "$OUT/dmg/${APP##*/}"`; `ln -s /Applications "$OUT/dmg/Applications"`; `hdiutil create -volname "$VOL" -srcfolder "$OUT/dmg" -format UDZO -ov "$OUT/$DMG_NAME"`; `codesign --sign "$IDENTITY" --timestamp` the DMG → `notarize` → `xcrun stapler staple`.
+    11. **Gatekeeper.** All must pass; print the outputs:
+        - `spctl -a -vvv -t exec "$APP"` → `accepted` + `source=Notarized Developer ID`;
+        - `spctl -a -vvv -t open --context context:primary-signature "$OUT/$DMG_NAME"` → the same (`-t install` is for installer packages, `man spctl`);
+        - `xcrun stapler validate "$OUT/$DMG_NAME"` → `The validate action worked!`; `syspolicy_check distribution "$APP"` → exit 0.
+        - With `--no-upload`: `printf '%s\n' "$PWD/$OUT/$DMG_NAME"` as the last stdout line, then exit 0.
+    12. **Appcast:**
+        - `rm -rf "$OUT/feed"; mkdir -p "$OUT/feed"`; copy the DMG in;
+        - `[ -f "$PREV" ] && cp "$PREV" "$OUT/feed/appcast.xml"`. The previous feed comes only from `dist-release/`, **never `curl`**: a tampered public feed must not flow into the next release (K7). The first release has none; generate_appcast keeps the existing items (`--maximum-versions` defaults to 3);
+        - the Sparkle tools: `GA=build/release-dd/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_appcast`; if absent (a `--from-dmg` run in a fresh checkout), `xcodegen generate && xcodebuild -resolvePackageDependencies -derivedDataPath build/release-dd >/dev/null` first;
+        - `"$GA" --account tegelapps --download-url-prefix "$PREFIX" -o "$OUT/feed/appcast.xml" "$OUT/feed"`;
+        - checks: `grep "$DMG_NAME" "$OUT/feed/appcast.xml" | grep -q 'sparkle:edSignature='` and `grep -q '<!-- sparkle-signatures:' "$OUT/feed/appcast.xml"` (generate_appcast signs the whole feed because the app's Info.plist sets `SURequireSignedFeed`; Sparkle 2.10.1 `generate_appcast/FeedXML.swift`), then print `appcast signatures present`.
+    13. **Confirm** unless `--yes`: print the DMG name, `du -h`, `shasum -a 256` and the two destination URLs; `read -r -p "Publish to downloads.tegelapps.com? [y/N] " a || a=`; anything but `y` → `aborted: nothing uploaded`, exit 1. With no TTY, `read` hits EOF and aborts.
+    14. **Upload**, DMG first so the appcast never points at a missing file. The bucket-scoped token goes to this one command only (K2):
+        - `CLOUDFLARE_API_TOKEN="$R2_TOKEN" CLOUDFLARE_ACCOUNT_ID="$ACCOUNT" bunx wrangler@4.151.2 r2 object put "$R2_BUCKET/$SLUG/$DMG_NAME" --file … --content-type application/x-apple-diskimage --cache-control "public, max-age=31536000, immutable" --remote`;
+        - then `"$R2_BUCKET/$SLUG/appcast.xml"` with `--content-type application/xml --cache-control "public, max-age=300" --remote`.
+    15. **Post-upload:**
+        - `curl -fsSI "$PREFIX$DMG_NAME" | head -1` → `HTTP/2 200`; `curl -fsS "$FEED?v=$BUILD" | grep -c "$DMG_NAME"` ≥ 1 (a read-back check only);
+        - `cp "$OUT/feed/appcast.xml" "$PREV"`, the base for the next release;
+        - print `published $PREFIX$DMG_NAME`, the public DMG URL that plan 05 writes into `site/config.json`.
   - **Makefile:** `test-release: ; bash scripts/release_test.sh`, and add `test-release` to `check`'s prerequisites.
 - [ ] **Step 4: Run it to verify it passes.**
-  - `bash scripts/release_test.sh`. Expected: `release_test: 9 passed, 0 failed`.
+  - `bash scripts/release_test.sh`. Expected: `release_test: 18 passed, 0 failed`.
   - `bash -n scripts/release.sh && echo syntax-ok` → `syntax-ok`.
-  - `make check` → the baseline, plus TegelStore, plus `release_test: 9 passed`.
-- [ ] **Step 5: Commit.**
-  ```bash
-  git add scripts/release.sh scripts/release_test.sh Makefile
-  git commit -m "feat(release): release.sh archive→notarise→DMG→appcast→R2 with guards" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-  ```
-- [ ] **Step 6: First real run (BLOCKED until Task 3).** This is Task 13 step 1.
+  - `make check` → the baseline, plus TegelStore, plus `release_test: 18 passed`.
+- [ ] **Step 5: Watch the new guards fail.** One at a time, re-running `bash scripts/release_test.sh` after each, then restoring:
+  - make `check_ents` `return 0` → `FAIL ents-extra (exit 0)`;
+  - delete the `--sandbox` needs `--no-upload` rule → `FAIL sandbox-public`;
+  - delete the `stapler validate` line → `FAIL from-dmg-stapled` (the empty file then fails at `spctl`, with another message; `stapler` and `spctl` on an empty file exit 66 and 3, checked on the build Mac).
+  - Restored: `18 passed, 0 failed`.
+  - A `markdown/` literal can't be caught while `markdown` is the only app. Plan 06's `data` row adds the standing guard: a `print-config` case expecting `dist-release/data/<v>`, `…/data/appcast.xml` and `r2=$R2_BUCKET/data/`, watched failing (`unknown app: data`) before the row exists.
+- [ ] **Step 6: Commit:** `scripts/release.sh scripts/release_test.sh scripts/entitlements Makefile`, "feat(release): release.sh archive→notarise→DMG→signed appcast→R2, with print-config, from-dmg and an entitlement allowlist".
+- [ ] **Step 7: First real run (BLOCKED until Task 3).** This is Task 13 step 1.
 
-### Task 13: End-to-end acceptance and BNPL record (Sat 21 – Sun 22 Nov; needs Task 3)
+### Task 13: End-to-end acceptance on private betas, BNPL record (Sat 21 – Sun 22 Nov; needs Task 3)
 
 **Machine:**
 - Build Mac (Intel iMac19,1, macOS 15.7), in a **fresh admin user account `tegeltest`** that the user creates.
 - The arm64 / macOS 27 leg runs on Scaleway M1 lease **L2 (Thu 26 Nov 09:00 → Fri 27 Nov 09:00)**, booked by plan 05. It is second in L2's order, after plan 05's macOS 27 matrix (see Hand-offs).
+
+**Distribution (K7):** b1 and b2 never leave the machine. They are `--sandbox --no-upload` builds in `dist-release/markdown/beta-feed/`, served by `python3 -m http.server 8765 --bind 127.0.0.1 --directory dist-release/markdown/beta-feed`, which runs in the background from the main account.
+- `tegeltest` reaches it at `http://localhost:8765/`. `localhost` is an unqualified name, which ATS still allows by default on macOS 14+; bare IP addresses it no longer allows (Apple's `NSAllowsLocalNetworking` reference, checked 27 Oct).
+- The b1 app reads the local feed through `-SUFeedURL` at launch. Sparkle 2.10.1 reads `SUFeedURL` from user defaults, the argument domain included, before Info.plist (`SUHost objectForKey:`), and its own log calls such an override fine "for testing purposes" (`SPUUpdater.m`).
 
 **Files:**
 - Create: `docs/gates/m03-acceptance.md` (table: check | machine | date | result | evidence)
@@ -936,38 +1061,47 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
 
 **Interfaces:**
 - Consumes everything above.
-- Produces the evidence for the milestone exit criterion.
+- Produces the evidence for the milestone exit criterion, and `dist-release/markdown/beta-feed/` (the b1 and b2 DMGs and a signed `appcast.xml`), kept for the L2 leg until Task 15.
 
-- [ ] **Step 0: Pre-b1 review.** b1 publishes the new licensing code, `release.sh` and the appcast, so they are reviewed first. The full pipeline still runs in Task 14.
-  - `BASE=$(git merge-base HEAD main)`. Run Task 14's **stages 2, 3, 4 and 9** on `git diff $BASE...HEAD`, with the same scope and commands. Where stage 4 inspects "the b2 app", use the app from `scripts/release.sh markdown 1.0.0-b1 --sandbox --no-upload` (nothing is uploaded).
+- [ ] **Step 0: Pre-b1 review** (master §11: stages 2, 3, 4 and 9 of Procedure P before cutting b1). b1 is the first signed build of the licensing code, `release.sh` and the signed feed. The full P still runs in Task 14.
+  - `BASE=$(git merge-base HEAD main)`. Run stages 2, 3, 4 and 9 on `git diff $BASE...HEAD`, with Task 14's stage-4 scope. Where that scope inspects "the b2 app", use the app from `scripts/release.sh markdown 1.0.0-b1 --sandbox --no-upload`.
   - Fix every P0/P1 (failing test first), then re-run the stage that found it.
-  - Record the results under "Pre-b1" in `docs/reviews/m03.md`, then `git add docs/reviews/m03.md && git commit -m "docs(reviews): m03 pre-b1 stages 2, 3, 4, 9" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`. `release.sh` needs a clean tree.
-- [ ] **Step 1: Publish b1 (outward-facing).**
-  - Ask: "Publish Tegel Markdown 1.0.0-b1 (sandbox Polar) to downloads.tegelapps.com?"
-  - After a yes: `scripts/release.sh markdown 1.0.0-b1 --sandbox --yes`. The first `generate_appcast` run may trigger a Keychain prompt for the Sparkle key; the user clicks **Always Allow**.
-  - Expected: the Gatekeeper lines from Task 12 step 3.10 all accepted, `appcast signature present`, `published https://downloads.tegelapps.com/markdown/TegelMarkdown-1.0.0-b1.dmg`.
-- [ ] **Step 2 (user):** create the admin account `tegeltest` in System Settings → Users & Groups, and log in to it.
+  - Record the results under "Pre-b1" in `docs/reviews/m03.md`. Commit: `docs/reviews/m03.md`, "docs(reviews): m03 pre-b1 stages 2, 3, 4, 9". `release.sh` needs a clean tree.
+- [ ] **Step 1: Build b1 and serve it locally.** Nothing leaves the machine, so no ask.
+  ```bash
+  scripts/release.sh markdown 1.0.0-b1 --sandbox --no-upload
+  F=dist-release/markdown/beta-feed; mkdir -p "$F" && cp dist-release/markdown/1.0.0-b1/TegelMarkdown-1.0.0-b1.dmg "$F/"
+  ```
+  - Expected: Task 12's Gatekeeper lines (step 3, item 11) all accepted, and the DMG path as the last line. This is the first real run of the entitlement allowlist on Developer ID bundles. If `check_ents` fails, stop and compare the signed set with D5; the allowlist changes only through a reviewed commit, never to make a build pass.
+  - Start the server in the background (Bash `run_in_background`): `python3 -m http.server 8765 --bind 127.0.0.1 --directory dist-release/markdown/beta-feed`. Check: `curl -sI http://localhost:8765/TegelMarkdown-1.0.0-b1.dmg | head -1` → `HTTP/1.0 200 OK`.
+- [ ] **Step 2 (user):** create the admin account `tegeltest` in System Settings → Users & Groups, and log in to it (fast user switching; the server keeps running).
 - [ ] **Step 3 (GUI, tegeltest): download and mount.**
-  - Safari → `https://downloads.tegelapps.com/markdown/TegelMarkdown-1.0.0-b1.dmg`;
+  - Safari → `http://localhost:8765/TegelMarkdown-1.0.0-b1.dmg`;
   - `xattr -p com.apple.quarantine ~/Downloads/TegelMarkdown-1.0.0-b1.dmg` prints a value (quarantine is set);
   - open it. The window shows the app and an Applications alias. Drag to Applications.
 - [ ] **Step 4 (GUI): first launch.** Record the dialog text verbatim.
   - Pass = only the standard "…downloaded from the Internet. Are you sure you want to open it?" prompt.
   - Then `spctl -a -vvv -t exec "/Applications/Tegel Markdown.app"` → `accepted`, `source=Notarized Developer ID`.
-- [ ] **Step 5:** add the b1 rows to `docs/gates/m03-acceptance.md` and commit (`docs(gates): m03 b1 acceptance`). This later commit gives b2 a higher `CFBundleVersion`.
-- [ ] **Step 6: Publish b2.**
-  - Ask the user for the b2 publish, then run `scripts/release.sh markdown 1.0.0-b2 --sandbox --yes`.
-  - Then `curl -fsS "https://downloads.tegelapps.com/markdown/appcast.xml?v=b2" | grep -c '<item>'` → `2`.
-- [ ] **Step 7 (GUI, tegeltest): update.**
-  - Check for Updates… → b2 is offered.
-  - For the Task 14 design review, before installing: `mkdir -p /Users/Shared/m03 && screencapture -x -w /Users/Shared/m03/sparkle-prompt-light.png` (click the prompt). Switch System Settings ▸ Appearance to Dark and capture `…-dark.png`; switch back. Click Remind Me Later, quit, `open -a "Tegel Markdown" --args -AppleLanguages '(ar)'`, Check for Updates…, capture `…-ar.png`, then quit and relaunch normally.
-  - Check for Updates… → Install and Relaunch;
-  - `defaults read "/Applications/Tegel Markdown.app/Contents/Info" CFBundleShortVersionString` → `1.0.0-b2`;
-  - `spctl -a -vvv -t exec` again → `accepted`.
-- [ ] **Step 8 (GUI): purchase, with the BNPL look.**
+- [ ] **Step 5:** add the b1 rows to `docs/gates/m03-acceptance.md`. Commit: `docs/gates/m03-acceptance.md`, "docs(gates): m03 b1 acceptance". This later commit gives b2 a higher `CFBundleVersion`.
+- [ ] **Step 6: Build b2 and the signed local feed.**
+  ```bash
+  scripts/release.sh markdown 1.0.0-b2 --sandbox --no-upload
+  F=dist-release/markdown/beta-feed; cp dist-release/markdown/1.0.0-b2/TegelMarkdown-1.0.0-b2.dmg "$F/"
+  build/release-dd/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_appcast --account tegelapps --download-url-prefix http://localhost:8765/ -o "$F/appcast.xml" "$F"
+  grep -c '<item>' "$F/appcast.xml"; grep -c 'sparkle-signatures:' "$F/appcast.xml"
+  ```
+  Expected: `2`, then `1` (the feed is signed, because the apps set `SURequireSignedFeed`). The first `generate_appcast` run may raise a Keychain prompt for the Sparkle key: the **user** clicks **Always Allow**; record it.
+- [ ] **Step 7 (GUI, tegeltest): the signed feed, watched failing, then the update.**
+  1. Main account, tamper one byte: `F=dist-release/markdown/beta-feed; cp "$F/appcast.xml" "$F/appcast.good" && sed -i '' 's|<channel>|<channel> |' "$F/appcast.xml"`.
+  2. tegeltest: quit the app, then `open -a "Tegel Markdown" --args -SUFeedURL http://localhost:8765/appcast.xml`, then Check for Updates…. Expected: **no update is offered**, and Sparkle reports an error. Record the text verbatim. This is `SURequireSignedFeed` failing as it should (K7).
+  3. Main account: `mv dist-release/markdown/beta-feed/appcast.good dist-release/markdown/beta-feed/appcast.xml`. tegeltest: Check for Updates… → b2 is offered.
+  4. For the Task 14 design review, before installing: `mkdir -p /Users/Shared/m03 && screencapture -x -w /Users/Shared/m03/sparkle-prompt-light.png` (click the prompt). Switch System Settings ▸ Appearance to Dark and capture `…-dark.png`; switch back. Click Remind Me Later, quit, `open -a "Tegel Markdown" --args -AppleLanguages '(ar)' -SUFeedURL http://localhost:8765/appcast.xml`, Check for Updates…, capture `…-ar.png`, then quit and relaunch with only the `-SUFeedURL` argument.
+  5. Check for Updates… → Install and Relaunch. Then `defaults read "/Applications/Tegel Markdown.app/Contents/Info" CFBundleShortVersionString` → `1.0.0-b2`, and `spctl -a -vvv -t exec` again → `accepted`.
+  - If step 2 or 3 fails with a connection or App Transport Security error instead, stop: record it and ask the user. Don't add an ATS exception to the shipping Info.plist.
+- [ ] **Step 8 (GUI): purchase.**
   - Settings → Licence → Buy Pro… → the sandbox checkout opens;
-  - set the country to Netherlands, list every payment method, and screenshot;
   - pay as `POLAR_EMAIL` with `4242 4242 4242 4242`. Expected: the success page.
+  - No second BNPL look: the sandbox isn't the live checkout, and Task 1 step 7 already recorded the sandbox one (B17). The live look is plan 05's.
 - [ ] **Step 9: Key email.** Record whether the email to `POLAR_EMAIL` contains the key. If it doesn't, take the key from the portal; that result feeds plan 05's FAQ.
 - [ ] **Step 10 (GUI): activate.**
   - Paste the key with leading spaces and a trailing newline → Activate. Expected: "Pro is active on this Mac", and folder mode works.
@@ -976,12 +1110,30 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
 - [ ] **Step 12 (GUI): deactivate.** Deactivate this Mac. Expected: the free copy, and 0 activations in the dashboard.
 - [ ] **Step 13: Error copy.**
   - Key `TEGEL-0000` → the `.notFound` copy.
-  - Fill both slots with Task 1 step 9's `act probe-1; act probe-2` (expected `200`, `200`), then Activate in the app → the `.limitReached` copy.
-  - Free both slots with `deact` (expected `204`, `204`).
+  - Fill both slots of `POLAR_SANDBOX_TEST_LICENSE_KEY` (the activation ids go to a gitignored file, because the next block runs in another shell):
+    ```bash
+    . scripts/lib/env.sh
+    O=$(envget POLAR_SANDBOX_ORGANIZATION_ID); K=$(envget POLAR_SANDBOX_TEST_LICENSE_KEY); A=https://sandbox-api.polar.sh/v1/customer-portal/license-keys; T=$(mktemp)
+    for l in probe-1 probe-2; do
+      curl -s -o "$T" -w '%{http_code}\n' -X POST "$A/activate" -H 'Content-Type: application/json' -d "{\"key\":\"$K\",\"organization_id\":\"$O\",\"label\":\"$l\"}"
+      plutil -extract id raw -o - "$T" >> dist-release/m03-probe-ids
+    done; rm -f "$T"
+    ```
+    Expected: `200`, `200`. Then paste the same key in the app and Activate → the `.limitReached` copy. Then free both slots:
+    ```bash
+    . scripts/lib/env.sh
+    O=$(envget POLAR_SANDBOX_ORGANIZATION_ID); K=$(envget POLAR_SANDBOX_TEST_LICENSE_KEY); A=https://sandbox-api.polar.sh/v1/customer-portal/license-keys
+    while read -r I; do curl -s -o /dev/null -w '%{http_code}\n' -X POST "$A/deactivate" -H 'Content-Type: application/json' \
+      -d "{\"key\":\"$K\",\"organization_id\":\"$O\",\"activation_id\":\"$I\"}"; done < dist-release/m03-probe-ids
+    rm dist-release/m03-probe-ids
+    ```
+    Expected: `204`, `204`.
   - **Another app's key is rejected (D1).** Paste `POLAR_SANDBOX_OTHER_LICENSE_KEY` (Task 1 step 10) as in step 10, then Activate → the `.wrongProduct` copy, and the app stays free. Then prove no activation was left on that key (its limit is 2):
     ```bash
+    . scripts/lib/env.sh
     O=$(envget POLAR_SANDBOX_ORGANIZATION_ID); K=$(envget POLAR_SANDBOX_OTHER_LICENSE_KEY); A=https://sandbox-api.polar.sh/v1/customer-portal/license-keys; T=$(mktemp)
-    # act / deact exactly as in Task 1 step 9
+    act()   { curl -s -o "$T" -w '%{http_code}\n' -X POST "$A/activate" -H 'Content-Type: application/json' -d "{\"key\":\"$K\",\"organization_id\":\"$O\",\"label\":\"$1\"}"; }
+    deact() { curl -s -o /dev/null -w '%{http_code}\n' -X POST "$A/deactivate" -H 'Content-Type: application/json' -d "{\"key\":\"$K\",\"organization_id\":\"$O\",\"activation_id\":\"$1\"}"; }
     act probe-1; I1=$(plutil -extract id raw -o - "$T"); act probe-2; I2=$(plutil -extract id raw -o - "$T")
     deact "$I1"; deact "$I2"; rm -f "$T"
     ```
@@ -995,93 +1147,104 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   - In Settings ▸ Updates, turn "Check for updates automatically" off, ⌘Q, then `defaults read ~/Library/Containers/com.tegelapps.markdown/Data/Library/Preferences/com.tegelapps.markdown SUEnableAutomaticChecks` → `0`.
   - Turn it back on → `1`.
 - [ ] **Step 16: Record and commit.**
-  - Write all rows into `docs/gates/m03-acceptance.md`, each naming the machine (Intel iMac, macOS 15.7, `tegeltest`).
-  - Write `docs/gates/bnpl.md`: rows for the W1 sandbox look (Task 1 step 7) and this one (date, checkout, countries tried, methods shown, BNPL present yes/no), plus a row "live checkout: pending plan 05 (W6)".
-  - Commit:
-  ```bash
-  git add docs/gates/m03-acceptance.md docs/gates/bnpl.md
-  git commit -m "docs(gates): m03 end-to-end acceptance (Intel) and sandbox BNPL check" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-  ```
+  - Write all rows into `docs/gates/m03-acceptance.md`, each naming the machine (Intel iMac, macOS 15.7, `tegeltest`). Include the two Keychain "Always Allow" dates (codesign, Task 11 step 5; Sparkle key, step 6) and the tampered-feed error text (step 7).
+  - Write `docs/gates/bnpl.md`: the W1 sandbox row (Task 1 step 7: date, checkout, countries tried, methods shown, BNPL present yes/no), plus a row "live checkout: pending plan 05 (W6)".
+  - Leave the server running for the L2 leg only if it falls within the same session; otherwise stop it (`pkill -f 'http.server 8765'`). The feed folder stays until Task 15.
+  - Commit: `docs/gates/m03-acceptance.md docs/gates/bnpl.md`, "docs(gates): m03 end-to-end acceptance (Intel, private betas) and sandbox BNPL record".
 
-### Task 14: 9-stage pipeline, merge, push (Mon 23 Nov)
+### Task 14: Procedure P, merge, push (Mon 23 Nov)
 
 **Files:**
 - Modify: `docs/reviews/m03.md` (created in Task 13 step 0)
 - Modify: `.github/workflows/ci.yml` (plan 01)
-- Create: `docs/reviews/m03/*.png` (design-review screenshots)
+- Create: `docs/reviews/m03-design/*.png` (design-review screenshots)
 - Modify: whatever stage 7 patches
 
 **Interfaces:**
-- Consumes: the whole branch. `BASE=$(git merge-base HEAD main)`.
+- Consumes: the whole branch.
+- Runs **Procedure P (master §11)** with id `m03`, branch `m03-commerce-release` and review file `docs/reviews/m03.md`. Only this plan's deltas follow.
 
 - [ ] **Step 0: CI on release tags.** Plan 01's macOS job runs on `workflow_dispatch` only; release tags `v*` must run it too. The workflow's `on: { push: {}, … }` already fires on tag pushes (adding a `push: tags:` filter there would stop the js job on branch pushes), so widen the job's condition:
   - in `.github/workflows/ci.yml`, job `macos`: `if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')`;
-  - check: `grep -c "startsWith(github.ref, 'refs/tags/v')" .github/workflows/ci.yml` → `1`;
-  - commit: `git add .github/workflows/ci.yml && git commit -m "ci: run the macOS matrix on v* release tags" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`.
+  - the proof is behavioural and comes with plan 05's first `v*` tag: its push shows the `macos` job running (no source grep, B16);
+  - Commit: `.github/workflows/ci.yml`, "ci: run the macOS matrix on v* release tags".
+- [ ] **Step 1: Run Procedure P** with these deltas.
+  - **Stage 2 counts to record:** bun; swift (TegelKit + 40 TegelStore); `release_test: 18 passed`.
+  - **Stage 4 `/cso` scope** (mandatory here: licensing, Keychain, entitlements, Sparkle, `release.sh`, `.env` handling):
+    - **TegelStore:**
+      - error → grace mapping (no 404 lock); the mid-flight race; key normalisation; no token or `Authorization` sent; HTTPS-only `apiBase`;
+      - K5: the skew window (`-1 day ≤ age ≤ grace`); the validate decode (`granted` + the stored activation id); one mutation in flight; the save rollback;
+      - the benefit binding: validate sends `benefit_id`; an activate mismatch releases the activation and throws `.wrongProduct`; a missing `benefit_id` fails closed; `TGPolarBenefitID` in the b2 app is the Markdown sandbox benefit.
+    - **Keychain:** item attributes and ACL; nothing logged; `failSaves` is internal and only tests set it.
+    - **Entitlements:** the b2 app's signed sets equal `scripts/entitlements/*.plist`, and those equal D5 plus the two mach-lookup names (app) and plan 01's Quick Look set.
+    - **Sparkle:** `SUPublicEDKey` present; HTTPS feed; `SURequireSignedFeed` and `SUVerifyUpdateBeforeExtraction` true; `SUEnableSystemProfiling` absent; EdDSA on every enclosure and on the feed (Task 13 step 7 watched a tampered feed fail).
+    - **`release.sh`:** quoting; no `set -x`; no value echoed; key values unexported; guard order; every path from `$SLUG`; the previous feed only from `dist-release/` (no `curl` fetches a feed to build on); the entitlement diff; `--sandbox` never publishes; the `--from-dmg` checks; the confirmation; upload order; the bucket-scoped token only, wrangler pinned (K2).
+    - **`.env` (K1):** every block in this plan's code sources `scripts/lib/env.sh`; no `set -a`. **`.env.example`:** names only.
+    - **Keys at rest (K3):** `find ~/.tegel-signing ~/.tegel-secrets -type f \( -name '*.key' -o -name '*.p8' -o -name '*.p12' \) 2>/dev/null` prints nothing (watched listing two files in Task 3 step 5).
+    - **Debug override compiled out of Release:** plan 02's marker check (CR-P2-18: a key of at least 16 bytes, ≥ `1` on a Debug build, `0` on the b2 app).
+    - **No secrets in history:** `git log -p $BASE..HEAD | grep -cE 'polar_oat_|BEGIN (EC |OPENSSH )?PRIVATE KEY|AuthKey_[A-Z0-9]+\.p8'` → `0`.
+  - **Stage 5 prompt:** "Find a way a paying user loses Pro, a non-payer or another app's key gains Pro, an unsigned or unnotarised update installs, or a secret reaches the repo or a log."
+  - **Design review shots** (against `DESIGN.md` and plan 09's Settings spec):
+    - the Licence tab (free, Pro, and the `.wrongProduct` error) and the Updates tab, on a Debug build on the build Mac, each in light, dark (System Settings ▸ Appearance) and Arabic (`-AppleLanguages '(ar)'`): `screencapture -x -w docs/reviews/m03-design/<licence-free|licence-pro|licence-error|updates>-<light|dark|ar>.png`;
+    - Sparkle's update prompt: copy Task 13 step 7's `/Users/Shared/m03/sparkle-prompt-*.png` into `docs/reviews/m03-design/`.
+  - **Stage 7 extra:** if `release.sh`, the entitlements, Info.plist or TegelStore changed, build `1.0.0-b3 --sandbox --no-upload`, add it to `dist-release/markdown/beta-feed/`, re-run Task 13 step 6's `generate_appcast`, and repeat Task 13 steps 3–4, 7 and 11. It stays local, so no ask.
+  - **Stage 9 output:** `cubic review -b "$BASE" -j > dist-release/cubic-<n>.json`.
+  - **Before the merge:** Commit: `docs/reviews/m03.md docs/reviews/m03-design/`, "docs(reviews): m03 pipeline results".
+  - **Merge message:** `merge: m03 licensing, updates, release`. Expected: `make check` matches the stage 2 counts, and the push succeeds.
 
-- [ ] **Stage 1: bloat audit (pre).** Apply `~/.claude/skills/code-upgrade/bloat-audit.md` to `git diff $BASE...HEAD` and the touched files. Strip self-introduced bloat; queue pre-existing findings as questions in `docs/reviews/m03.md`.
-- [ ] **Stage 2: baseline.** `git status --short` (expected empty), then `make check 2>&1 | tail -30`. Record the bun, swift (TegelKit + 35 TegelStore) and `release_test: 9 passed` counts.
-- [ ] **Stage 3: code review.** gstack `/review` on `git diff $BASE...HEAD`, or a cold code-review subagent given only the diff.
-- [ ] **Stage 4: `/cso` (mandatory).** Scope:
-  - **TegelStore:** error → grace mapping (no 404 lock); the mid-flight race; key normalisation; no token or `Authorization` sent; HTTPS-only `apiBase`; the benefit binding (validate sends `benefit_id`; an activate mismatch releases the activation and throws `.wrongProduct`; a missing `benefit_id` fails closed; `TGPolarBenefitID` in the b2 app is the Markdown sandbox benefit).
-  - **Keychain:** item attributes and ACL; nothing logged.
-  - **Entitlements** (`codesign -d --entitlements -` on the b2 app): only D5's set plus the two mach-lookup names.
-  - **Sparkle:** `SUPublicEDKey` present; HTTPS feed; `SUEnableSystemProfiling` absent; EdDSA on every enclosure.
-  - **`release.sh`:** quoting, no `set -x`, no value echoed, guard order, the confirmation, upload order, token scope.
-  - **`.env.example`:** names only.
-  - **Debug override compiled out of Release:** `strings "<b2 app>/Contents/MacOS/"* | grep -c <plan-02 override key>` → `0`.
-  - **No secrets in history:** `git log -p $BASE..HEAD | grep -cE 'polar_oat_|BEGIN (EC |OPENSSH )?PRIVATE KEY|AuthKey_[A-Z0-9]+\.p8'` → `0`.
-- [ ] **Stage 5: adversarial.** `/codex` challenge mode: "Find a way a paying user loses Pro, a non-payer or another app's key gains Pro, an unsigned or unnotarised update installs, or a secret reaches the repo or a log." If codex can't run, use an agent fallback and say so.
-- [ ] **Design review** (CLAUDE.md "Verification"; skill `design-review`). Review against `DESIGN.md` and plan 09's Settings spec:
-  - the Licence tab (free, Pro, and the `.wrongProduct` error) and the Updates tab, on a Debug build on the build Mac, each in light, dark (System Settings ▸ Appearance) and Arabic (`-AppleLanguages '(ar)'`): `screencapture -x -w docs/reviews/m03/<licence-free|licence-pro|licence-error|updates>-<light|dark|ar>.png`;
-  - Sparkle's update prompt: copy Task 13 step 7's `/Users/Shared/m03/sparkle-prompt-*.png` into `docs/reviews/m03/`.
-  - Findings go into stage 6 with the others.
-- [ ] **Stage 6: consolidate.** Dedupe and classify P0/P1/P2 in `docs/reviews/m03.md`.
-- [ ] **Stage 7: patch and re-review.**
-  - Each fix gets a failing test first, then `make check` and the targeted review again.
-  - If `release.sh`, entitlements, Info.plist or TegelStore changed: publish `1.0.0-b3 --sandbox` (ask the user first) and repeat Task 13 steps 3–4, 7 and 11.
-- [ ] **Stage 8: bloat audit (post)** on the final cumulative diff.
-- [ ] **Stage 9: `/review` + cubic.** `cubic review -b "$BASE" -j > dist-release/cubic-<n>.json`, then read `issues`. Repeat after each fix batch until **two consecutive rounds show no new P0/P1**, on a stable tree.
-- [ ] **Graph and record.** `graphify update .`, then write the stage results into `docs/reviews/m03.md` (findings, fixes, cubic rounds, any stage that couldn't run and its substitute).
+### Task 15: Sandbox beta close-out (Fri 27 Nov, after the L2 leg)
+
+**Files:** Modify `docs/gates/m03-acceptance.md` (on `main`).
+
+- [ ] **Step 1: Ask the user** (K7): "Close the sandbox betas: revoke every Polar sandbox licence key and archive the sandbox products `Tegel Markdown` and `Tegel Test Other (not for sale)`?"
+- [ ] **Step 2: Run the check while the key is still live**, so the later failure means something:
   ```bash
-  git add docs/reviews/m03.md docs/reviews/m03/ && git commit -m "docs(reviews): m03 pipeline results" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+  . scripts/lib/env.sh
+  for k in POLAR_SANDBOX_TEST_LICENSE_KEY POLAR_SANDBOX_OTHER_LICENSE_KEY; do
+    curl -s -o /dev/null -w "$k %{http_code}\n" -X POST https://sandbox-api.polar.sh/v1/customer-portal/license-keys/validate -H 'Content-Type: application/json' \
+      -d "{\"key\":\"$(envget $k)\",\"organization_id\":\"$(envget POLAR_SANDBOX_ORGANIZATION_ID)\"}"
+  done
   ```
-- [ ] **Merge and push (D14).**
-  ```bash
-  git checkout main && git pull --ff-only origin main
-  git merge --no-ff m03-commerce-release -m "merge: m03 licensing, updates, release" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-  make check && git push origin main
-  ```
-  Expected: `make check` matches the stage 2 counts, and the push succeeds.
+  Expected: `… 200` twice.
+- [ ] **Step 3: After a yes** (Playwright, sandbox dashboard): revoke every licence key on the two products (the two Task 1 keys, the Task 13 step 8 key, any other test purchase), then archive both products.
+- [ ] **Step 4: Verify.** Re-run step 2. Expected: neither line is `200` (the validate schema only ever returns `status: granted`, so a revoked key gets an error; record the code). Open `POLAR_SANDBOX_CHECKOUT_URL_MARKDOWN` in Playwright: no payable checkout (record what it shows). The betas existed only on this Mac and the L2 lease, and an installed one now lapses after its grace (K5).
+- [ ] **Step 5: Clean up.** `pkill -f 'http.server 8765'; rm -rf dist-release/markdown/beta-feed`. From now on a Debug build's "Buy Pro…" opens an archived product; a later plan that needs a sandbox purchase makes its own product (plans 06 and 08 already do).
+- [ ] **Step 6: Record.** Add the close-out rows to `docs/gates/m03-acceptance.md`. Commit on `main`: `docs/gates/m03-acceptance.md`, "docs(gates): m03 sandbox beta close-out"; then `git push origin main`.
 
 ---
 
 ## Hand-offs to plan 05
 
-1. **arm64 / macOS 27 leg** on Scaleway M1 lease L2 (Thu 26 Nov 09:00 → Fri 27 Nov 09:00), second after plan 05's macOS 27 matrix, using b2. Repeat Task 13 steps 3–4, 7 and 10–12, and record them in `docs/gates/m03-acceptance.md` labelled "Scaleway M1, macOS 27".
-2. **Before 1.0.0, delete `markdown/TegelMarkdown-1.0.0-b*.dmg` and `markdown/appcast.xml` from R2.** This is outward-facing, so ask the user first. Sandbox betas accept Stripe test cards, so anyone holding a beta DMG gets Pro for free.
-3. **Replace `REPLACE_IN_PLAN_05` in `Config/Release.xcconfig`** in all four settings: `TG_POLAR_ORGANIZATION_ID`, `TG_POLAR_CHECKOUT_URL_MARKDOWN`, `TG_POLAR_PORTAL_URL` and `TG_POLAR_BENEFIT_ID_MARKDOWN` (the live Markdown licence benefit). Create the live product with the same benefit settings (limit 2, `enable_customer_admin`) at $14 (D15). Check with a Release build (`xcodebuild -scheme markdown -configuration Release -derivedDataPath build`), not `make build` (Debug).
-4. **Live BNPL row** in `docs/gates/bnpl.md` [F3g].
-5. **FAQ input:** whether the key arrives by email (Task 13 step 9), and the error copy from Task 9.
+1. **arm64 / macOS 27 leg** on Scaleway M1 lease L2 (Thu 26 Nov 09:00 → Fri 27 Nov 09:00), second after plan 05's macOS 27 matrix, using b2. Copy `dist-release/markdown/beta-feed/` to the lease (`scp -r`), serve it there exactly as in Task 13 step 1, then repeat Task 13 steps 3–4, 7 and 10–12. Record them in `docs/gates/m03-acceptance.md` labelled "Scaleway M1, macOS 27". Task 15 runs after this leg.
+2. **Nothing beta is on R2.** The first objects under `markdown/` are 1.0.0's, published with `scripts/release.sh markdown 1.0.0 --from-dmg <the smoke-tested DMG>`; compare the printed `sha256` with the smoked file's. That run is also the first real use of `release.sh`'s appcast and upload half.
+3. **RC Sparkle acceptance:** RC builds use the same local signed feed and `-SUFeedURL` override as Task 13 steps 6–7. No RC goes on the public feed (K7).
+4. **Replace `REPLACE_IN_PLAN_05` in `Config/Release.xcconfig`** in all four settings: `TG_POLAR_ORGANIZATION_ID`, `TG_POLAR_CHECKOUT_URL_MARKDOWN`, `TG_POLAR_PORTAL_URL` and `TG_POLAR_BENEFIT_ID_MARKDOWN` (the live Markdown licence benefit). Create the live product with the same benefit settings (limit 2, `enable_customer_admin`) at $14 (D15). Check with a Release build (`xcodebuild -scheme markdown -configuration Release -derivedDataPath build`), not `make build` (Debug).
+5. **Live BNPL row** in `docs/gates/bnpl.md` [F3g].
+6. **FAQ input:** whether the key arrives by email (Task 13 step 9), and the error copy from Task 9.
+
+## Deferred
+
+- **S16, machine binding: DEFERRED (m00 consolidation).** v1 sends no machine `conditions` on activate or validate. Client licensing is patchable anyway, and binding would hurt Migration Assistant moves.
 
 ## Contract change requests
 
-Status (consolidation, 27 Oct): 1–5 accepted; 3 extended with `--no-upload` and `-rcN` versions; 6 added.
+Status: 1–6 accepted (consolidation, 27 Oct); 3, 4 and 5 extended by the m00 review (K5, K7); master §3 already carries them.
 
 1. **`Polar-Version`: omitted, not pinned.** This changes master §10 P3's mitigation ("Calendar: bump `Polar-Version` every 6 months").
    - **Reason:** an omitted header uses Current, while a pinned version 404s after about 9 months, which would remove Pro from every install that doesn't update (polar.sh/docs/api-reference/2026-10/versioning.md).
-   - **New mitigation:** each quarter, when a version enters Next, run Task 1 step 9 against the sandbox with `-H 'Polar-Version: <Next>'`, and ship a fix within the 3-month Next window if it breaks. The 30-day grace still covers 404s.
+   - **New mitigation:** each quarter, when a version enters Next, run Task 1 step 9 against the sandbox with `-H 'Polar-Version: <Next>'`, and ship a fix within the 3-month Next window if it breaks. The 30-day grace still covers 404s and a drifted validate body.
 2. **§3.1 layout: add `Config/PolarSandbox.xcconfig`.**
    - **Reason:** notarised betas (Task 13) need sandbox Polar values in a *Release* build. One file, included by `Debug.xcconfig` and passed as `xcodebuild -xcconfig` by `release.sh --sandbox`, keeps a single source of sandbox values.
-3. **`scripts/release.sh <app> <version>` gains `[--sandbox] [--yes] [--no-upload]`, and versions may end `-bN` or `-rcN`**, in CLAUDE.md's Commands table and §3.1.
-   - **Reason:** sandbox betas, plus a confirmation prompt for an outward-facing upload. The prompt is skipped only by an explicit flag after user approval. Plans 05–07 build RCs with `--no-upload`.
-4. **§3.1: add `scripts/release_test.sh` and a Makefile `test-release` target in `check`.**
-   - **Reason:** the release guards (dirty tree, missing key, placeholder values) need a regression test that runs without signing or network.
+3. **`scripts/release.sh <app> <version>` gains `[--sandbox] [--yes] [--no-upload] [--print-config] [--from-dmg <path>]`, and versions may end `-bN` or `-rcN`**, in CLAUDE.md's Commands table and §3.1.
+   - **Reason:** sandbox betas that stay private (`--sandbox` requires `--no-upload`); a confirmation prompt for an outward-facing upload, skipped only by an explicit flag after user approval; RCs built with `--no-upload` (plans 05–07); `--print-config` to assert each app's destinations (CR-P0-1); `--from-dmg` so the published DMG is the smoke-tested one (CR-P2-2).
+4. **§3.1: add `scripts/release_test.sh`, a Makefile `test-release` target in `check`, and `scripts/entitlements/<target>.plist`.**
+   - **Reason:** the release guards (dirty tree, missing key, placeholder values, private betas, destinations, `--from-dmg` checks, the entitlement allowlist) need a regression test that runs without signing or network.
 5. **Clarifications to §3.3, no signature change:**
    - `LicenseManager.isPro` is computed (true only for `.pro`).
    - `deactivate()` treats `PolarError.notFound` as success, because the activation was already removed.
    - `refresh` ignores `validate`'s `expires_at`.
-   - `KeychainStore` throws `NSError(NSOSStatusErrorDomain)`.
+   - `KeychainStore` throws `NSError(NSOSStatusErrorDomain)`; its internal `failSaves` is a test seam.
    - Key normalisation strips all whitespace, not only the ends.
+   - K5: `LicensePolicy` gives `.pro` only for `-1 day ≤ now − lastValidatedAt ≤ grace` (internal `skew`). `validate` throws `.http(200)` unless the 200 decodes to `status == "granted"` with the stored activation id. `LicenseManager` allows one activate/deactivate at a time (another call throws `CancellationError`) and releases the new activation when the Keychain save fails.
 6. **§3.3 and D16: licence keys bind to one app** (decision D1; interfaces X2). `PolarConfig.benefitID` (Info.plist `TGPolarBenefitID`, build setting `TG_POLAR_BENEFIT_ID_MARKDOWN`), `PolarError.wrongProduct`, `benefit_id` on validate, and the activate check.
    - **Reason:** without it, any key in the Polar organisation (a later Data or bundle key) unlocks App 1. Plan 07 F1 generalises the single id to a set only if v2 needs it.
