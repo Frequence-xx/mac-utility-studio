@@ -1,0 +1,21 @@
+docs/superpowers/plans/2026-10-27-07-post-launch-scale.md
+  s_bc8ea26773de3f::t_7a88122ad81da3 184,976-978
+docs/superpowers/plans/2026-10-27-08-growth-engine.md
+  s_bc8ea26773de3f::t_7a88122ad81da3 1090-1092
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ab2c827fe90401a621b78f9bbd8afe33cb0c6baf",
+  "prompts": {},
+  "sessions": {
+    "s_bc8ea26773de3f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c36ff1eb-4626-43e3-815d-36966257085e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "farouq abou umar <farouqabouumar@farouqs-iMac.local>"
+    }
+  }
+}
