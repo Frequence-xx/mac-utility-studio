@@ -970,7 +970,9 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   sed -i '' '/^APPLE_TEAM_ID=/d' "$D/.env"
          check missing-key      1 "missing .env key: APPLE_TEAM_ID" markdown 1.0.0
   fresh; touch "$D/stray.txt"
-         check dirty-tree       1 "working tree is dirty"  markdown 1.0.0
+         check dirty-tree       1 "working tree is dirty outside docs/"  markdown 1.0.0
+  fresh; mkdir -p "$D/docs/ops"; echo row >> "$D/docs/ops/support-log.md"   # a pending log row isn't a build input
+         check docs-dirty       1 "Config/Release.xcconfig still has REPLACE_IN_PLAN_05" markdown 1.0.0
   fresh; check placeholder      1 "Config/Release.xcconfig still has REPLACE_IN_PLAN_05" markdown 1.0.0
          check rc-version       1 "Config/Release.xcconfig still has REPLACE_IN_PLAN_05" markdown 1.0.0-rc1 --no-upload   # passes the version regex
          check no-upload        1 "Config/Release.xcconfig still has REPLACE_IN_PLAN_05" markdown 1.0.0 --no-upload
@@ -1006,7 +1008,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   cd "$D"; SLUG=select TEAM="not set" fn from-dmg-no-appex 1 "TGPolarBenefitID is not TG_POLAR_BENEFIT_ID_SELECT" check_app "$X/Select.app"; cd - >/dev/null
   echo "release_test: $pass passed, $fail failed"; [[ $fail == 0 ]]
   ```
-- [ ] **Step 2: Run it to verify it fails.** `bash scripts/release_test.sh`. Expected: FAIL, `cp: …/scripts/release.sh: No such file or directory`, … `release_test: 0 passed, 27 failed`.
+- [ ] **Step 2: Run it to verify it fails.** `bash scripts/release_test.sh`. Expected: FAIL, `cp: …/scripts/release.sh: No such file or directory`, … `release_test: 0 passed, 28 failed`.
 - [ ] **Step 3: Implement.**
   - **`scripts/entitlements/`** (the allowlist; any change to it is a reviewed commit, never generated from `project.yml`):
     ```bash
@@ -1055,7 +1057,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
     2. **Guards.**
        - `cd "$(git rev-parse --show-toplevel)"`, then `. scripts/lib/env.sh`;
        - `need` the seven keys (exit 1, `missing .env key: KEY`; only the name is printed). Values go into **unexported** shell variables with `envget` (`TEAM`, `IDENTITY`, `PROFILE`, `ACCOUNT`, `R2_KEY_ID`, `R2_SECRET`, `R2_BUCKET`), and each reaches only the commands that need it;
-       - `[ -z "$(git status --porcelain)" ] || die 1 "working tree is dirty"`;
+       - `[ -z "$(git status --porcelain -- . ':(exclude)docs')" ] || die 1 "working tree is dirty outside docs/"`. Nothing under `docs/` feeds a build, and the daily support log, the distribution log, QA rows and plan records live there, so a pending row never blocks a release (pathspec checked with git 2.50.1 on the build Mac, 27 Oct);
        - without `--sandbox`, `grep -q REPLACE_IN_PLAN_05 Config/Release.xcconfig` → `Config/Release.xcconfig still has REPLACE_IN_PLAN_05; pass --sandbox for a beta`, exit 1.
     3. **`--from-dmg <path>`** replaces steps 4–11 (each failure → exit 1):
        - `[ -f "$SRC" ] || die 1 "no such DMG: $SRC"`; `[ "${SRC##*/}" = "$DMG_NAME" ] || die 1 "expected $DMG_NAME, got ${SRC##*/}"`;
@@ -1107,9 +1109,9 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
         - print `published $PREFIX$DMG_NAME`: the `downloadURL` that the publishing plan copies into `site/config.json` with the version (plan 05 for App 1, plan 06 for App 2; plan 04 CR-5).
   - **Makefile:** `test-release: ; bash scripts/release_test.sh`, and add `test-release` to `check`'s prerequisites.
 - [ ] **Step 4: Run it to verify it passes.**
-  - `bash scripts/release_test.sh`. Expected: `release_test: 27 passed, 0 failed`.
+  - `bash scripts/release_test.sh`. Expected: `release_test: 28 passed, 0 failed`.
   - `bash -n scripts/release.sh && echo syntax-ok` → `syntax-ok`.
-  - `make check` → the baseline, plus TegelStore, plus `release_test: 27 passed`.
+  - `make check` → the baseline, plus TegelStore, plus `release_test: 28 passed`.
 - [ ] **Step 5: Watch the new guards fail.** One at a time, re-running `bash scripts/release_test.sh` after each, then restoring:
   - make `check_ents` `return 0` → `FAIL ents-extra (exit 0)`;
   - delete the `--sandbox` needs `--no-upload` rule → `FAIL sandbox-public` (it now meets the pre-release rule's message);
@@ -1117,7 +1119,8 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   - delete the `stapler validate` line → `FAIL from-dmg-stapled` (the empty file then fails at `spctl`, with another message; `stapler` and `spctl` on an empty file exit 66 and 3, checked on the build Mac);
   - make `check_direct`, `check_unlocked` and `check_app` each `return 0` in turn → `FAIL direct-store-flag`, `FAIL locked`, `FAIL from-dmg-wrong-app`; drop `[ -e "$b" ] || continue` → `FAIL from-dmg-no-appex`;
   - delete `check_unpublished`'s `die` → `FAIL already-in-feed` and `FAIL already-on-r2`.
-  - Restored: `27 passed, 0 failed`.
+  - drop the `':(exclude)docs'` pathspec → `FAIL docs-dirty`;
+  - Restored: `28 passed, 0 failed`.
   - A `markdown/` literal can't be caught while `markdown` is the only app. Plan 06's `data` row adds the standing guard: a `print-config` case expecting `dist-release/data/<v>`, `…/data/appcast.xml` and `r2=$R2_BUCKET/data/`, watched failing (`unknown app: data`) before the row exists.
 - [ ] **Step 6: Commit:** `scripts/release.sh scripts/release_test.sh scripts/entitlements Makefile`, "feat(release): release.sh archive→notarise→DMG→signed appcast→R2, with print-config, from-dmg and an entitlement allowlist".
 - [ ] **Step 7: First real run (needs Task 3, done 27 Oct).** This is Task 13 step 1.
@@ -1237,7 +1240,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   - the proof is behavioural and comes with plan 05's first `v*` tag: its push shows the `macos` job running (no source grep, B16);
   - Commit: `.github/workflows/ci.yml`, "ci: run the macOS matrix on v* release tags".
 - [ ] **Step 1: Run Procedure P** with these deltas.
-  - **Stage 2 counts to record:** bun; swift (TegelKit + 41 TegelStore); `release_test: 27 passed`.
+  - **Stage 2 counts to record:** bun; swift (TegelKit + 41 TegelStore); `release_test: 28 passed`.
   - **Stage 4 `/cso` scope** (mandatory here: licensing, Keychain, entitlements, Sparkle, `release.sh`, `.env` handling):
     - **TegelStore:**
       - error → grace mapping (no 404 lock); the mid-flight race; key normalisation; no token or `Authorization` sent; HTTPS-only `apiBase`;

@@ -438,7 +438,7 @@ The source is CLAUDE.md's "Mandatory 9-stage review pipeline", and CLAUDE.md win
 `BASE=$(git merge-base HEAD main)`.
 
 1. **Bloat audit (pre):** run `~/.claude/skills/code-upgrade/bloat-audit.md` over `git diff $BASE...HEAD` and the touched files. Strip self-introduced bloat. Pre-existing findings go under "Questions for the user".
-2. **Baseline:** `git status --short` is empty, then `make check`. Record the pass/fail counts; later stages must not regress them.
+2. **Baseline:** `git status --short -- . ':(exclude)docs'` is empty (pending log rows and records under `docs/` are allowed, as in `release.sh`), then `make check`. Record the pass/fail counts; later stages must not regress them.
 3. **Code review:** a cold review of `git diff $BASE...HEAD`, bugs, security and correctness first (gstack `/review`, or a code-review subagent).
 4. **Security:** `/cso` with the plan's scope, whenever the diff touches a CLAUDE.md stage-4 trigger.
 5. **Adversarial:** `/codex` challenge mode on the same diff (fallback: the closest agent).
