@@ -28,3 +28,8 @@ site/public/
 graphify-out/
 .playwright-mcp/
 .DS_Store
+
+# local signing/build secrets
+Config/Local.xcconfig
+*.key
+*.pem

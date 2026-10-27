@@ -442,7 +442,7 @@ test('UI strings and templates contain no emoji', () => {
   - **System Settings path:**
     - `QuickLookSetup.settingsPath(macOSMajor:)` chooses the copy: `.loginItemsExtensions` (15 and later) is the wireframe text; `.privacySecurityExtensions` (14) reads "… System Settings › Privacy & Security › Extensions › Quick Look."
     - "Open System Settings…" opens `QuickLookSetup.settingsURL`; if `NSWorkspace.open` returns false, it falls back to opening System Settings.
-    - Deep-link verification on macOS 14, 15 and 27 belongs to plan 08 Task 11 Step 6. Add its results to the spec when they land.
+    - Deep-link verification on macOS 14, 15 and 27 belongs to plan 08 Task 11 Step 2. Add its results to the spec when they land.
     - There is no public API to read whether a Quick Look extension is enabled, so the copy teaches instead of checking.
   - **"Open Sample"** opens `docs/design/samples/en-spec.md`, bundled as `Welcome.md` (`ar-spec.md` when the UI language is Arabic), as a normal read-only document.
   - **Launch check:** on first launch, check that the document Open panel doesn't appear on top of Welcome. If it does, register `NSShowAppCentricOpenPanelInsteadOfUntitledFile = false` in `UserDefaults.register(defaults:)`, then verify again.

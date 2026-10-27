@@ -1,0 +1,61 @@
+# M00 stage 6: consolidated findings and decisions (27 Oct 2026)
+
+Inputs:
+- `m00-bloat-audit.md` (B1–B29)
+- `m00-code-review.md` (P0-1, P1-1…4, P2-1…29, cited as CR-xx)
+- `m00-security-review.md` (#1–#29, cited as S#)
+- `m00-codex-challenge.md` (#1–#24, cited as CX#)
+
+**Rule for fixers:**
+- Apply every finding that touches your files, as decided below.
+- Merged findings are fixed once, by the owner named.
+- "DEFER" and "USER" items get no plan edit beyond what is stated.
+- Line numbers in the reports are pre-edit; locate by content.
+- Every new guard needs a step that watches it fail first (CLAUDE.md).
+
+## Merged clusters (one fix each)
+
+| Cluster | Findings | Decision | Owner |
+|---|---|---|---|
+| **K1 `.env` handling** | S1, S26, CR-P2-1, CR-P2-29, CX4, CX19 | Plan 01 Task 1 creates `scripts/lib/env.sh`:<br>• `envget KEY`: a literal parse, never `source`;<br>• `envset KEY VALUE`: `umask 077` + `mktemp` in the same dir + atomic `mv`, values written as `KEY='…'` with `'` escaped, newlines rejected;<br>• `need`.<br>Every command that uses `.env` starts with `. scripts/lib/env.sh` and passes keys one at a time (`KEY="$(envget KEY)" cmd`). **No `set -a; . ./.env` anywhere.**<br>`make check` guard: `! grep -rn 'set -a' scripts Makefile site/*.js` and no unpinned `bunx <pkg>` (version required); watch it fail on a planted line.<br>`.gitignore` gets `Config/Local.xcconfig`, `*.key`, `*.pem` (done by Claude 27 Oct). | 01 (helper + guard); 03–08 (call sites) |
+| **K2 Cloudflare token split** | S1 | Deploy token = Pages Edit only, with a TTL; R2 stays on the bucket-scoped token; DNS by hand in the dashboard with a user ask. Pin `wrangler` and `lighthouse` to exact versions. | 04, 03 |
+| **K3 signing keys at rest** | S2 | After the one-time Keychain import, move the Developer ID key, the Sparkle private key and the `.p8` into encrypted offline storage (the user's choice, same question as U-23), then delete the plaintext files. Drop `SPARKLE_PRIVATE_KEY_BACKUP_PATH` from `.env`. Stage-4 check: `find ~/.tegel-signing ~/.tegel-secrets -type f \( -name '*.key' -o -name '*.p8' -o -name '*.p12' \)` prints nothing. | 03 (+ master H2 note) |
+| **K4 local images** | S3, S12, CX1, CR-P2-16, CR-P2-24 | Local images always go through a `WKURLSchemeHandler` (`tegel-doc:`; plan 02 CR-1 becomes unconditional, and the `file:`-on-`img` hook goes):<br>• The handler serves only `UTType.image` files whose `standardizedFileURL.resolvingSymlinksInPath()` lies, comparing `pathComponents`, under the security-scoped grant root that contains the document. Anything else gives 404.<br>• CSP `img-src 'self' data: tegel-doc:`, no `file:`. Run `/cso`.<br>• On PDF export, if any loaded local image lies outside the document's own folder, show a confirmation that lists those files before writing (S3 option A).<br>• The App 1 Quick Look extension drops the `/` read-only exception; Quick Look renders with `baseURL: nil` and shows no local images.<br>• Tests: `notes-old` prefix case → nil; `..` escape → 404; hidden 1 px outside-folder image → listed in the export confirmation; a folder granted by bookmark outside the container loads its images. | 01 (CSP, QL entitlement), 02 (handler, export check), master §3 |
+| **K5 licence hardening** | S4, CX20, S5, CX5 | • Pro only when `-1 day ≤ now − lastValidatedAt ≤ grace`. Beyond the skew the state is `.lapsed`, and the next 200 restores Pro. Flip `clockMovedBackwards…` to expect `.lapsed`; add `smallBackwardSkewStaysPro` and `futureStampBeyondSkewIsLapsed`. (This reverses 03:40; Claude decided it: a 1-day skew keeps honest users safe.)<br>• Validate decodes `status == "granted"` and the matching activation id, otherwise it counts as failure (grace, never a lock).<br>• `LicenseManager` serialises mutations (one in-flight activate/deactivate). A Keychain save failure after activate triggers a best-effort `deactivate` (rollback). There is no persistent retry queue: the user can free slots in the Polar portal (ponytail note). | 03 |
+| **K6 renderer defence in depth** | S6, S7, S8, S9, S10, S11 | • S6: add the WebKit test (a document-folder `.js` injected as `<script src>` must not run). If it runs on the `file:` origin, serve the renderer from `tegel-renderer://` (plan 01's own fallback).<br>• S7: a `WKContentRuleList` blocks `^(https?\|wss?\|ftp):`.<br>• S8: sanitise the Mermaid SVG with DOMPurify's svg profile; `htmlLabels:false`.<br>• S9: watched-fail step with the sanitise call replaced by the identity function.<br>• S10: `style` added to `FORBID_TAGS`.<br>• S11: `page.js` never reads page globals by name (module reference for Mermaid). Heading ids stay unprefixed for anchor compatibility. Add a `# mermaid` fixture. | 01 |
+| **K7 release pipeline** | CR-P0-1, CX14, CR-P2-2, S13, S14, S15, CX21, CX13 | • `release.sh`: the `case` sets `SLUG`; every `markdown/` literal becomes `$SLUG/`. Add `--print-config`, with a `release_test.sh` case showing `data` resolves to `data/appcast.xml` and `$R2_BUCKET/data/`.<br>• A `--from-dmg <path>` mode publishes the already smoke-tested DMG, with no rebuild (CR-P2-2).<br>• `SURequireSignedFeed` and `SUVerifyUpdateBeforeExtraction` set to true.<br>• The previous appcast comes from `dist-release/`, never `curl`.<br>• Entitlements are diffed against `scripts/entitlements/<target>.plist` and fail on any difference.<br>• Betas b1/b2 are private (no public R2 feed). Close-out revokes the sandbox keys and archives the sandbox product (ask the user).<br>• The RC Sparkle acceptance uses a locally served test feed for RC builds (verify the Sparkle 2.10.1 feed-override mechanism first). | 03 (+06 Data case, 05 release-day steps) |
+| **K8 waitlist abuse** | S17, CX2, CR-P1-4, S18 | • The Function rejects any `Host` other than `tegelapps.com`/`www`, keeps a global daily cap (KV) and a per-address cooldown (KV), and returns the "try later" page without calling MailerLite when over.<br>• Tests move to `site/test/functions/`, out of the routes folder.<br>• Separate MailerLite tokens for Pages and for local use; a one-off Polar `discounts:write` token for plan 07 F3, deleted after use. | 08 (+04 deploy) |
+| **K9 email consent** | CX6, CX7, CR-P2-3 | • The checkout field is **opt-in**, unticked: "Email me set-up tips and news about Tegel apps". Only opted-in buyers enter lifecycle and cross-sell; licence and receipt mail is Polar's.<br>• The daily sync reconciles **all** orders since launch (small n; ponytail note: page through by `updated_at` once orders exceed about 2,000). A refund removes the buyer and cancels queued sends. | 05 (label), 08 (sync, lifecycle) |
+| **K10 EUR pricing** | CX8 | Polar supports per-currency prices, currency chosen by geolocation, and EU tax-inclusive by default (verified at polar.sh/docs/features/products, 27 Oct). Products get a EUR price beside USD. NL (and every EU-language) page shows the EUR price incl. VAT; the honest-intro rules apply to EUR too. **USER: the EUR price points.** Default in plans: €19, intro €14, marked "pending user confirmation". | 04, 05, master |
+| **K11 huge/blocking files** | CX10, CX11, CX12 | • Quick Look opens with `O_NONBLOCK`, `fstat` checks for a regular file, I/O runs off the main actor, and the deadline covers the whole preview. FIFO fixture test.<br>• The window path never loads a file over the cap into memory: check the size before reading; executor verifies the SwiftUI document API path, with a test through the real open path with a > 50 MB file.<br>• Search: return on cancellation, propagate cancellation, drop stale results by query generation. | 01 (QL, loader), 02 (search) |
+| **K12 App 2 robustness** | S23, CX17, CR-P2-5, CR-P1-3, CX15, S20, S21, S22 | • `RecordIndex` reads through `FileHandle` at offsets, no `.alwaysMapped`; truncation test.<br>• The paged list uses a scaled virtual scroller, so record 2,747,748 is reachable under WebKit's 33.5 M px cap; test it.<br>• App 2 reuses plan 03's Sparkle updater and licence refresh wiring explicitly, verified on a production build.<br>• Quick Look masks PEM bodies and secret dotfiles.<br>• Transcripts mask common token shapes in view and export.<br>• `readonly-gate` scans `Apps/`. | 06 |
+| **K13 CI** | CX3, CR-P2-7, CR-P2-8, S24, S25, CR-P2-22 | • Dispatch-only workflows (`smoke.yml`, `design-shots.yml`, UTType matrix) land on `main` first in a tiny reviewed commit, then `gh workflow run … --ref <branch>`.<br>• Runners `xcode-select` the pinned Xcode 26.x; the macOS 14 legs run a binary built on a newer runner (artefact hand-off).<br>• Actions pinned to SHAs; xcodegen pinned with a sha256.<br>• `mas.yml`: inputs via `env:` + a regex check, `permissions: contents: read`, `-T` instead of `-A`.<br>• `test-smoke-dmg.sh` (GUI) comes out of `make check`. | 01, 05, 07, 09 |
+| **K14 kill path** | CX18 | Every stop/kill decision ships a final build that keeps Pro for any stored licence with no further online checks, and stops new sales first. | 07, master |
+| **K15 tool privacy** | CX9 | Tool CSP `img-src data:` only. Sanitising drops every non-`data:` `src`. Test with a same-origin path. | 04 (`_headers`), 08 (tool) |
+| **K16 honesty and funnel** | CX23, CX24 | • Plan 08 states the channel-mix arithmetic that reaches the G1/G2 sales targets (launch channels + SEO), and adds a checkpoint that triggers a re-plan when qualified traffic is short.<br>• The comparison page compares the actual Print → PDF result of MacMD, discloses the workaround, and claims nothing unverified. | 08, 04 |
+| **K17 imprint VAT** | CX22 | The btw-id NL863569353B01 is in the first-deploy imprint and its assertion (the W6 task is gone). | 04 |
+| **K18 Upsell simplification** | B6, CR-P2-11, S19 | • Drop the `UpsellPolicy` class and the TegelStore move: `UpsellFeature` stays app-side, and `UpsellContext` gains `previewShown: Set<UpsellFeature>`.<br>• The preview is **at most two in-memory page images** (`PDFPage.thumbnail`), with no temp file. | 08, 02, master §3 |
+
+## Single-plan fixes (apply as each report says)
+
+- **01:** CR-P1-1 (bind `try await` to `let` before `XCTAssert`). CR-P1-2 (`dir="auto"` on top-level blocks only, never on children of `ul/ol/blockquote/table`; tests with an Arabic list, blockquote and table). CR-P2-15 (define `$SCRATCH`), P2-17 (`xcodegen generate` before `test-app` in `check`), P2-19 (entitlement counts on Release, or account for Debug's `get-task-allow`), P2-21. S27 (`bun audit` in `make check`; record Mermaid's bundled DOMPurify version).
+- **02:** CR-P2-18 (a ≥ 16-byte marker string + a Debug positive control), P2-25, P2-28 (resolve symlinks in path assertions).
+- **03:** CR-P2-20, P2-26, P2-27 (first codesign: the user clicks "Always Allow" once; record it). S16 is DEFERRED: no machine binding in v1, since client licensing is patchable and Migration Assistant moves would be hurt.
+- **06:** CR-P2-4, P2-6, P2-12 (`files(in:extensions:limit:)`), P2-13, P2-14.
+- **07:** CR-P2-10, CX16 (activate returns and persists the benefit id), S29.
+- **08/09:** CR-P2-9 (wrangler secret env flag; one `-w`).
+- **CR-P2-23:** no change. `Frequence-xx` is a **User** (`api.github.com/users/Frequence-xx` → `"type": "User"`, checked 27 Oct).
+
+## Bloat (B1–B29): apply high and medium confidence
+
+- **B1:** master §11 defines **Procedure P**, the 9 stages once. Each plan's pipeline task keeps only its deltas: the `/cso` scope, the design-review screenshot list, release steps and "can't run" notes.
+- **B2:** the commit convention is stated once per plan; commit steps become one line.
+- **B3** (drop plan 04's Monday log), **B4** (drop the Cloudflare GraphQL counter, token and zone id), **B5** (drop the ICE backlog and sequential-test protocol; keep "no price A/B" and one re-plan trigger), **B7**, **B8**, **B9**, **B10** (Global Constraints = deltas plus one line pointing to the master and CLAUDE.md), **B11**.
+- **B12:** DESIGN.md §7 names the CSS files instead of copying the tables.
+- **B13–B29:** apply at high/medium confidence; skip low.
+
+## USER items (question round)
+
+- K10: EUR price points.
+- K3: where the encrypted key backup lives.
+- S28: move the account passwords out of `.env` into the Keychain? CLAUDE.md currently mandates `.env`. Default: keep `.env` (chmod 600) and use K1.

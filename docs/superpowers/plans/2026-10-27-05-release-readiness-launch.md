@@ -317,7 +317,7 @@ Notes the doc must carry:
   - If a Quick Look screenshot is black (headless session), mark R3 `—` for that runner with the reason.
 - [ ] **Step 4: Build Mac, R1–R11 manual pass** (`m15-intel`). Steps per row:
   - **R1:** download the DMG through Safari from the private release, so it gets the quarantine flag. Open it, drag to Applications, first launch. Expected: the standard "downloaded from the Internet" prompt naming Apple-checked software, and the app opens. Also run `bash scripts/smoke-dmg.sh <dmg> docs/gates/evidence/1.0/m15-intel/smoke`: 5 `PASS`.
-  - **R2:** screenshot the System Settings path that enables the extension. This exact path becomes the FAQ text in Task 4. Also click the Welcome window's `Open System Settings` button (`QuickLookSetup.settingsURL`) and screenshot where it lands as `R2-deeplink.png`; plan 08 Task 11 Step 6 reads it for `m15-intel`, `m27-arm` and `m14-arm`.
+  - **R2:** screenshot the System Settings path that enables the extension. This exact path becomes the FAQ text in Task 4. Also click the Welcome window's `Open System Settings` button (`QuickLookSetup.settingsURL`) and screenshot where it lands as `R2-deeplink.png`; plan 08 Task 11 Step 2 reads it for `m15-intel`, `m27-arm` and `m14-arm`.
   - **R3:** Space on each fixture in Finder. Expected:
     - `hostile.md`: no script runs, no navigation;
     - `mermaid-broken.md`: one error box, the rest renders;
