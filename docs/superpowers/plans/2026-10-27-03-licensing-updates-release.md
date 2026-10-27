@@ -1077,7 +1077,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
        - PlistBuddy `CFBundleShortVersionString == $V` and `CFBundleVersion == $BUILD`;
        - `TGPolarAPIBase` == `https://sandbox-api.polar.sh` (`--sandbox`) or `https://api.polar.sh`; `TGPolarBenefitID` non-empty (D1);
        - `lipo -archs` on the app and appex executables contains both `x86_64` and `arm64`;
-       - **entitlements (K7):** for `$APP` and each `$APP/Contents/PlugIns/*.appex`, `check_ents "$b" "scripts/entitlements/${id#com.tegelapps.}.plist"`, where `id` is the bundle's `CFBundleIdentifier`;
+       - **entitlements (K7):** for `$APP` and each `$APP/Contents/PlugIns/*.appex` that exists (the same `[ -e "$b" ] || continue` loop as `check_app`: App 3 has no extension), `check_ents "$b" "scripts/entitlements/${id#com.tegelapps.}.plist"`, where `id` is the bundle's `CFBundleIdentifier`;
        - `codesign --verify --deep --strict --verbose=2 "$APP"`; `syspolicy_check notary-submission "$APP"`.
     8. **`notarize <file>`:** `xcrun notarytool submit "$1" --keychain-profile "$PROFILE" --wait --output-format json > "$OUT/notary-<n>.json"`; `plutil -extract status raw -o - <json>` must be `Accepted` (plutil reads JSON; checked on the build Mac), otherwise write `xcrun notarytool log <id> …` to `$OUT/notary-log.json` and exit 1.
     9. **App:** `ditto -c -k --keepParent "$APP" "$OUT/app.zip"` → `notarize` → `xcrun stapler staple "$APP"`.
