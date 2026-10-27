@@ -1093,7 +1093,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
         - With `--no-upload`: `printf '%s\n' "$PWD/$OUT/$DMG_NAME"` as the last stdout line, then exit 0.
     12. **Appcast:**
         - `rm -rf "$OUT/feed"; mkdir -p "$OUT/feed"`; copy the DMG in;
-        - `[ -f "$PREV" ] && cp "$PREV" "$OUT/feed/appcast.xml"`. The previous feed comes only from `dist-release/`, **never `curl`**: a tampered public feed must not flow into the next release (K7). The first release has none; generate_appcast keeps the existing items (`--maximum-versions` defaults to 3);
+        - `[ -f "$PREV" ] && cp "$PREV" "$OUT/feed/appcast.xml"`. The previous feed comes only from `dist-release/`, **never `curl`**: a tampered public feed must not flow into the next release (K7). The first release has none; generate_appcast keeps the existing items (`--maximum-versions` defaults to 3: `DEFAULT_MAX_VERSIONS_PER_BRANCH_IN_FEED`, Sparkle 2.x `generate_appcast/main.swift`, checked 27 Oct);
         - the Sparkle tools: `GA=build/release-dd/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_appcast`; if absent (a `--from-dmg` run in a fresh checkout), `xcodegen generate && xcodebuild -resolvePackageDependencies -derivedDataPath build/release-dd >/dev/null` first;
         - `"$GA" --account tegelapps --download-url-prefix "$PREFIX" -o "$OUT/feed/appcast.xml" "$OUT/feed"`;
         - checks: `grep "$DMG_NAME" "$OUT/feed/appcast.xml" | grep -q 'sparkle:edSignature='` and `grep -q '<!-- sparkle-signatures:' "$OUT/feed/appcast.xml"` (generate_appcast signs the whole feed because the app's Info.plist sets `SURequireSignedFeed`; Sparkle 2.10.1 `generate_appcast/FeedXML.swift`), then print `appcast signatures present`.
