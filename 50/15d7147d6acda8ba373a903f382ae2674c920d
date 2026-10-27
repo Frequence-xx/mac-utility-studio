@@ -1,0 +1,51 @@
+docs/superpowers/plans/2026-10-27-09-design-system-brand.md
+  s_bc8ea26773de3f::t_fe8664d976ab9c 445
+docs/reviews/m00-bloat-audit.md
+  s_bc8ea26773de3f::t_020ddd69930490 1-2,4-48
+  s_bc8ea26773de3f::t_ad1efb7ed7d28f 3
+.env.example
+  s_bc8ea26773de3f::t_1ffeb70f981d67 49
+docs/superpowers/plans/2026-10-27-00-master-roadmap.md
+  s_bc8ea26773de3f::t_1ffeb70f981d67 265
+docs/reviews/m00-pipeline.md
+  s_bc8ea26773de3f::t_d18768410d3f03 1-15
+docs/superpowers/plans/2026-10-27-05-release-readiness-launch.md
+  s_bc8ea26773de3f::t_fe8664d976ab9c 320
+docs/superpowers/plans/2026-10-27-04-site-seo.md
+  s_af471bcd2afa5d::t_dd44656d3dc260 876
+  s_bc8ea26773de3f::t_f37ff8b7cc3534 879,1108
+docs/reviews/m00-security-review.md
+  s_bc8ea26773de3f::t_2b61c14f1b9e2c 1-81
+docs/reviews/m00-code-review.md
+  s_bc8ea26773de3f::t_93952e6335b669 1-81
+docs/reviews/m00-codex-challenge.md
+  s_bc8ea26773de3f::t_e066f6c40a176d 1-49
+docs/reviews/m00-consolidated.md
+  s_bc8ea26773de3f::t_72a9debdf50161 1-61
+.gitignore
+  s_bc8ea26773de3f::t_e99b7e45ccef23 31-35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5015d7147d6acda8ba373a903f382ae2674c920d",
+  "prompts": {},
+  "sessions": {
+    "s_af471bcd2afa5d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a17c9e-7799-7fc1-9aa8-d0acc6338281",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "farouq abou umar <farouqabouumar@farouqs-iMac.local>"
+    },
+    "s_bc8ea26773de3f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c36ff1eb-4626-43e3-815d-36966257085e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "farouq abou umar <farouqabouumar@farouqs-iMac.local>"
+    }
+  }
+}
