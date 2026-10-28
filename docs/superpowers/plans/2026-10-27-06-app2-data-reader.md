@@ -393,7 +393,9 @@ test('table cells are escaped', () => {
 export function isSecretName(name)
   // -> boolean, any case: name contains KEY, TOKEN, SECRET, PASSWORD, PASSWD or CREDENTIAL, or has AUTH or AUTHORIZATION as a
   //    whole segment between start, end, '_', '-' or '.' (`auth`, `HTTP_AUTH`, `basic-auth`; `author` stays visible)
-// tree.js, table.js, jsonl.js gain an option, default false, that Quick Look turns on (Task 6):
+// tree.js, table.js, jsonl.js gain an option, default false, that Quick Look turns on (Task 6). With it, every string they render
+// (tree leaf, table cell, JSONL preview string) also goes through maskSecrets(s) without `structured`, so an assignment held in a
+// value is masked too (a compose `environment:` item `- POSTGRES_PASSWORD=…`, `DB_PASSWORD=…` in a transcript's tool output):
 //   treeHTML(value, { …, maskNames })         -> the value of a key passing isSecretName renders as '••••••••', with no children
 //   tableRowsHTML(rows, first, header, { maskNames, nameRow = header }) -> every cell in a column whose nameRow cell passes
 //                                                        isSecretName renders as '••••••••'; Quick Look passes nameRow = header ?? records[0],
@@ -416,7 +418,7 @@ export function maskSecrets(text, { wholeFile = false, structured = false } = {}
 //    one to the end of the line (so YAML nesting and the source of a malformed JSON file are covered).
   //    structured (Quick Look's JSON/JSONL/YAML/TOML/CSV/TSV/.env input) skips only that pass: an unquoted replacement can
   //    break a parser, while the passes above replace key and token characters only, so the file still parses. The views
-  //    apply the same name rule after parsing instead (maskNames above).
+  //    apply the name rule after parsing instead: to secret-named keys and columns, and to every rendered string (maskNames above).
   //    wholeFile (secret dotfiles, Task 5 DataFile.secretFile): then every non-comment line keeps only its first token
   //    (`machine`, `//registry/:_authToken`, `aws_secret_access_key`, the masked credential URL, …). The list is explicit, not a scanner.
 ```
@@ -475,6 +477,10 @@ test('secrets are masked: PEM bodies, token shapes, secret-named values, whole s
   expect(out).toContain('name=visible');
   const nested = maskSecrets('db:\n  password: pwnested1\n  "client_secret": "pwquoted2",\n  user: visible');
   for (const s of ['pwnested1', 'pwquoted2']) expect(nested).not.toContain(s);
+  const compose = treeHTML(parseDocument('db:\n  environment:\n    - POSTGRES_PASSWORD=pwcompose1\n', 'yaml').value, { maskNames: true }).html;
+  expect(compose).not.toContain('pwcompose1'); expect(compose).toContain('POSTGRES_PASSWORD');
+  expect(jsonlRowHTML(3, '{"output":"DB_PASSWORD=pwjsonl3"}', undefined, { maskNames: true })).not.toContain('pwjsonl3');
+  expect(tableRowsHTML([['DB_PASSWORD=pwcell2']], 0, ['value'], { maskNames: true })).not.toContain('pwcell2');
   for (const [src, v] of [['{"client_secret":"pwmin0","a":[1', 'pwmin0'], ['ENV DB_PASSWORD=pwenv1', 'pwenv1'], ['  - password: pwlist9', 'pwlist9']])
     expect(maskSecrets(src)).not.toContain(v);
   expect(nested).toContain('user: visible');
@@ -647,7 +653,7 @@ View rules:
   - **`testHostileStringsNeverExecute`:** for each `hostile.*`, `DataFile.load(url, maxBytes: 2_000_000)` then `renderData` (mode `.window`). Assert `evaluateJavaScript("String(window.__pwned)") == "undefined"`, `document.querySelectorAll('#doc img,#doc script,#doc svg,#doc iframe,#doc a[href^=javascript]').length == 0`, and the `#doc` innerText contains `<script>` (so the container exists and the empty-query assertions aren't vacuous).
   - **`testDotenvMaskedUntilClicked`:** render `sample.env` in `.window`. `documentElement.outerHTML` contains none of its values; after `document.querySelector('.secret').click()`, exactly the first value appears and the second doesn't.
   - **`testDotenvQuickLookNeverReveals`:** the same in `.quicklook`. After the click, no value appears.
-  - **`testQuickLookMasksSecretFiles`** (K12): write a temp `.netrc` (`machine example.com login demo password not-a-real-secret-9`), a temp `id_rsa` whose PEM header and footer are built by concatenation around the body `ZmFrZS1ib2R5LWxpbmU=`, and a temp `key.json` holding that PEM as `{"private_key": "<PEM, newlines as \n>", "client_secret": "not-a-real-secret-5"}`. For each, `DataFile.load`, then `renderData` in mode `.quicklook` with `secretFile: file.secretFile`. `documentElement.outerHTML` contains none of `not-a-real-secret-9`, `ZmFrZS1ib2R5` and `not-a-real-secret-5`, and does contain the file's own non-secret sentinel: `machine` (`.netrc`), `-----BEGIN` (`id_rsa`: the header's first token, which the whole-file rule keeps) and `client_secret` (`key.json`'s key). For `key.json`, `document.querySelector('#doc details')` is non-null and `mark.err` is null (the tree rendered, masked, not an error view). Then a temp `broken.yaml` of `db:\n  password: pwnotreal7\n  token: >-\n    pwblock8\n  port: [5432\n` (malformed next to secret-named values, one a block scalar): the HTML lacks `pwnotreal7` and `pwblock8` and contains `Parse error`. Then a temp `bad.json` of `{\n  "client_secret": "not-a-real-secret-8",\n  "a": 1\n  "b": 2\n}` (fails JSC and js-yaml at line 4, so it reaches the error view): the HTML lacks `not-a-real-secret-8`. Last, a temp `creds.csv` of `login,password` and `zq-71,pw-not-r`, whose header the vote rejects (equal lengths per column, −2): the HTML lacks `pw-not-r` and contains `zq-71`.
+  - **`testQuickLookMasksSecretFiles`** (K12): write a temp `.netrc` (`machine example.com login demo password not-a-real-secret-9`), a temp `id_rsa` whose PEM header and footer are built by concatenation around the body `ZmFrZS1ib2R5LWxpbmU=`, and a temp `key.json` holding that PEM as `{"private_key": "<PEM, newlines as \n>", "client_secret": "not-a-real-secret-5"}`. For each, `DataFile.load`, then `renderData` in mode `.quicklook` with `secretFile: file.secretFile`. `documentElement.outerHTML` contains none of `not-a-real-secret-9`, `ZmFrZS1ib2R5` and `not-a-real-secret-5`, and does contain the file's own non-secret sentinel: `machine` (`.netrc`), `-----BEGIN` (`id_rsa`: the header's first token, which the whole-file rule keeps) and `client_secret` (`key.json`'s key). For `key.json`, `document.querySelector('#doc details')` is non-null and `mark.err` is null (the tree rendered, masked, not an error view). Then a temp `compose.yaml` of `services:\n  db:\n    environment:\n      - POSTGRES_PASSWORD=pwcompose4\n`: the HTML lacks `pwcompose4` and contains `POSTGRES_PASSWORD`. Then a temp `broken.yaml` of `db:\n  password: pwnotreal7\n  token: >-\n    pwblock8\n  port: [5432\n` (malformed next to secret-named values, one a block scalar): the HTML lacks `pwnotreal7` and `pwblock8` and contains `Parse error`. Then a temp `bad.json` of `{\n  "client_secret": "not-a-real-secret-8",\n  "a": 1\n  "b": 2\n}` (fails JSC and js-yaml at line 4, so it reaches the error view): the HTML lacks `not-a-real-secret-8`. Last, a temp `creds.csv` of `login,password` and `zq-71,pw-not-r`, whose header the vote rejects (equal lengths per column, −2): the HTML lacks `pw-not-r` and contains `zq-71`.
   - **`testYAMLErrorLine`:** the bad YAML from Task 2 gives `errors.first?.line == 4`, and `document.querySelector('mark.err') != null`.
   - **`testPaged1MRows`:** `XCTSkip` without the fixture. `renderPaged(RecordIndex(url: big-1m.csv, quoteAware: true), format: .csv, …)` returns `records == 1_000_001` in < 2 s (timed after the index is built). After `document.scrollingElement.scrollTop = 1e9` and 500 ms, the last visible row's first cell is `"999999"`.
   - **`testPaged200MBLastRecordReachable`** (K12): `XCTSkip` without the fixture. `renderPaged` over `RecordIndex(url: big-200mb.jsonl, quoteAware: false)`. After `scrollTop = 1e9` and 500 ms, the last visible row's `data-line` equals `index.count`. After scrolling to `1_600_000 / index.count` of the maximum `scrollTop`, a `.row.bad` is visible (the plain-height list stops near record 1,525,000).
@@ -658,6 +664,7 @@ View rules:
   - set `MAX_SPACER_PX = Infinity` in `view.js`, `make renderer`, run `--filter testPaged200MBLastRecordReachable`. Expected: FAIL, the last visible `data-line` is about 1,525,000;
   - replace the `maskSecrets(…)` call in `view.js` with its `text` argument, `make renderer`, run `--filter testQuickLookMasksSecretFiles`. Expected: FAIL, `not-a-real-secret-9` is in the HTML;
   - pass `maskNames: false` in `quicklook` mode, `make renderer`, run `--filter testQuickLookMasksSecretFiles`. Expected: FAIL, `not-a-real-secret-5` is in the HTML;
+  - stop passing rendered strings through `maskSecrets` in `quicklook` mode (keep the key and column rule), `make renderer`, run `--filter testQuickLookMasksSecretFiles`. Expected: FAIL, `pwcompose4` is in the HTML;
   - show the masked source and `error.message` in the `quicklook` error view, `make renderer`, run `--filter testQuickLookMasksSecretFiles`. Expected: FAIL, `pwblock8` (a block scalar no line rule masks) or `pwnotreal7` (js-yaml's message quotes line 2) is in the HTML;
   - drop `nameRow` from the `quicklook` table calls (so it defaults to the rejected header), `make renderer`, run `--filter testQuickLookMasksSecretFiles`. Expected: FAIL, `pw-not-r` is in the HTML;
   - remove the `preparePage()` call from `renderData`, run `--filter testHostileStringsNeverExecute`. Expected: FAIL with a JavaScript error (`window.tegel` is undefined on the unloaded page).
