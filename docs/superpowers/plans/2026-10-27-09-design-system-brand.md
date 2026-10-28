@@ -1095,7 +1095,7 @@ for i in $(seq 30); do ID=$(gh run list --workflow design-shots.yml --branch m09
 
   Expected:
   - the `build` job prints `Xcode 26.3`, and the `shots` leg starts from its artefact;
-  - `docs/design/proto/runner/design-shots-macos-26/` contains the Liquid Glass icon renders;
+  - `docs/design/proto/runner/` contains the Liquid Glass icon renders (one named artifact extracts straight into `-D`, with no subfolder, as in plan 02);
   - `fonts.txt` lists Damascus and GeezaPro.
 
   Record the results in `decisions.md` D-4/D-5, naming the machine. macOS 14 has no runner leg (master D11): record its row as "n/a: image retired" unless lease L2's macOS 14 reinstall (plan 05 Task 3) covers it. Commit `docs/design/proto docs/design/decisions.md`: "design(icon): runner icon renders and font probe".
