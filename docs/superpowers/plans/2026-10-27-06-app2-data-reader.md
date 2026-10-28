@@ -411,7 +411,9 @@ export function maskSecrets(text, { wholeFile = false, structured = false } = {}
   //    the password in scheme://user:password@host (.git-credentials lines, URLs in any text);
   //    token shapes sk-…, sk_live_…, rk_live_…, gh[pousr]_…, github_pat_…, glpat-…, xox[abpr]-…, AKIA…, AIza…, npm_…, hvs.…, hf_…,
   //    and a 40-char [A-Za-z0-9/+] run on the same line as an AKIA id (the secret of an AWS key pair).
-  //    Unless structured: the value of NAME=value / NAME: value when isSecretName(NAME).
+  //    Unless structured: the value of NAME=value / NAME: value when isSecretName(NAME). NAME may follow indentation or `export `
+//    and may be quoted ("NAME", 'NAME'), with spaces around = or :; a quoted value is masked inside its quotes, an unquoted
+//    one to the end of the line (so YAML nesting and the source of a malformed JSON file are covered).
   //    structured (Quick Look's JSON/JSONL/YAML/TOML/CSV/TSV/.env input) skips only that pass: an unquoted replacement can
   //    break a parser, while the passes above replace key and token characters only, so the file still parses. The views
   //    apply the same name rule after parsing instead (maskNames above).
@@ -471,6 +473,9 @@ test('secrets are masked: PEM bodies, token shapes, secret-named values, whole s
   const out = maskSecrets(`${pem}\nnote ${toks.join(' ')}\nDB_PASSWORD=hunter-x\nname=visible`);
   for (const s of ['ZmFrZS1ib2R5', ...toks, 'hunter-x']) expect(out).not.toContain(s);
   expect(out).toContain('name=visible');
+  const nested = maskSecrets('db:\n  password: pwnested1\n  "client_secret": "pwquoted2",\n  user: visible');
+  for (const s of ['pwnested1', 'pwquoted2']) expect(nested).not.toContain(s);
+  expect(nested).toContain('user: visible');
   const netrc = maskSecrets('machine example.com login demo password not-a-real-secret-9', { wholeFile: true });
   expect(netrc).toContain('machine'); expect(netrc).not.toContain('not-a-real-secret-9');
 });
@@ -502,7 +507,7 @@ test('secret-named keys and columns are masked in tree, row and table views', ()
   for (const s of ['client_secret', 'visible-id', 'Jane']) expect(tree).toContain(s);
   expect(jsonlRowHTML(1, adc, undefined, { maskNames: true })).not.toContain('cs-not-real-1');
   const bad = jsonlRowHTML(2, '{"password":pwnotreal6}', undefined, { maskNames: true });   // JSC: Unexpected identifier "pwnotreal6"
-  expect(bad).not.toContain('pwnotreal6'); expect(bad).toContain('Parse error'); expect(bad).toContain('line');
+  expect(bad).not.toContain('pwnotreal6'); expect(bad).toContain('Parse error'); expect(bad).toContain('line 2');
   const table = tableRowsHTML([['demo', 'pw-not-real-3']], 1, ['user', 'POSTGRES_PASSWORD'], { maskNames: true });
   expect(table).not.toContain('pw-not-real-3'); expect(table).toContain('demo');
   const rows = [['user', 'password'], ['root', 'pw-not-r']];   // equal lengths per column: vote −1 −1 = −2
@@ -640,7 +645,7 @@ View rules:
   - **`testHostileStringsNeverExecute`:** for each `hostile.*`, `DataFile.load(url, maxBytes: 2_000_000)` then `renderData` (mode `.window`). Assert `evaluateJavaScript("String(window.__pwned)") == "undefined"`, `document.querySelectorAll('#doc img,#doc script,#doc svg,#doc iframe,#doc a[href^=javascript]').length == 0`, and the `#doc` innerText contains `<script>` (so the container exists and the empty-query assertions aren't vacuous).
   - **`testDotenvMaskedUntilClicked`:** render `sample.env` in `.window`. `documentElement.outerHTML` contains none of its values; after `document.querySelector('.secret').click()`, exactly the first value appears and the second doesn't.
   - **`testDotenvQuickLookNeverReveals`:** the same in `.quicklook`. After the click, no value appears.
-  - **`testQuickLookMasksSecretFiles`** (K12): write a temp `.netrc` (`machine example.com login demo password not-a-real-secret-9`), a temp `id_rsa` whose PEM header and footer are built by concatenation around the body `ZmFrZS1ib2R5LWxpbmU=`, and a temp `key.json` holding that PEM as `{"private_key": "<PEM, newlines as \n>", "client_secret": "not-a-real-secret-5"}`. For each, `DataFile.load`, then `renderData` in mode `.quicklook` with `secretFile: file.secretFile`. `documentElement.outerHTML` contains none of `not-a-real-secret-9`, `ZmFrZS1ib2R5` and `not-a-real-secret-5`, and does contain the file's own non-secret sentinel: `machine` (`.netrc`), `-----BEGIN` (`id_rsa`: the header's first token, which the whole-file rule keeps) and `client_secret` (`key.json`'s key). For `key.json`, `document.querySelector('#doc details')` is non-null and `mark.err` is null (the tree rendered, masked, not an error view). Then a temp `broken.yaml` of `db:\n  password: pwnotreal7\n  port: [5432\n` (malformed next to a secret-named value): the HTML lacks `pwnotreal7` and contains `Parse error`. Last, a temp `creds.csv` of `login,password` and `zq-71,pw-not-r`, whose header the vote rejects (equal lengths per column, −2): the HTML lacks `pw-not-r` and contains `zq-71`.
+  - **`testQuickLookMasksSecretFiles`** (K12): write a temp `.netrc` (`machine example.com login demo password not-a-real-secret-9`), a temp `id_rsa` whose PEM header and footer are built by concatenation around the body `ZmFrZS1ib2R5LWxpbmU=`, and a temp `key.json` holding that PEM as `{"private_key": "<PEM, newlines as \n>", "client_secret": "not-a-real-secret-5"}`. For each, `DataFile.load`, then `renderData` in mode `.quicklook` with `secretFile: file.secretFile`. `documentElement.outerHTML` contains none of `not-a-real-secret-9`, `ZmFrZS1ib2R5` and `not-a-real-secret-5`, and does contain the file's own non-secret sentinel: `machine` (`.netrc`), `-----BEGIN` (`id_rsa`: the header's first token, which the whole-file rule keeps) and `client_secret` (`key.json`'s key). For `key.json`, `document.querySelector('#doc details')` is non-null and `mark.err` is null (the tree rendered, masked, not an error view). Then a temp `broken.yaml` of `db:\n  password: pwnotreal7\n  port: [5432\n` (malformed next to a secret-named value): the HTML lacks `pwnotreal7` and contains `Parse error`. Then a temp `bad.json` of `{\n  "client_secret": "not-a-real-secret-8",\n  "a": 1\n  "b": 2\n}` (fails JSC and js-yaml at line 4, so it reaches the error view): the HTML lacks `not-a-real-secret-8`. Last, a temp `creds.csv` of `login,password` and `zq-71,pw-not-r`, whose header the vote rejects (equal lengths per column, −2): the HTML lacks `pw-not-r` and contains `zq-71`.
   - **`testYAMLErrorLine`:** the bad YAML from Task 2 gives `errors.first?.line == 4`, and `document.querySelector('mark.err') != null`.
   - **`testPaged1MRows`:** `XCTSkip` without the fixture. `renderPaged(RecordIndex(url: big-1m.csv, quoteAware: true), format: .csv, …)` returns `records == 1_000_001` in < 2 s (timed after the index is built). After `document.scrollingElement.scrollTop = 1e9` and 500 ms, the last visible row's first cell is `"999999"`.
   - **`testPaged200MBLastRecordReachable`** (K12): `XCTSkip` without the fixture. `renderPaged` over `RecordIndex(url: big-200mb.jsonl, quoteAware: false)`. After `scrollTop = 1e9` and 500 ms, the last visible row's `data-line` equals `index.count`. After scrolling to `1_600_000 / index.count` of the maximum `scrollTop`, a `.row.bad` is visible (the plain-height list stops near record 1,525,000).
