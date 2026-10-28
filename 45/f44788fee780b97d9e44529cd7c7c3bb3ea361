@@ -1,0 +1,19 @@
+docs/superpowers/plans/2026-10-27-06-app2-data-reader.md
+  s_bc8ea26773de3f::t_ba36cce26e4460 414-415,478-479,642,650,661
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "45f44788fee780b97d9e44529cd7c7c3bb3ea361",
+  "prompts": {},
+  "sessions": {
+    "s_bc8ea26773de3f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c36ff1eb-4626-43e3-815d-36966257085e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "farouq abou umar <farouqabouumar@farouqs-iMac.local>"
+    }
+  }
+}
