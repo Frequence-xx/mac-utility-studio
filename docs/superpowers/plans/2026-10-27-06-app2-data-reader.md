@@ -50,6 +50,7 @@ Master §2/§3 and `CLAUDE.md` apply (platform, machines and evidence naming, pr
   - `.env` values are masked by default and revealed per click in the window only. They never appear in any Quick Look DOM.
   - Quick Look also masks PEM private-key bodies, URL passwords and common token shapes in any file, in every view; the value of every secret-named key or column in tree, row and table views; and every value in secret dotfiles (`.netrc`, `.npmrc`, `.git-credentials`, `credentials`, `id_rsa`, …), with no reveal.
   - The transcript view and its Markdown export mask common token shapes unless the user turns on "Show secrets".
+  - **Scope:** beyond `.env` values (rule 2) and secret dotfiles, which are guaranteed, Quick Look masking is a best-effort layer on markers: secret names and columns, assignments, name/value pairs, token shapes. A secret with no marker shows as text, as it does in Apple's own text preview. A newly found unmasked shape is a P2 enhancement with its test, not a P1.
 - **Untrusted input:** every string is escaped by our code **and** the result goes through the page's DOMPurify sanitiser.
 - **Pricing:** $15 once, 2 Macs; the bundle at $29 grants both licences; EUR prices per master K10 (user-confirmed amounts). Free = Quick Look for every format. Pro = window viewer, `.env` viewer, session mode, export (§6.2).
 - **Fixtures:** synthetic and secret-free; never copy a real transcript. Fixture filenames must not be `.env` or `.env.*` (`.gitignore` ignores both). Secret-shaped test strings are built by concatenation inside test files, never committed under `Fixtures/`.
@@ -393,13 +394,16 @@ test('table cells are escaped', () => {
 export function isSecretName(name)
   // -> boolean, any case: name contains KEY, TOKEN, SECRET, PASSWORD, PASSWD or CREDENTIAL, or has AUTH or AUTHORIZATION as a
   //    whole segment between start, end, '_', '-' or '.' (`auth`, `HTTP_AUTH`, `basic-auth`; `author` stays visible)
-// tree.js, table.js, jsonl.js gain an option, default false, that Quick Look turns on (Task 6). With it, every string they render
-// (tree leaf, table cell, JSONL preview string) also goes through maskSecrets(s) without `structured`, so an assignment held in a
+// tree.js, table.js, jsonl.js gain an option, default false, that Quick Look turns on (Task 6). With it, each raw string value
+// (tree leaf, table cell, and in the JSONL replacer before JSON.stringify), before escaping, also goes through maskSecrets(s) without `structured`, so an assignment held in a
 // value is masked too (a compose `environment:` item `- POSTGRES_PASSWORD=…`, `DB_PASSWORD=…` in a transcript's tool output):
-//   treeHTML(value, { …, maskNames })         -> the value of a key passing isSecretName renders as '••••••••', with no children
+//   treeHTML(value, { …, maskNames })         -> the value of a key passing isSecretName renders as '••••••••', with no children;
+//                                                so does the `value` member of an object whose `name` or `key` string passes isSecretName
+//                                                (Kubernetes/ECS env pairs); the JSONL replacer applies the same pair rule
 //   tableRowsHTML(rows, first, header, { maskNames, nameRow = header }) -> every cell in a column whose nameRow cell passes
 //                                                        isSecretName renders as '••••••••'; Quick Look passes nameRow = header ?? records[0],
-//                                                        so a header the vote rejects (`user,password` over `root,p@ssw0rd`, vote −2) still masks
+//                                                        so a header the vote rejects (`user,password` over `root,p@ssw0rd`, vote −2) still masks;
+//                                                        in a two-column table, a row whose first cell passes isSecretName masks its second (key,value CSV)
 //   jsonlRowHTML(lineNo, text, labels, { maskNames }) -> a bad row shows `labels.line N` and the fixed `labels.parseError` only, never its raw text
 //                                                        or the parser's message (JSC's quotes unquoted tokens: `Unexpected identifier "…"`); a good row's preview is JSON.stringify(value, replacer) instead of the raw line;
 //                                                        the replacer returns '••••••••' for a secret-named key and v.toString() for a BigInt
@@ -415,7 +419,7 @@ export function maskSecrets(text, { wholeFile = false, structured = false } = {}
   //    and a 40-char [A-Za-z0-9/+] run on the same line as an AKIA id (the secret of an AWS key pair).
   //    Unless structured: the value of NAME=value / NAME: value when isSecretName(NAME). NAME may follow the start of a line or any
 //    character outside [A-Za-z0-9_.-] (indentation, `export `, `ENV `, `- `, `{` or `,` in minified JSON) and may be quoted ("NAME", 'NAME'), with spaces around = or :; a quoted value is masked inside its quotes, an unquoted
-//    one to the end of the line (so YAML nesting and the source of a malformed JSON file are covered).
+//    one to the end of the line; a non-secret NAME's match ends at the name, so `HOST=db DB_PASSWORD=x` still masks x (so YAML nesting and the source of a malformed JSON file are covered).
   //    structured (Quick Look's JSON/JSONL/YAML/TOML/CSV/TSV/.env input) skips only that pass: an unquoted replacement can
   //    break a parser, while the passes above replace key and token characters only, so the file still parses. The views
   //    apply the name rule after parsing instead: to secret-named keys and columns, and to every rendered string (maskNames above).
@@ -481,6 +485,14 @@ test('secrets are masked: PEM bodies, token shapes, secret-named values, whole s
   expect(compose).not.toContain('pwcompose1'); expect(compose).toContain('POSTGRES_PASSWORD');
   expect(jsonlRowHTML(3, '{"output":"DB_PASSWORD=pwjsonl3"}', undefined, { maskNames: true })).not.toContain('pwjsonl3');
   expect(tableRowsHTML([['DB_PASSWORD=pwcell2']], 0, ['value'], { maskNames: true })).not.toContain('pwcell2');
+  expect(maskSecrets('PGHOST=db PGPASSWORD=pwmulti2 psql')).not.toContain('pwmulti2');
+  const inner = '{"client_secret":"pwjson4"}';   // JSON text held in a string value: masked raw, before escaping
+  expect(jsonlRowHTML(4, JSON.stringify({ output: inner }), undefined, { maskNames: true })).not.toContain('pwjson4');
+  expect(treeHTML({ output: inner }, { maskNames: true }).html).not.toContain('pwjson4');
+  expect(tableRowsHTML([[inner]], 0, ['value'], { maskNames: true })).not.toContain('pwjson4');
+  const k8s = treeHTML(parseDocument('env:\n  - name: POSTGRES_PASSWORD\n    value: pwk8s1\n', 'yaml').value, { maskNames: true }).html;
+  expect(k8s).not.toContain('pwk8s1'); expect(k8s).toContain('POSTGRES_PASSWORD');
+  expect(tableRowsHTML([['DB_PASSWORD', 'pwkv3'], ['HOST', 'db']], 0, ['key', 'value'], { maskNames: true })).not.toContain('pwkv3');
   for (const [src, v] of [['{"client_secret":"pwmin0","a":[1', 'pwmin0'], ['ENV DB_PASSWORD=pwenv1', 'pwenv1'], ['  - password: pwlist9', 'pwlist9']])
     expect(maskSecrets(src)).not.toContain(v);
   expect(nested).toContain('user: visible');
@@ -761,7 +773,7 @@ F="$D/.env" swift -e 'import AppKit; let u = URL(fileURLWithPath: ProcessInfo.pr
 ### Task 9: Transcript parser (Claude Code and Codex) and synthetic fixtures
 
 **Files:**
-- Create: `Renderer/src/data/transcript.js`. Modify `Renderer/src/data/view.js` so format `transcript` uses it, falling back to JSONL rows when `kind === 'unknown'` (risk 6), and fill `window.tegel.transcriptMarkdown`.
+- Create: `Renderer/src/data/transcript.js`. Modify `Renderer/src/data/view.js` so format `transcript` uses it, falling back to JSONL rows when `kind === 'unknown'` (risk 6), rendered with `maskNames: !showSecrets` so the fallback masks token shapes, assignments and secret-named keys like the transcript view (Global Constraints), and fill `window.tegel.transcriptMarkdown`.
 - Create these synthetic fixtures, **hand-written, not derived from any real file**; prose contains no code fences:
   - `Fixtures/data/sessions/claude/-Users-demo-sample/00000000-0000-4000-8000-000000000001.jsonl` (current format [DF9]): user text; an `isMeta` user record; assistant `thinking`, `text` and `tool_use{id:"toolu_demo1"}`; user `tool_result{tool_use_id:"toolu_demo1"}` whose content includes a ```` ``` ```` line; `ai-title`, `attachment` and `system` records; one `isSidechain` record; an unknown `{"type":"future-record"}`; one malformed line; a user text record containing `needle-42` on line 9.
   - `…/00000000-0000-4000-8000-000000000002.jsonl`: the legacy format with `{"type":"summary",…}`.
