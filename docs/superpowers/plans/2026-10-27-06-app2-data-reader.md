@@ -398,8 +398,8 @@ export function isSecretName(name)
 //   tableRowsHTML(rows, first, header, { maskNames, nameRow = header }) -> every cell in a column whose nameRow cell passes
 //                                                        isSecretName renders as '••••••••'; Quick Look passes nameRow = header ?? records[0],
 //                                                        so a header the vote rejects (`user,password` over `root,p@ssw0rd`, vote −2) still masks
-//   jsonlRowHTML(lineNo, text, labels, { maskNames }) -> a bad row shows `labels.line N` and the message only, never its raw text
-//                                                        (the structured mask skips the name pass); a good row's preview is JSON.stringify(value, replacer) instead of the raw line;
+//   jsonlRowHTML(lineNo, text, labels, { maskNames }) -> a bad row shows `labels.line N` and the fixed `labels.parseError` only, never its raw text
+//                                                        or the parser's message (JSC's quotes unquoted tokens: `Unexpected identifier "…"`); a good row's preview is JSON.stringify(value, replacer) instead of the raw line;
 //                                                        the replacer returns '••••••••' for a secret-named key and v.toString() for a BigInt
 export function parseDotenv(text)
   // -> { entries: [{ line, key, value, exported: boolean, commented: boolean }], comments: [{ line, text }], errors: [{ line, message }] }
@@ -501,7 +501,7 @@ test('secret-named keys and columns are masked in tree, row and table views', ()
   for (const s of ['cs-not-real-1', 'rt-not-real-2', 'YXV0aC1ub3QtcmVhbA==']) expect(tree).not.toContain(s);
   for (const s of ['client_secret', 'visible-id', 'Jane']) expect(tree).toContain(s);
   expect(jsonlRowHTML(1, adc, undefined, { maskNames: true })).not.toContain('cs-not-real-1');
-  expect(jsonlRowHTML(2, '{"password":"pw-not-real-6",', undefined, { maskNames: true })).not.toContain('pw-not-real-6');   // malformed
+  expect(jsonlRowHTML(2, '{"password":pw-not-real-6}', undefined, { maskNames: true })).not.toContain('pw-not-real-6');   // JSC's message names the token
   const table = tableRowsHTML([['demo', 'pw-not-real-3']], 1, ['user', 'POSTGRES_PASSWORD'], { maskNames: true });
   expect(table).not.toContain('pw-not-real-3'); expect(table).toContain('demo');
   const rows = [['user', 'password'], ['root', 'pw-not-r']];   // equal lengths per column: vote −1 −1 = −2
