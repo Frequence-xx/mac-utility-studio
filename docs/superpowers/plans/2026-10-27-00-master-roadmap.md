@@ -352,7 +352,7 @@ Credentials go to `.env` the moment an account exists; `.env.example` names ever
 | Polar (sandbox + production) | MoR, licence keys, customer portal | Claude via Playwright; user: production org, identity + payout (H5) | W1 sandbox, production by Fri 20 Nov (W4) |
 | Apple Developer / App Store Connect | Developer ID, notarisation, later MAS | **user only** (H2) | W1–W3 |
 | Scaleway | macOS 27 / arm64 test Mac | Claude via Playwright; user: card (H6) | W1 |
-| Google Search Console | SEO data for G2 | the user adds the property in the Google account `marketing@snelverhuizen.nl`, never another Google account (automated Google sign-in is unreliable); Claude adds only the DNS TXT record | W2 |
+| Google Search Console | SEO data for G2 | the user adds the property (automated Google sign-in is unreliable), in the Google account `marketing@snelverhuizen.nl` and never another; Claude adds only the DNS TXT record | W2 |
 | MailerLite | waitlist, buyer sync, lifecycle emails, App 2 cross-sell send. **Plan 08 owns the account and every send**; plan 06 Task 15 supplies only the cross-sell copy and segment rule | Claude; user: approval, 2FA, DNS records (plan 08 Task 6) | W2 |
 | Product Hunt, Reddit, HN, Indie Hackers | launch posts | user decides (H9) | W6 |
 

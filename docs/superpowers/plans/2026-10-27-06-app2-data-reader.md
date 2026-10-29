@@ -425,8 +425,9 @@ export function maskSecrets(text, { wholeFile = false, structured = false } = {}
   //    apply the name rule after parsing instead: to secret-named keys and columns, and to every rendered string (maskNames above).
   //    wholeFile (secret dotfiles, Task 5 DataFile.secretFile), after the passes above: a line that is nothing but one URL with a user
   //    part once trimmed (`scheme://…@host…`, a .git-credentials line) keeps only its scheme and host: everything between `://` and the
-  //    authority's last `@` becomes '••••••••' (`https://••••••••@example.com`; the user slot can hold the token, as in
-  //    `<token>:x-oauth-basic@`, and a password may hold `@`; the authority ends at the first `/`, `?` or `#`). Any other line keeps
+  //    authority's last `@` becomes '••••••••', and so does anything after the host (`https://••••••••@example.com`,
+  //    `https://••••••••@example.com••••••••` with a path or query; the user slot can hold the token, as in `<token>:x-oauth-basic@`,
+  //    a password may hold `@`, and a query may hold a signature; the authority ends at the first `/`, `?` or `#`). Any other line keeps
   //    its first whitespace-separated token only when that token is a .netrc keyword (`machine`, `default`, `login`, `password`,
   //    `account`, `macdef`) or PEM armour (`-----BEGIN`, `-----END`) and another token follows it, and the rest becomes '••••••••';
   //    every other line is '••••••••' whole, comment (`#`) and `[section]` lines included. No `NAME=` clause and no shape exception:
@@ -512,8 +513,8 @@ test('secrets are masked: PEM bodies, token shapes, secret-named values, whole s
 });
 test('credential URLs and newer token prefixes are masked', () => {
   expect(maskSecrets('git clone https://demo:pwurl14@example.com/r.git')).not.toContain('pwurl14');   // first: ordinary text, only the URL pass catches it
-  const gc = maskSecrets('https://demo:' + 'not-a-real-secret-7' + '@example.com\nhttps://' + 'c0ffee11'.repeat(5) + ':x-oauth-basic@github.com', { wholeFile: true }); // .git-credentials lines; the second holds a legacy token in the user slot
-  for (const v of ['not-a-real-secret-7', 'c0ffee11', 'demo']) expect(gc).not.toContain(v);
+  const gc = maskSecrets('https://demo:' + 'not-a-real-secret-7' + '@example.com\nhttps://' + 'c0ffee11'.repeat(5) + ':x-oauth-basic@github.com\nhttps://u:p@example.org/r.git?sig=pwsig17', { wholeFile: true }); // .git-credentials lines; the second holds a legacy token in the user slot
+  for (const v of ['not-a-real-secret-7', 'c0ffee11', 'demo', 'pwsig17']) expect(gc).not.toContain(v);
   expect(gc).toContain('https://••••••••@example.com'); expect(gc).toContain('https://••••••••@github.com');
   const toks = ['github' + '_pat_' + 'D'.repeat(40), 'gl' + 'pat-' + 'E'.repeat(20), 'AKIA' + 'F'.repeat(16) + ' ' + 'g/H+'.repeat(10)];
   const out = maskSecrets(toks.join('\n'));
@@ -561,7 +562,8 @@ test('secret-named keys and columns are masked in tree, row and table views', ()
   - add an exception that keeps a line that is `[…]` once trimmed (an INI section). Expected: FAIL in the same test, the output contains `[pwnetrc15]`;
   - drop the "another token follows" condition. Expected: FAIL in the same test, the output contains `account`;
   - keep `#` lines as they are in whole-file mode. Expected: FAIL in the same test, the output contains `pwcomment16`;
-  - make the whole-line URL rule mask only the password, keeping the user part. Expected: FAIL in `credential URLs and newer token prefixes…`, the output contains `c0ffee11`.
+  - make the whole-line URL rule mask only the password, keeping the user part. Expected: FAIL in `credential URLs and newer token prefixes…`, the output contains `c0ffee11`;
+  - make the whole-line URL rule keep what follows the host. Expected: FAIL in the same test, the output contains `pwsig17`.
 - [ ] **Step 6: Commit:** `Renderer/src/data/dotenv.js Renderer/src/data/tree.js Renderer/src/data/table.js Renderer/src/data/jsonl.js Renderer/test/data-dotenv.test.js Fixtures/data/sample.env`, `feat(renderer): .env parser and secret masking, values kept out of the HTML` + trailer.
 
 ---
@@ -605,7 +607,7 @@ public final class RecordIndex: Sendable {
 ```
 
 - [ ] **Step 1: Write the failing tests.** Each one writes into `FileManager.default.temporaryDirectory`.
-  - **`testRouting`:** `.env`, `.env.local`, `prod.env` and `.envrc` give `.dotenv`; `x.NDJSON` gives `.jsonl`; `Dockerfile` gives `nil`. `DataFile.isSecret` is true for `.netrc`, `.npmrc`, `credentials`, `id_rsa` and `ID_ED25519`, and false for `id_rsa.pub`, `Dockerfile` and `.gitignore`.
+  - **`testRouting`:** `.env`, `.env.local`, `prod.env` and `.envrc` give `.dotenv`; `x.NDJSON` gives `.jsonl`; `Dockerfile` gives `nil`. `DataFile.isSecret` is true for `.netrc`, `_netrc`, `.npmrc`, `.pypirc`, `.git-credentials`, `credentials`, `id_rsa`, `id_ecdsa` and `ID_ED25519`, and false for `id_rsa.pub`, `Dockerfile` and `.gitignore`.
   - **`testBinaryRejected`:** the bytes `[0x41, 0x00, 0x42]` throw `.binary`.
   - **`testUTF16LoadsAsText`:** a UTF-16LE BOM `{"a":1}` loads with format `.json` and text `{"a":1}`.
   - **`testFIFORejected`:** `mkfifo(path, 0o600)` throws `.notRegularFile` within 0.5 s, with no hang.
@@ -728,7 +730,7 @@ View rules:
 | `sample.json`, `.yaml`, `.toml`, `.jsonl`, `x.ndjson` | Our tree or rows, Tegel footer |
 | `sample.csv`, `sample.tsv`, `quoted-newline.csv` | Our table, header detected, the quoted newline in one cell |
 | `prod.env` and `.env` (copies of `sample.env`) | Keys shown; every value is `••••••••`; clicking reveals nothing |
-| `.netrc`, `.git-credentials`, `credentials`, `id_rsa` (temp files with fake values, made as in `testQuickLookMasksSecretFiles`) | Only the first token of a `.netrc` keyword or PEM armour line with another token after it (`machine ••••••••`, `-----BEGIN ••••••••`) and the scheme and host of a whole-line credential URL (`https://••••••••@github.com`) show; every other line, comment and `[section]` lines included, is `••••••••` whole |
+| `.netrc`, `.git-credentials`, `credentials`, `id_rsa` (temp files with fake values: `.netrc` and `id_rsa` as in `testQuickLookMasksSecretFiles`, `.git-credentials` with the three lines of Task 4's `gc` test, `credentials` with a `[default]` section and fake `aws_access_key_id` / `aws_secret_access_key` lines) | Only the first token of a `.netrc` keyword or PEM armour line with another token after it (`machine ••••••••`, `-----BEGIN ••••••••`) and the scheme and host of a whole-line credential URL (`https://••••••••@github.com`) show; every other line, comment and `[section]` lines included, is `••••••••` whole |
 | `big-1m.csv` | First 1,000 rows plus the truncated banner |
 | `Dockerfile`, `CHANGELOG`, `.gitignore` | Our plain text |
 | a NUL-containing `blob` (no extension) | System generic preview (icon), no garbage |

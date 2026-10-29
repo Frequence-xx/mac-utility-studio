@@ -180,7 +180,7 @@ No commit; Task 4 adds `CLOUDFLARE_R2_API_TOKEN`, `R2_ACCESS_KEY_ID`, `R2_SECRET
 - The offline key store, `TegelKeys` (default: an encrypted APFS image the user keeps on external media). Task 10 adds the Sparkle key to it.
 
 - [ ] **Step 1: The certificate (done 27 Oct; verify).**
-  - Run: `security find-identity -v -p codesigning | grep -c '"Developer ID Application:'; security find-certificate -c "Developer ID Application" -p | openssl x509 -noout -enddate`
+  - Run: `security find-identity -v -p codesigning | grep -c '"Developer ID Application: .*(23N7947PKX)"'; security find-certificate -c "Developer ID Application" -p | openssl x509 -noout -enddate`
   - Expected: `1`, then `notAfter=Nov 26 11:25:05 2027 GMT`. If the count is `0`, the identity is gone: re-import `~/.tegel-signing/devid-application.key` (`security import … -t priv -f openssl -T /usr/bin/codesign`) and the `.cer` beside it into the login Keychain, or after Step 5 the key from `TegelKeys`.
   - **First use (CR-P2-27):** the first `codesign` with this key (Task 11 step 5) raises a Keychain prompt, "codesign wants to sign using key …". The **user** types the login password and clicks **Always Allow**, once. Record the date in `docs/gates/m03-acceptance.md` (Task 13 step 16). Until then a non-interactive `release.sh` would stall on that prompt.
 - [ ] **Step 2: The identity and team id in `.env` (done 27 Oct; verify without printing them).**
