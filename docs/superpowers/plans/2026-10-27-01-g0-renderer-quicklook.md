@@ -1806,7 +1806,7 @@ Then commit `docs/gates/trademark.md`: "docs(gates): trademark desk search for T
 ### Task 12: Scaleway M1 on macOS 27 — the remote G0 leg (H6)
 
 **Files:**
-- Modify: `.env` (values, gitignored), `.env.example` (key names: `SCALEWAY_EMAIL=`, `SCALEWAY_PASSWORD=`, `REMOTE_MAC_VNC_PORT=`), `docs/gates/G0.md`
+- Modify: `.env` (values, gitignored), `.env.example` (key names: `SCALEWAY_EMAIL=`, `REMOTE_MAC_VNC_PORT=`), `docs/gates/G0.md`
 
 **Interfaces:**
 - Consumes:
@@ -1814,7 +1814,8 @@ Then commit `docs/gates/trademark.md`: "docs(gates): trademark desk search for T
   - The universal `Tegel Markdown.app` from `make build` (Task 8).
   - The fixtures.
 - Produces:
-  - `.env` keys `SCALEWAY_EMAIL`, `SCALEWAY_PASSWORD`, `REMOTE_MAC_HOST`, `REMOTE_MAC_USER`, `REMOTE_MAC_PASSWORD`, `REMOTE_MAC_VNC_PORT`;
+  - the Keychain password `tegel-scaleway` (master §6);
+  - `.env` keys `SCALEWAY_EMAIL`, `REMOTE_MAC_HOST`, `REMOTE_MAC_USER`, `REMOTE_MAC_PASSWORD`, `REMOTE_MAC_VNC_PORT`;
   - the `Scaleway M1 · 27.x · arm64` row in G0.md;
   - a deleted server.
 - Facts:
@@ -1826,9 +1827,9 @@ Then commit `docs/gates/trademark.md`: "docs(gates): trademark desk search for T
 
 - [ ] **Step 1: Create the account (Wed 28 Oct)**
 
-Run: `. scripts/lib/env.sh; envset SCALEWAY_EMAIL "$(envget STUDIO_EMAIL)" && envset SCALEWAY_PASSWORD "$(openssl rand -base64 24)"`. The password is never echoed. With Playwright, sign up at https://console.scaleway.com/register with those two values. Add the three key names to `.env.example`.
+Run: `. scripts/lib/env.sh; envset SCALEWAY_EMAIL "$(envget STUDIO_EMAIL)" && security add-generic-password -U -a "$(envget STUDIO_EMAIL)" -s tegel-scaleway -w "$(openssl rand -base64 24)"`. The password is never echoed. With Playwright, sign up at https://console.scaleway.com/register with that email and the `tegel-scaleway` password (master §6). Add the two key names to `.env.example`.
 
-Check: `. scripts/lib/env.sh; need SCALEWAY_EMAIL SCALEWAY_PASSWORD && echo ok`
+Check: `. scripts/lib/env.sh; need SCALEWAY_EMAIL && security find-generic-password -a "$(envget STUDIO_EMAIL)" -s tegel-scaleway -w >/dev/null && echo ok`
 Expected: `ok`.
 
 - [ ] **Step 2: H6 — the user adds the card and 2FA**

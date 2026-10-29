@@ -27,7 +27,7 @@
 
 Master §2/§3 and CLAUDE.md apply (product rules 1–9, outward-facing approvals, secrets, hardware evidence, the D7/D16 names, DESIGN.md for every UI value). This plan's deltas:
 
-- **Price (D15, K10):** App 1 is **$19 / €19 once, 2 Macs**. The introductory **$14 / €14 is the actual Polar price, not a discount** [F3f]. Both currencies change by hand on **Tue 15 Dec 2026 00:00 CET**, site first. The EUR amounts are the plan default, **pending user confirmation** (K10). Polar picks the checkout currency by geolocation and shows EU prices VAT-inclusive.
+- **Price (D15, K10):** App 1 is **$19 / €19 once, 2 Macs**. The introductory **$14 / €14 is the actual Polar price, not a discount** [F3f]. Both currencies change by hand on **Tue 15 Dec 2026 00:00 CET**, site first. The EUR amounts were confirmed by the user on 29 Oct (K10, master §5). Polar picks the checkout currency by geolocation and shows EU prices VAT-inclusive.
 - **Launch-price wording, verbatim, wherever a price is shown before 15 Dec:** `Introductory price $14 until Mon 14 Dec 2026 23:59 CET. From 15 Dec: $19.` Pages that show EUR use the same dated sentence with € amounts (plan 04 owns the translations). Never a "was" price, struck-through price, countdown or "only N left" (rule 6, art. 5a Bpp).
 - **Media:** no faces anywhere (avatars, Dock icons of people, browser tabs); videos are encoded with `-an`; demo documents come from `Fixtures/markdown/` (§3.4). No Black Friday (27 Nov) or Cyber Monday (30 Nov) tie-ins.
 - **Key check, by name:** `. scripts/lib/env.sh; [ -n "$(envget KEY)" ] && echo set` → `set`. (A `grep '^KEY=.+'` passes on an empty quoted `KEY=''`, so it isn't used.)
@@ -207,7 +207,7 @@ Each 🔒 step is a live, outward-facing change. Show the user the exact values,
 
   Expected: a screenshot `polar/benefit.png` showing limit 2 and customer admin on. Save the benefit id as `POLAR_BENEFIT_ID_MARKDOWN` (the app's `TGPolarBenefitID`, which binds keys to this app; plan 03): key check → `set`.
 - [ ] **Step 5 🔒 Product:**
-  - "Tegel Markdown", one-time purchase, fixed prices **USD 14.00** and **EUR 14.00** (K10; the EUR amount is pending user confirmation, and this step's approval of the exact values is that confirmation), with the benefit attached. USD stays the organisation's default currency, which Polar requires;
+  - "Tegel Markdown", one-time purchase, fixed prices **USD 14.00** and **EUR 14.00** (K10; the EUR amount was confirmed on 29 Oct, master §5; this step still needs the user's approval because it creates a live product), with the benefit attached. USD stays the organisation's default currency, which Polar requires;
   - a checkbox custom field, slug `marketing_opt_in`, label "Email me set-up tips and news about Tegel apps", **not required and not prefilled, so it starts unticked** (K9). It is opt-in consent. Only buyers whose order carries `custom_field_data.marketing_opt_in == true` enter plan 08's lifecycle and cross-sell emails; licence and receipt mail is Polar's. Plan 08 Task 14 rereads the live label and slug before it activates any send.
 
   Description, which states the limits before purchase:
@@ -934,7 +934,7 @@ Expected: every line starts with `200`. During launch week it can run on `/loop 
   - whether Polar production sells before identity verification (T2 S1);
   - whether Polar's checkbox loads unticked with no prefill (T2 S11 screenshot; the docs don't say);
   - that the NL checkout total is €14.00 with VAT included (T2 S11);
-  - the EUR price points (USER, K10; €19 / €14 is the default until the user confirms);
+  - the EUR price points (K10): €19 / €14, confirmed by the user on 29 Oct (master §5);
   - the Sparkle 2.10.1 feed override behind the RC test feed (plan 03 verifies it first; T3 R10);
   - the PH tag names (T8);
   - the press tips addresses (T8);

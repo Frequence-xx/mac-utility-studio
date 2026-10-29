@@ -24,7 +24,7 @@
 Master §2/§3 and `CLAUDE.md` apply (platform and universal binary, build Mac and evidence naming, product rules 1–9, design standard and `DESIGN.md`, approvals for outward-facing actions, secrets, dependency pins). Plan-specific:
 - **Read-only, extended:** App 3 may also write the pasteboard on an explicit action. `readonly-gate` (plan 06) scans every app; a new writer joins its allowlist by exact name, with a step that watches the gate fail first.
 - **Network:** the MAS edition makes **no** network calls. Setapp framework reporting is allowed only if the user signs the exception in Task C2.
-- **Pricing:** App 1 **$19 once, 2 Macs**; App 2 **$15**; bundle **$29**; each with its EUR price from plans 05/06 (K10, pending the user); MAS at the $19 price point. App 3 and v2 prices are set by the user (D1, F0).
+- **Pricing:** App 1 **$19 once, 2 Macs**; App 2 **$15**; bundle **$29**; each with its EUR price from plans 05/06 (K10: €19, €15, €29, confirmed on 29 Oct); MAS at the $19 price point. App 3 and v2 prices are set by the user (D1, F0).
 - **Licence and kill path:** master GC; Task G7 is Procedure S.
 - **Site keys after every direct release (plan 04 CR-5):** in the same session as each `--from-dmg` publish (A7, D7, E4, F2, G7), on `content/release-<app>-<v>`: set `apps.<app>.version` → `"<v>"` and `apps.<app>.downloadURL` → the URL on `release.sh`'s `published …` line in `site/config.json` (App 1 also adds a `/changelog/` entry); `(cd site && bun test)` → 0 fail; review stages 2, 3 and 9; merge, push, and deploy with plan 04's production deploy command (Task 10 Step 2; not a first deploy, so no approval). Expected: `curl -s https://tegelapps.com/<page>/ | grep -cF "<downloadURL>"` ≥ 1, where `<page>` is `download` for markdown (plan 04's download page), `data` for data and D1's slug for select. MAS and Setapp builds don't touch these keys.
 - **Permissions:** **no Accessibility, Screen Recording or Input Monitoring in Apps 1–2.** App 3 would use Accessibility only: no event tap, no Input Monitoring, no key-event monitor. That exception (CR-8) stays **NO-GO until the user signs it off explicitly** in D2.
@@ -1156,6 +1156,8 @@ Row 14 accepted and applied to plan 08 Task 4 Step 8 and Task G1 (27 Oct); histo
 | 15 | `PolarClient.activate` returns `Activation { id, benefitID }` and the benefit id is stored at activation | CX16 | F1 |
 
 ## Open questions only the user can answer
+
+Answered on 29 Oct (master §5): 1 (no), 4's Accessibility exception (NO-GO until signed off), 5 (yes, flagged), 6 (keep on sale), 7 for Data and the bundle (€15, €29). Still open: 2, 3, 4's name, price, trigger and fallback, and 7 for App 3.
 
 1. **Setapp:** accept the Setapp edition's usage reporting as a disclosed exception to rule 1, or skip Setapp? (C2; default no.)
 2. **MAS price:** $19.00 in the USD storefront, and is Apple's auto-generated euro price acceptable? (B4)

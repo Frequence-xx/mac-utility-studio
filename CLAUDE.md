@@ -95,15 +95,16 @@ Approval covers the specific action shown, not the next one. Sandbox and test re
 
 Every account action uses the studio identity: **`marketing@snelverhuizen.nl`** (`STUDIO_EMAIL`), and on Apple the individual team **Mohammed Haroen Baksh, `23N7947PKX`**. This covers Apple Developer, App Store Connect, notarisation, Google, Cloudflare, Polar, Scaleway, MailerLite and every account added later. The exceptions are GitHub (`Frequence-xx`, already exists) and the launch-post accounts (H9), which are the user's choice.
 
-- This Mac also holds another organisation's Apple access: **Stichting Tarbiyah Consultancy** (team `72PF8SBQR6`, Keychain certificate "Apple Development: Hamza Bouzaggou (W3Q9G8NSHG)") and a Personal Team `34WLYZ5RS6`, both in Xcode's cached team list. Never sign, upload, enrol or change anything with them.
+- This Mac also holds another organisation's Apple access: **Stichting Tarbiyah Consultancy** (team `72PF8SBQR6`, Keychain certificate "Apple Development: Hamza Bouzaggou (W3Q9G8NSHG)") and a Personal Team `34WLYZ5RS6`, both in Xcode's cached team list. Never sign, upload, enrol or change anything with them. They stay on this Mac because the user works on another project for that organisation, so never remove them either.
 - Before any change in a web dashboard, read the signed-in account on the page: the email, plus the team name and id on Apple, and the account or org id on Cloudflare and Polar (`CLOUDFLARE_ACCOUNT_ID`, `POLAR_ORGANIZATION_ID`, or `POLAR_SANDBOX_ORGANIZATION_ID` in the sandbox). If anything differs, stop and tell the user.
 - Signing names the team explicitly (`DEVELOPMENT_TEAM` from `APPLE_TEAM_ID`, notary profile `tegel-notary`), never a team Xcode picks. Every signature that isn't ad hoc must show `TeamIdentifier=23N7947PKX` in `codesign -dv`.
 
 ## Secrets
 
 - `.env` is gitignored and `chmod 600`; `.env.example` lists every key.
-- Credentials for accounts Claude creates go in `.env` immediately.
+- Credentials for accounts Claude creates are saved the moment the account exists: emails, ids and tokens in `.env`, the account password in the Keychain (master roadmap §6).
 - **Keychain holds:**
+  - every account password, as a generic password `tegel-<service>` with account `marketing@snelverhuizen.nl`;
   - the notarytool profile (`tegel-notary`);
   - the Sparkle EdDSA private key. Its backup lives **outside** the repo.
 - Never print a secret value in output, commit messages, plans or logs. Refer to it by its `.env` key name.
