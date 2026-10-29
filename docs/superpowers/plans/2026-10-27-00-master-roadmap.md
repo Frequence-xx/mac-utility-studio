@@ -62,7 +62,7 @@ These are the five input classes the spec implies but no feature test exercises 
 | Repo | `git@github-mus:Frequence-xx/mac-utility-studio.git`, `main` pushed (bootstrap commit) |
 | Build Mac | Intel iMac19,1, macOS 15.7.7, Xcode 26.3 (the last Xcode this Mac can run) [F1, F2] |
 | Installed | Xcode 26.3, Swift 6.2.4, xcodegen, bun, node, python3, brew, gh, graphify, cubic (logged in), codex (logged in), Playwright MCP |
-| Signing | **27 Oct:** Developer ID Application certificate (G2 Sub-CA) for team `23N7947PKX` in the login Keychain, expires **Fri 26 Nov 2027**. ASC Team API key created; notarytool profile `tegel-notary` stored; the first test notarisation was submitted and is still pending. Open: K3 (plaintext keys to encrypted storage, plan 03 Task 3 Step 5). Source: plan 03 Task 3 Status. The Keychain's `Apple Development: Hamza Bouzaggou (W3Q9G8NSHG)` belongs to another team and is never used |
+| Signing | **27 Oct:** Developer ID Application certificate (G2 Sub-CA) for team `23N7947PKX` in the login Keychain, expires **Fri 26 Nov 2027**. ASC Team API key created; notarytool profile `tegel-notary` stored; the first test notarisation was submitted and is still pending. Open: K3 (plaintext keys to encrypted storage, plan 03 Task 3 Step 5). Source: plan 03 Task 3 Status. The Keychain's `Apple Development: Hamza Bouzaggou (W3Q9G8NSHG)` belongs to Stichting Tarbiyah Consultancy (team `72PF8SBQR6`) and is never used (CLAUDE.md "Accounts") |
 | Accounts | None created yet for the studio |
 
 ## 2. Decisions taken in planning (my calls; each one can be overridden)
@@ -336,6 +336,8 @@ Location: `Fixtures/markdown/`.
 
 Credentials go to `.env` the moment an account exists; `.env.example` names every key.
 
+**Account identity (user instruction, 29 Oct):** every account below is created and used as `marketing@snelverhuizen.nl` (`STUDIO_EMAIL`; `CLOUDFLARE_EMAIL`, `POLAR_EMAIL` and `APPLE_ACCOUNT_EMAIL` hold the same address), and Apple work uses team `23N7947PKX` only. Never the Stichting Tarbiyah Consultancy account or any other one on this Mac. Before any dashboard change, the signed-in account is read off the page first (CLAUDE.md "Accounts").
+
 **Secrets notes:**
 - `.env` is read only through `scripts/lib/env.sh` (`envget`/`envset`, K1). It is never `source`d.
 - Every secret value (token, password, licence key, S3 secret) is saved from the pasteboard, never typed into a command: copy it on the page, then `envset KEY "$(pbpaste)" && pbcopy </dev/null`. Ids, hosts, ports and public URLs may be typed. Wherever a plan says "save it with `envset`" for a secret, this is the form.
@@ -350,7 +352,7 @@ Credentials go to `.env` the moment an account exists; `.env.example` names ever
 | Polar (sandbox + production) | MoR, licence keys, customer portal | Claude via Playwright; user: production org, identity + payout (H5) | W1 sandbox, production by Fri 20 Nov (W4) |
 | Apple Developer / App Store Connect | Developer ID, notarisation, later MAS | **user only** (H2) | W1–W3 |
 | Scaleway | macOS 27 / arm64 test Mac | Claude via Playwright; user: card (H6) | W1 |
-| Google Search Console | SEO data for G2 | the user adds the property in their own Google account (automated Google sign-in is unreliable); Claude adds only the DNS TXT record | W2 |
+| Google Search Console | SEO data for G2 | the user adds the property in the Google account `marketing@snelverhuizen.nl`, never another Google account (automated Google sign-in is unreliable); Claude adds only the DNS TXT record | W2 |
 | MailerLite | waitlist, buyer sync, lifecycle emails, App 2 cross-sell send. **Plan 08 owns the account and every send**; plan 06 Task 15 supplies only the cross-sell copy and segment rule | Claude; user: approval, 2FA, DNS records (plan 08 Task 6) | W2 |
 | Product Hunt, Reddit, HN, Indie Hackers | launch posts | user decides (H9) | W6 |
 
