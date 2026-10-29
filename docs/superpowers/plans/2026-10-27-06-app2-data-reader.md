@@ -423,8 +423,8 @@ export function maskSecrets(text, { wholeFile = false, structured = false } = {}
   //    structured (Quick Look's JSON/JSONL/YAML/TOML/CSV/TSV/.env input) skips only that pass: an unquoted replacement can
   //    break a parser, while the passes above replace key and token characters only, so the file still parses. The views
   //    apply the name rule after parsing instead: to secret-named keys and columns, and to every rendered string (maskNames above).
-  //    wholeFile (secret dotfiles, Task 5 DataFile.secretFile), after the passes above: a line the credential-URL pass masked stays
-  //    as it is (`https://demo:••••••••@example.com`); an INI `[section]` line stays; any other non-comment line keeps its first
+  //    wholeFile (secret dotfiles, Task 5 DataFile.secretFile), after the passes above: a line that is nothing but one masked credential
+  //    URL once trimmed (`https://demo:••••••••@example.com`, a .git-credentials line) stays as it is; an INI `[section]` line stays; any other non-comment line keeps its first
   //    whitespace-separated token only when that token is a .netrc keyword (`machine`, `default`, `login`, `password`, `account`,
   //    `macdef`) or PEM armour (`-----BEGIN`, `-----END`), and the rest becomes '••••••••'; every other line is '••••••••' whole.
   //    No `NAME=` clause: a value on its own line (.netrc allows it, and it may hold `=` or `:`) never shows any part. The lists are explicit.
@@ -503,6 +503,8 @@ test('secrets are masked: PEM bodies, token shapes, secret-named values, whole s
   expect(netrc).toContain('machine'); expect(netrc).not.toContain('not-a-real-secret-9');
   const split = maskSecrets('machine b.example\n  login demo\n  password\n  pwnetrc10\n  password\n  pwnetrc:11=\n', { wholeFile: true });   // values on their own lines
   expect(split).toContain('login'); for (const v of ['pwnetrc10', 'pwnetrc', '11']) expect(split).not.toContain(v);
+  const withUrl = maskSecrets('machine example.com login demo password pwnetrc12 # see https://demo:pwurl13@example.com', { wholeFile: true });
+  expect(withUrl).toContain('machine'); for (const v of ['pwnetrc12', 'pwurl13']) expect(withUrl).not.toContain(v);   // a URL on the line keeps nothing
 });
 test('credential URLs and newer token prefixes are masked', () => {
   const gc = maskSecrets('https://demo:' + 'not-a-real-secret-7' + '@example.com', { wholeFile: true }); // .git-credentials line
