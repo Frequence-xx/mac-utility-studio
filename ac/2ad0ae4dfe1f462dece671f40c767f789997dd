@@ -1,0 +1,25 @@
+docs/superpowers/plans/2026-10-27-07-post-launch-scale.md
+  s_bc8ea26773de3f::t_d3726380b81deb 29
+docs/superpowers/plans/2026-10-27-05-release-readiness-launch.md
+  s_bc8ea26773de3f::t_d3726380b81deb 316
+docs/superpowers/plans/2026-10-27-08-growth-engine.md
+  s_bc8ea26773de3f::t_d3726380b81deb 550-551,571,575,595,600-601,608,1088,1091
+docs/superpowers/plans/2026-10-27-04-site-seo.md
+  s_bc8ea26773de3f::t_d3726380b81deb 592,646
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ac2ad0ae4dfe1f462dece671f40c767f789997dd",
+  "prompts": {},
+  "sessions": {
+    "s_bc8ea26773de3f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c36ff1eb-4626-43e3-815d-36966257085e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "farouq abou umar <farouqabouumar@farouqs-iMac.local>"
+    }
+  }
+}
