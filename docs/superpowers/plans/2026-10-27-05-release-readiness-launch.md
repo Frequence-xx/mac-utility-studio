@@ -176,7 +176,7 @@ jobs:
   - `.env` keys `POLAR_ORGANIZATION_ID`, `POLAR_ACCESS_TOKEN` (scopes `orders:read`, `products:read` only), `POLAR_PRODUCT_ID_MARKDOWN`, `POLAR_BENEFIT_ID_MARKDOWN`, `POLAR_CHECKOUT_URL_MARKDOWN`, `POLAR_PORTAL_URL`, `POLAR_QA_LICENSE_KEY`;
   - the four production `TG_POLAR_*` settings in `Release.xcconfig` (Step 9).
 
-Each 🔒 step is a live, outward-facing change. Show the user the exact values, get approval, then act (Playwright MCP, with the user doing 2FA). Every value saved to `.env` goes through `envset KEY VALUE` (K1); "key check" is the Global Constraints form.
+Each 🔒 step is a live, outward-facing change. Show the user the exact values, get approval, then act (Playwright MCP, with the user doing 2FA). Every value saved to `.env` goes through `envset KEY VALUE` (K1), and every secret through the pasteboard form `envset KEY "$(pbpaste)" && pbcopy </dev/null`; "key check" is the Global Constraints form.
 
 - [ ] **Step 0 (user, by Fri 20 Nov, H5):** Create the Polar **production** organisation and start Stripe identity + payout verification, so it can complete before Tue 1 Dec. Record the date here.
 - [ ] **Step 1 (Tue 24 Nov):** In the Polar production dashboard, record the verification status (pending or verified) here.
@@ -188,7 +188,7 @@ Each 🔒 step is a live, outward-facing change. Show the user the exact values,
 
   Expected: a screenshot of the settings page saved as `polar/org.png`.
 - [ ] **Step 3 🔒 Access token:**
-  - Create an organization access token with scopes `orders:read`, `products:read` and save it as `POLAR_ACCESS_TOKEN`.
+  - Create an organization access token with scopes `orders:read`, `products:read`; copy it and `. scripts/lib/env.sh && envset POLAR_ACCESS_TOKEN "$(pbpaste)" && pbcopy </dev/null`.
   - Expected: key check `POLAR_ACCESS_TOKEN` → `set`.
   - Expected: the command below prints `200`.
 
@@ -359,7 +359,7 @@ Notes the doc must carry:
     - `grep -c '/Users/' R11.txt` → `0`.
 - [ ] **Step 5: Scaleway lease L2 (`m27-arm`), H6.**
   - **Ask the user first:** "Lease one Scaleway M1 for 24 h, Thu 26 Nov 09:00 → Fri 27 Nov 09:00, macOS 27, at €3.19 incl. VAT (€2.64 before tax) [F9]?" Record the approval here.
-  - **Order and save access** (L1's server, key and host key were deleted in plan 01 Task 12 Step 10): after the yes, repeat plan 01 Task 12 Step 4 for this lease. Order the M1 (PARIS 3, macOS 27) in the console; `envset` `REMOTE_MAC_HOST`, `REMOTE_MAC_USER`, `REMOTE_MAC_PASSWORD` and `REMOTE_MAC_VNC_PORT` from the Overview page; then run its key block after prefix line P (`ssh-keygen` for `~/.ssh/id_ed25519_scaleway`, `ssh-copy-id -o StrictHostKeyChecking=accept-new` through the askpass file, never the password in argv). Expected: its `R 'sw_vers -productVersion; uname -m; who'` → `27.x`, `arm64` and a `console` line.
+  - **Order and save access** (L1's server, key and host key were deleted in plan 01 Task 12 Step 10): after the yes, repeat plan 01 Task 12 Step 4 for this lease. Order the M1 (PARIS 3, macOS 27) in the console; `envset` `REMOTE_MAC_HOST`, `REMOTE_MAC_USER` and `REMOTE_MAC_VNC_PORT` from the Overview page, and `REMOTE_MAC_PASSWORD` from the pasteboard (`envset REMOTE_MAC_PASSWORD "$(pbpaste)" && pbcopy </dev/null`); then run its key block after prefix line P (`ssh-keygen` for `~/.ssh/id_ed25519_scaleway`, `ssh-copy-id -o StrictHostKeyChecking=accept-new` through the askpass file, never the password in argv). Expected: its `R 'sw_vers -productVersion; uname -m; who'` → `27.x`, `arm64` and a `console` line.
   - **L2 is shared, in this order:** (1) this plan's matrix on macOS 27; (2) plan 03's arm64/macOS 27 acceptance with b2; (3) plan 02's pending arm64 checks; (4) plan 08's Quick Look deep-link check; (5) **last:** reinstall macOS 14 if offered, then the macOS 14 leg.
   - **Operator:**
     - SSH parts: Claude via `REMOTE_MAC_*`;

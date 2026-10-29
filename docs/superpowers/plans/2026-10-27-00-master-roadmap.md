@@ -338,6 +338,7 @@ Credentials go to `.env` the moment an account exists; `.env.example` names ever
 
 **Secrets notes:**
 - `.env` is read only through `scripts/lib/env.sh` (`envget`/`envset`, K1). It is never `source`d.
+- Every secret value (token, password, licence key, S3 secret) is saved from the pasteboard, never typed into a command: copy it on the page, then `envset KEY "$(pbpaste)" && pbcopy </dev/null`. Ids, hosts, ports and public URLs may be typed. Wherever a plan says "save it with `envset`" for a secret, this is the form.
 - Tokens may appear in `curl -H` arguments on the build Mac. It is single-user (the founder's own accounts), so `ps` exposure is an accepted risk. In CI they come from secrets as environment variables only, never on a command line.
 - Signing keys never stay on disk in plaintext. After the Keychain import, the Developer ID key, the Sparkle private key and the `.p8` live only in the Keychain and in encrypted offline storage (K3, H2-status).
 - Account passwords stay in `.env` (chmod 600) by default. Moving them to the Keychain is a USER question (S28).

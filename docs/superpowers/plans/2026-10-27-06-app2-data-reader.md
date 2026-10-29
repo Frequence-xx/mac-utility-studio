@@ -716,7 +716,7 @@ View rules:
 | `sample.json`, `.yaml`, `.toml`, `.jsonl`, `x.ndjson` | Our tree or rows, Tegel footer |
 | `sample.csv`, `sample.tsv`, `quoted-newline.csv` | Our table, header detected, the quoted newline in one cell |
 | `prod.env` and `.env` (copies of `sample.env`) | Keys shown; every value is `••••••••`; clicking reveals nothing |
-| `.netrc`, `.git-credentials`, `credentials`, `id_rsa` (temp files with fake values, made as in `testQuickLookMasksSecretFiles`) | First tokens shown; every value, URL password and PEM body is `••••••••` |
+| `.netrc`, `.git-credentials`, `credentials`, `id_rsa` (temp files with fake values, made as in `testQuickLookMasksSecretFiles`) | Only `.netrc` keywords, PEM armour lines, `[section]` lines and masked-URL lines (`https://demo:••••••••@…`) show; every other line is `••••••••` whole |
 | `big-1m.csv` | First 1,000 rows plus the truncated banner |
 | `Dockerfile`, `CHANGELOG`, `.gitignore` | Our plain text |
 | a NUL-containing `blob` (no extension) | System generic preview (icon), no garbage |
