@@ -243,7 +243,7 @@ export function sourceErrorHTML(text, error, context = 20) // -> string
 export function escapeHTML(s) // -> string (only if the renderer has none)
 export function treeHTML(value, { budget = 2000, path = '', labels = DEFAULT_LABELS } = {}) // -> { html: string, used: number }; partial options keep the other defaults
 export function nodeAt(root, path /* '/a~1b/0', RFC 6901 escaping */) // -> any
-export function summarize(value) // -> 'Object · 3 keys' | 'Array · 1,204 items' | scalar text
+export function summarize(value) // -> '3 keys' | '1,204 items' | scalar text (no middle-dot meta strings, DESIGN.md §11)
 ```
 
 - [ ] **Step 1: Write the failing test.**
@@ -913,7 +913,7 @@ struct SessionsView: View
 // The "Sessions" window and its ⌘⇧S command open this view, so neither reaches session mode without Pro.
 // Sidebar: sources, then sessions = FolderIndex.files(in:extensions:["jsonl"]) (default cap; a capped list says so in the sidebar footer) sorted by modification date (newest first).
 // Search field: debounced 300 ms, FolderIndex.search(…, maxBytesPerFile: 128_000_000) off the main actor (the open-session cap below).
-// A result row shows `relativePath · L<line>`, plus SearchHit.snippet only while "Show secrets" is on: the snippet is raw file text.
+// A result row shows `relativePath` as its title and "Line <line>" as its secondary text (no middle-dot meta string, DESIGN.md §11), plus SearchHit.snippet only while "Show secrets" is on: the snippet is raw file text.
 // A hit opens the session, then scroll(toHeading: "user-content-L\(line)"): the item's id="L<line>" after the page's
 // SANITIZE_NAMED_PROPS pass (plan 01 CR 4; Task 0 #5).
 // The open session loads through TextFileLoader.load(url, maxBytes: 128_000_000) (truncated -> banner).
@@ -933,7 +933,7 @@ struct SessionsView: View
   - appending a synthetic user line adds it within 1 s;
   - a synthetic user line holding `[a](https://example.com) [b](file:///etc/hosts)`: transcript prose is escaped plain text (Task 9), so both show literally, clicking them does nothing, and the session stays on screen;
   - a `.jsonl` that isn't a transcript shows generic rows; with "Show secrets" off, a synthetic line `{"note":"sk-…"}` (40 × `a`, in the temp copy) shows `••••••••` in its row and in the detail pane after a click, and the value once it's on;
-  - a synthetic user line holding `'sk-' + 40 × 'a'` (typed into the temp copy, never into `Fixtures/`) shows as `••••••••` until "Show secrets" is on, and is masked again after a relaunch. Searching `sk-aaaa` with "Show secrets" off lists the hit as `<session file> · L<n>` with no snippet; with it on, the row adds the snippet. Watch it fail first: show the snippet unconditionally, `make build`, and the off-state row shows `sk-aaaa…`; restore it;
+  - a synthetic user line holding `'sk-' + 40 × 'a'` (typed into the temp copy, never into `Fixtures/`) shows as `••••••••` until "Show secrets" is on, and is masked again after a relaunch. Searching `sk-aaaa` with "Show secrets" off lists the hit as `<session file>` over "Line <n>" with no snippet; with it on, the row adds the snippet. Watch it fail first: show the snippet unconditionally, `make build`, and the off-state row shows `sk-aaaa…`; restore it;
   - **Pro gate:** with the Debug `isPro` override **off**, ⌘⇧S opens the Sessions window showing only `WelcomeView` (no sources, no search field), and so does Window › Sessions. Watch it fail first: comment out the `!isPro` branch in `SessionsView`, `make build`, and ⌘⇧S shows the session browser with the bookmarked sources. Restore it and rebuild: `WelcomeView` again. (Every row above runs with the override **on**.)
 - [ ] **Step 5: Commit:** `Packages/TegelKit/Sources/TegelKit/FolderIndex.swift Packages/TegelKit/Tests/TegelKitTests/FolderIndexTests.swift Apps/Data/App`, `feat(data): session mode with bookmarked folders, cross-session search, live reload` + trailer.
 
@@ -1034,7 +1034,7 @@ swift -e 'import AppKit; print(NSWorkspace.shared.urlForApplication(withBundleId
 
 ### Task 13: Site pages (with plan 04)
 
-**Files** (plan 04's page register owns these URLs and their SEO targets; this task writes the copy, front matter `app: data`, except `bundle.md`'s `app: bundle`, so plan 04's JSON-LD offers the bundle's own name and price, not Data's):
+**Files** (on `m06-app2`: the four pages reach `main` with Task 16's merge on Fri 29 Jan, go live with the next deploy and say "Launches Tue 2 Feb 2027" until Task 16 Step 4 adds the download and Buy links; plan 04's page register owns these URLs and their SEO targets; this task writes the copy, front matter `app: data`, except `bundle.md`'s `app: bundle`, so plan 04's JSON-LD offers the bundle's own name and price, not Data's):
 - Create: `site/content/en/data.md`, the product page. It covers the formats and free vs Pro; `{{pricing:data}}` (price and licence limits, rule 6; the "Buy Pro" link `{{checkout:data}}` comes with the download in Task 16 Step 4); and "Bundle with Tegel Markdown: {{price:bundle}} (one key per app)" (plan 04 allows prices only through config placeholders); the 14-day refund; privacy (no network except licence checks and updates; `.env` values masked); "Not affiliated with Anthropic or OpenAI"; the Task 7 Quick Look results (claim only what was observed). No demo yet: plan 04's "every internal link and asset resolves" test fails on a missing file, so Task 14 Step 5 adds the `<video>` with the file. No download link yet: `{{download:data}}` throws while `downloadURL` is empty, so Task 16 Step 4 adds it with the URL.
 - Create: `site/content/en/jsonl-viewer-mac.md` (target query "jsonl viewer mac").
 - Create: `site/content/en/claude-code-transcript-viewer.md` (target query "view claude code transcripts"). It explains where the transcripts live (DF9, DF10) and that the app only reads them.
@@ -1046,7 +1046,7 @@ swift -e 'import AppKit; print(NSWorkspace.shared.urlForApplication(withBundleId
 - Consumes: plan 04's page register, front-matter keys, build command and sitemap (Task 0 #10).
 - Produces: `/data/`, `/jsonl-viewer-mac/`, `/claude-code-transcript-viewer/`, `/bundle/` (use the register's bundle URL if it differs).
 
-- [ ] **Step 1: Write the failing tests in plan 04's `site/test/pages.test.js`** (B19). Its site-wide invariants already cover descriptions, "was" prices and placeholders. Add `PHASES.APP2` and its "exist" test if plan 04 Task 16 hasn't yet (same line), then:
+- [ ] **Step 1: Write the failing tests in plan 04's `site/test/pages.test.js`** (B19). Its site-wide invariants already cover descriptions, "was" prices and placeholders. Add `PHASES.APP2 = ['/data/', '/jsonl-viewer-mac/', '/claude-code-transcript-viewer/', '/bundle/']` and its "exist" test (plan 04 Task 16 leaves both to this task), then:
 
 ```js
 test('App 2 pages carry price and licence limits from config', () => {

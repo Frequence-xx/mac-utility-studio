@@ -950,7 +950,7 @@ func testSearchURLEncodesQueryAndAcceptsOnlyHTTPS() {
 func testDismissMonitorWatchesNoKeys() { XCTAssertTrue(ActionPanel.dismissMask.isDisjoint(with: [.keyDown, .keyUp, .flagsChanged])) }
 @MainActor func testFreeActionsWorkWithoutProAndProActionsDont() throws {
     let s = Selection(runs: [.init(text: "hello world")])
-    XCTAssertEqual(try Actions.perform(.wordCount, on: s, isPro: false), "2 words · 11 characters")
+    XCTAssertEqual(try Actions.perform(.wordCount, on: s, isPro: false), "2 words, 11 characters")
     _ = try Actions.perform(.convertCase, on: s, style: .kebab, isPro: false)
     XCTAssertEqual(NSPasteboard.general.string(forType: .string), "hello-world")
     XCTAssertThrowsError(try Actions.perform(.copyMarkdown, on: s, isPro: false)) { XCTAssertEqual($0 as? SelectError, .needsPro) }
