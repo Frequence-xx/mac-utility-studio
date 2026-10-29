@@ -479,7 +479,7 @@ Captions, gallery frames and screenshots follow plan 09 Task 12 and its m05 gate
 | 31–39 | Terminal (text only) appends a line → view updates | Changes from your editor or agent appear live |
 | 39–50 | Export PDF A4 of the Arabic note → Preview shows pages | Paginated A4 and Letter PDF, right-to-left correct |
 | 50–57 | Theme switch paper → ink → studio, then dark | Three themes, light and dark |
-| 57–60 | Plain end card: icon tile + text | "Tegel Markdown", with "tegelapps.com" on the line below (no middle dot, DESIGN.md §11) |
+| 57–60 | Plain end card: icon tile + text | Get Tegel Markdown at tegelapps.com |
 
 No price in the video, so it never goes stale.
 
