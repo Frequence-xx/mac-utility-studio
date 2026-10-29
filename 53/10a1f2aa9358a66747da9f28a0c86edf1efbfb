@@ -1,0 +1,19 @@
+docs/reviews/m00-pipeline.md
+  s_bc8ea26773de3f::t_b63067af9dabe8 15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5310a1f2aa9358a66747da9f28a0c86edf1efbfb",
+  "prompts": {},
+  "sessions": {
+    "s_bc8ea26773de3f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c36ff1eb-4626-43e3-815d-36966257085e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "farouq abou umar <farouqabouumar@farouqs-iMac.local>"
+    }
+  }
+}
