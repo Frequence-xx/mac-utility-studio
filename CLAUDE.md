@@ -93,10 +93,10 @@ Approval covers the specific action shown, not the next one. Sandbox and test re
 
 ## Accounts: the studio identity only (MANDATORY)
 
-Every account action uses the studio identity: **`marketing@snelverhuizen.nl`** (`STUDIO_EMAIL`), and on Apple the individual team **Mohammed Haroen Baksh, `23N7947PKX`**. This covers Apple Developer, App Store Connect, notarisation, Google, Cloudflare, Polar, Scaleway, MailerLite and every account added later.
+Every account action uses the studio identity: **`marketing@snelverhuizen.nl`** (`STUDIO_EMAIL`), and on Apple the individual team **Mohammed Haroen Baksh, `23N7947PKX`**. This covers Apple Developer, App Store Connect, notarisation, Google, Cloudflare, Polar, Scaleway, MailerLite and every account added later. The exceptions are GitHub (`Frequence-xx`, already exists) and the launch-post accounts (H9), which are the user's choice.
 
 - This Mac also holds another organisation's Apple access: **Stichting Tarbiyah Consultancy** (team `72PF8SBQR6`, Keychain certificate "Apple Development: Hamza Bouzaggou (W3Q9G8NSHG)") and a Personal Team `34WLYZ5RS6`, both in Xcode's cached team list. Never sign, upload, enrol or change anything with them.
-- Before any change in a web dashboard, read the signed-in account on the page (the email; on Apple also the team name and id). If it's anything else, stop and tell the user.
+- Before any change in a web dashboard, read the signed-in account on the page: the email, plus the team name and id on Apple, and the account or org id on Cloudflare and Polar (`CLOUDFLARE_ACCOUNT_ID`, `POLAR_ORGANIZATION_ID`, or `POLAR_SANDBOX_ORGANIZATION_ID` in the sandbox). If anything differs, stop and tell the user.
 - Signing names the team explicitly (`DEVELOPMENT_TEAM` from `APPLE_TEAM_ID`, notary profile `tegel-notary`), never a team Xcode picks. Every signature that isn't ad hoc must show `TeamIdentifier=23N7947PKX` in `codesign -dv`.
 
 ## Secrets

@@ -190,7 +190,7 @@ No commit; Task 4 adds `CLOUDFLARE_R2_API_TOKEN`, `R2_ACCESS_KEY_ID`, `R2_SECRET
   ID=$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application: [^"]*(23N7947PKX)\)"/\1/p' | head -1)
   [ "$(envget APPLE_DEVELOPER_ID_IDENTITY)" = "$ID" ] && [ "$(envget APPLE_TEAM_ID)" = "$(printf '%s' "$ID" | sed -n 's/.*(\([A-Z0-9]*\))$/\1/p')" ] && echo match; unset ID
   ```
-  Expected: `saved`, then `match`. The pattern only accepts the studio team `23N7947PKX` (CLAUDE.md "Accounts"), so another team's Developer ID can never match. On a mismatch, re-run the `ID=` line and stop if `ID` is empty (the studio certificate is gone: Step 1). Otherwise `envset APPLE_DEVELOPER_ID_IDENTITY "$ID"` (K1 quoting handles the spaces and parentheses) and `envset APPLE_TEAM_ID 23N7947PKX`.
+  Expected: `saved`, then `match`. The pattern only accepts the studio team `23N7947PKX` (CLAUDE.md "Accounts"), so another team's Developer ID can never match. On a mismatch, run this as one command (K1 quoting handles the spaces and parentheses): `. scripts/lib/env.sh; ID=$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application: [^"]*(23N7947PKX)\)"/\1/p' | head -1); [ -n "$ID" ] && envset APPLE_DEVELOPER_ID_IDENTITY "$ID" && envset APPLE_TEAM_ID 23N7947PKX && echo fixed; unset ID`. No `fixed` means the studio certificate is gone: Step 1.
 - [ ] **Step 3: The App Store Connect API key (done 27 Oct; verify).** The `.p8` is in `~/.appstoreconnect/private_keys/AuthKey_<KEYID>.p8`, not in `~/.tegel-secrets/`; Step 5 moves it.
   - Run: `. scripts/lib/env.sh; need ASC_API_KEY_ID ASC_API_ISSUER_ID && test -f ~/.appstoreconnect/private_keys/"AuthKey_$(envget ASC_API_KEY_ID).p8" && echo ok`
   - Expected: `ok`.
