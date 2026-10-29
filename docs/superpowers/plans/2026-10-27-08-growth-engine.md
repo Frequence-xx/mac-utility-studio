@@ -547,7 +547,8 @@ test('valid sign-up creates an unconfirmed subscriber and redirects', async () =
 ### Task 8: Waitlist copy, pages and go-live (C drafts, U approves; Wed 11 – Mon 16 Nov)
 
 **Files:**
-- Create `site/templates/partials/waitlist-form.html`.
+- Create `site/templates/partials/waitlist-form.html` and `site/templates/partials/waitlist-form-ar.html`.
+- Modify `site/content/en/index.md` and `site/content/en/rtl-markdown-to-pdf.md` (one `{{partial:waitlist-form}}` line each, Step 1b).
 - Create `site/content/{en,ar}/waitlist/{check-email,confirmed,invalid,error,later}.md` (front matter copied from an existing plan 04 page).
 - Create `docs/growth/email-copy.md`.
 
@@ -567,10 +568,11 @@ test('valid sign-up creates an unconfirmed subscriber and redirects', async () =
 ```
 
   - `.wl-hp` is positioned off-screen (plan 04 CSS), not `display:none`.
-  - The Arabic partial mirrors the markup, with `lang=ar`, `dir="rtl"` and this copy (U reviews the Arabic):
+  - The Arabic partial (`waitlist-form-ar.html`) mirrors the markup, with `lang=ar`, `dir="rtl"` and this copy (U reviews the Arabic):
     - consent: `راسلني مرتين: عند إطلاق Tegel Markdown ‏(8 ديسمبر 2026)، وعند إطلاق تطبيق Tegel التالي (المخطط له مطلع 2027). بعد ذلك تُحذف هذه القائمة. يمكنك إلغاء الاشتراك في أي وقت.`
     - button: `انضم إلى القائمة`.
   - Consent law: Tw 11.7 lid 1 (prior, provable consent). The box is unchecked, the purpose is specific, the retention is stated and the opt-out is shown (HR7).
+- [ ] **Step 1b: Place the form.** Add a `{{partial:waitlist-form}}` line below the pricing block of `site/content/en/index.md` and `site/content/en/rtl-markdown-to-pdf.md`. The Arabic page `site/content/ar/arabic-markdown-pdf.md` comes later (plan 04, W5); if it ships before Tue 8 Dec, that task adds a `{{partial:waitlist-form-ar}}` line to it. Expected after `bun site/build.js`: `grep -c 'action="/api/waitlist"' site/public/index.html site/public/rtl-markdown-to-pdf/index.html` → `1` for each.
 - [ ] **Step 2: Result pages** (one short paragraph each, EN + AR):
   - **check-email:** "Check your inbox and confirm your address. Nothing arrives until you do. If it isn't there in 10 minutes, look in spam."
   - **confirmed:** "You're on the list. Two emails, then the list is deleted. Meanwhile you can try the RTL Markdown checker." (Link it once Task 9 is live.)
@@ -590,20 +592,20 @@ Tegel, a one-person studio in the Netherlands · hello@tegelapps.com · <identit
 - [ ] **Step 4: Privacy line.** It goes to plan 04's privacy page, which must be **live before the form**. That is contract change request 5.
 
 ```text
-Waitlist. If you join the waitlist, your email address is stored by MailerLite (our email processor, under its data processing agreement) on the basis of your consent, confirmed by email. We use it for two emails: the launch of Tegel Markdown and the launch of the next Tegel app. After the second, we delete the list. You can unsubscribe at any time from any email, or by writing to hello@tegelapps.com. To limit abuse, the sign-up form keeps a hash of your IP address for 24 hours to count sign-ups per connection; the IP address itself isn't stored.
+Waitlist. If you join the waitlist, your email address is stored by MailerLite (our email processor, under its data processing agreement) on the basis of your consent, confirmed by email. We use it for two emails: the launch of Tegel Markdown and the launch of the next Tegel app. After the second, we delete the list. You can unsubscribe at any time from any email, or by writing to hello@tegelapps.com. To limit abuse, the sign-up form keeps a hash of your IP address for 24 hours to count sign-ups per connection, and a hash of your email address for 24 hours to stop repeat sign-ups; neither the IP address nor the email address is stored in them.
 Buyers. If you buy a licence, Polar (our merchant of record) shares your email with us. Only if you ticked "Email me set-up tips and news about Tegel apps" at checkout do we send three short emails in your first month (set-up, tips, a request for a review) and news about Tegel apps. Every email has an unsubscribe link. If you're refunded, we remove you from that list. If you ask us to delete your data, we do, and keep only a hash of your email address so the daily sync never adds you back.
 ```
 
 - [ ] **Step 5: Checks.** Run Task 1's lint on `site/content/*/waitlist`, `site/templates/partials/waitlist-form.html` and `docs/growth/email-copy.md` → `COPY-LINT: clean`. Then plan 04's site build and tests: no external script. Expected: pass.
-- [ ] **Step 5b: Commit** (`git add site/templates/partials/waitlist-form.html site/content/en/waitlist site/content/ar/waitlist docs/growth/email-copy.md`, `feat(site): waitlist form, result pages and consent copy` + trailer), on `m08-waitlist`, before anything is deployed (K1).
-- [ ] **Step 5c: Preview check.** Deploy with plan 04's preview command (no approval; it deploys the working tree, not `main`). Expected: `. scripts/lib/env.sh && H="$(envget CLOUDFLARE_PAGES_HOST)" && for p in {,ar/}waitlist/{check-email,confirmed,invalid,error,later}; do curl -s -o /dev/null -w "%{http_code} $p\n" "https://preview.$H/$p/"; done` → ten lines, each `200`.
+- [ ] **Step 5b: Commit** (`git add site/templates/partials site/content/en/index.md site/content/en/rtl-markdown-to-pdf.md site/content/en/waitlist site/content/ar/waitlist docs/growth/email-copy.md`, `feat(site): waitlist form, result pages and consent copy` + trailer), on `m08-waitlist`, before anything is deployed (K1).
+- [ ] **Step 5c: Preview check.** Deploy with plan 04's preview command (no approval; it deploys the working tree, not `main`). Expected: `. scripts/lib/env.sh && H="$(envget CLOUDFLARE_PAGES_HOST)" && for p in {,ar/}waitlist/{check-email,confirmed,invalid,error,later}; do curl -s -o /dev/null -w "%{http_code} $p\n" "https://preview.$H/$p/"; done` → ten lines, each `200`; `curl -s "https://preview.$H/" | grep -c 'action="/api/waitlist"'` → `1`, and the same for `/rtl-markdown-to-pdf/`.
 - [ ] **Step 5d: Review and merge.** Run Task 23 for `m08-waitlist` (its `/cso` scope covers `functions/api/waitlist.js` and this task's pages), fix every P0/P1, then merge to `main`. Nothing public sends mail before this review.
 - [ ] **Step 6 🔒 Go live** (U approves "deploy the waitlist form to production"), from `main` after Step 5d's merge, with plan 04's production deploy command (it starts with `git switch main`, which now holds `functions/api/waitlist.js`). If plan 04 hasn't yet made the site's first public deploy, this one is it: CLAUDE.md lists that separately, so the request says so and the user confirms both. The approval needs these in place, each checked, not assumed:
   - **Live privacy page:** `curl -s https://tegelapps.com/privacy/ | grep -c MailerLite` ≥ 1, and the page lists MailerLite as processor, the waitlist, the buyer sync and the lifecycle emails (the Step 4 text). If Task 6 Step 4 found that tracking can't be turned off, `curl -s https://tegelapps.com/privacy/ | grep -ciE 'open.*click|tracking'` ≥ 1 as well;
   - **Email footer:** the double-opt-in test email (Task 6 settings, sent to `STUDIO_EMAIL`) shows the real identity and a postal address or number (Tw 11.7 lid 7), and `grep -c '<identity and postal address' docs/growth/email-copy.md` → `0`;
   - the Cloudflare rate-limiting rule (Free: 1 rule) is **path equals `/api/waitlist`, 5 requests per 10 s per IP, block 10 s** (🔒 zone change);
   - the production secrets are set, from `.env`'s `MAILERLITE_API_TOKEN_PAGES` (never the local token), with `--env production` (Task 7 Step 6's pattern), plus `SITE_ORIGIN=https://tegelapps.com` and `WAITLIST_DAILY_CAP=100`; `pages secret list --project-name tegel --env production` shows all four names, and `WAITLIST_KV` is bound to `tegel-waitlist` (not the preview namespace) in Production;
-  - the form is included on the home page and the RTL landing page until Tue 8 Dec (plan 04 coordination; Task 15 Step 1b closes it).
+  - the form is on the home page and the RTL landing page (Step 1b, checked on the preview in Step 5c) until Tue 8 Dec (Task 15 Step 1b closes it).
 - [ ] **Step 7: End-to-end check on production with `STUDIO_EMAIL`.** Expected:
   - the browser lands on `/waitlist/check-email/`;
   - the confirmation email arrives, lints clean and shows the footer;
@@ -1083,10 +1085,10 @@ This was email 1 of 2. The second comes when the next Tegel app launches; then t
 
   🔒 Send. Record the time and recipient count.
 - [ ] **Step 1b 🔒 Close sign-up** (K13; Tue 8 Dec, right after the send). The consent promises an email "when Tegel Markdown launches (8 Dec 2026)", which nobody joining later can get, so the list closes rather than change its promise; everyone on it keeps the two emails they agreed to. U approves "close the waitlist form":
-  - plan 04 drops `partials/waitlist-form.html` from the home and RTL pages (contract change request 4(d));
+  - on `main`, remove the `{{partial:waitlist-form}}` lines from `site/content/en/index.md` and `site/content/en/rtl-markdown-to-pdf.md`, and the `{{partial:waitlist-form-ar}}` line from `site/content/ar/arabic-markdown-pdf.md` if it has one; `(cd site && bun test)` → 0 fail; Commit: those files, `feat(site): close the waitlist form` + trailer; push;
   - delete the production mail token: `. scripts/lib/env.sh && CLOUDFLARE_API_TOKEN="$(envget CLOUDFLARE_API_TOKEN)" CLOUDFLARE_ACCOUNT_ID="$(envget CLOUDFLARE_ACCOUNT_ID)" bunx wrangler@4.151.2 pages secret delete MAILERLITE_API_TOKEN --project-name tegel --env production`;
   - deploy with plan 04's production command (a deployment keeps the secrets it was made with: Task 7 Step 6).
-  - Expected: `curl -s https://tegelapps.com/ | grep -c 'action="/api/waitlist"'` → `0`, the same for the RTL page, and a valid POST with Task 8 Step 7's headers and `email=<STUDIO_EMAIL+closed@…>&consent=on&website=` → `303 https://tegelapps.com/waitlist/error/` with no email sent.
+  - Expected: `curl -s https://tegelapps.com/ | grep -c 'action="/api/waitlist"'` → `0`, the same for the RTL page and `/ar/arabic-markdown-pdf/`, and a valid POST with Task 8 Step 7's headers and `email=<STUDIO_EMAIL+closed@…>&consent=on&website=` → `303 https://tegelapps.com/waitlist/error/` with no email sent.
 - [ ] **Step 1c 🔒 Late confirmations** (Mon 14 Dec, the last intro-price day). A sign-up made before the close but confirmed after Step 1's send hasn't had the launch email it was promised. U approves "send the launch email to late confirmations, then drop unconfirmed sign-ups":
   - in MailerLite, segment the waitlist group by "subscribed after <Step 1's recorded send time>" and send it the Step 1 campaign unchanged; record the count (often 0);
   - delete the subscribers still `unconfirmed` in the waitlist group (they never gave consent; nothing is kept), so nobody can confirm into a promise that can't be kept. Record the count.

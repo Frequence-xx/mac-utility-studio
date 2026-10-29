@@ -313,6 +313,7 @@ Notes the doc must carry:
 
 - [ ] **Step 1: Price-string check** (the app shows no price; the checkout does). `grep -rnE '(\$|€) ?1[49]\b' Apps/Markdown || echo "no price in app"`. Expected: `no price in app`. A hit means 15 Dec would need an app release, so raise it before RC1.
 - [ ] **Step 2: Build RC1 and store it privately.**
+  - Bring in what has merged to `main` since Task 1 Step 8 (plan 08 Task 12's upsell, which ships in 1.0.0): `git switch m05-launch && git merge main`, and record in the matrix header which plan 08 branches are in (`git log --merges --oneline main | grep m08`). Do the same before RC2, so 1.0.0 contains no code an RC didn't carry.
   - Commit first, since `release.sh` stops on a dirty tree (plan 03 step 2): `git add docs/gates/test-matrix-1.0.md docs/gates/evidence/1.0 docs/superpowers/plans/2026-10-27-05-release-readiness-launch.md && git commit -m "docs(gates): test matrix 1.0 before the RC build"` + trailer, then `git status --porcelain -- . ':(exclude)docs'` → empty. Before RC1 this holds the matrix template and Task 2 Steps 0–1's records ("here" is this plan file); before RC2 (Step 6), the cells, evidence and records so far.
   - `scripts/release.sh markdown 1.0.0-rc1 --no-upload`; DMG = the last stdout line.
   - `gh release create v1.0.0-rc1 "$DMG" --prerelease --title "1.0.0-rc1 (internal)" --notes "internal test build"`. The repo is private, so this is not an outward action.
