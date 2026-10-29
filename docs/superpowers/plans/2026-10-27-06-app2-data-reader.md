@@ -423,13 +423,15 @@ export function maskSecrets(text, { wholeFile = false, structured = false } = {}
   //    structured (Quick Look's JSON/JSONL/YAML/TOML/CSV/TSV/.env input) skips only that pass: an unquoted replacement can
   //    break a parser, while the passes above replace key and token characters only, so the file still parses. The views
   //    apply the name rule after parsing instead: to secret-named keys and columns, and to every rendered string (maskNames above).
-  //    wholeFile (secret dotfiles, Task 5 DataFile.secretFile), after the passes above: a line that is nothing but one masked credential
-  //    URL once trimmed (`https://demo:••••••••@example.com`, a .git-credentials line) stays as it is; any other non-comment line keeps its first
-  //    whitespace-separated token only when that token is a .netrc keyword (`machine`, `default`, `login`, `password`, `account`,
-  //    `macdef`) or PEM armour (`-----BEGIN`, `-----END`) and another token follows it, and the rest becomes '••••••••'; every other
-  //    line is '••••••••' whole, `[section]` lines included. No `NAME=` clause and no shape exception: a value on its own line (.netrc
-  //    allows it, and it may look like `[x]`, a keyword, or hold `=` or `:`) never shows any part. The lists are explicit. Accepted
-  //    ceiling: a .netrc value shaped like a credential URL shows its user and host (its password part is masked).
+  //    wholeFile (secret dotfiles, Task 5 DataFile.secretFile), after the passes above: a line that is nothing but one URL with a user
+  //    part once trimmed (`scheme://…@host…`, a .git-credentials line) keeps only its scheme and host: everything between `://` and the
+  //    authority's last `@` becomes '••••••••' (`https://••••••••@example.com`; the user slot can hold the token, as in
+  //    `<token>:x-oauth-basic@`, and a password may hold `@`; the authority ends at the first `/`, `?` or `#`). Any other line keeps
+  //    its first whitespace-separated token only when that token is a .netrc keyword (`machine`, `default`, `login`, `password`,
+  //    `account`, `macdef`) or PEM armour (`-----BEGIN`, `-----END`) and another token follows it, and the rest becomes '••••••••';
+  //    every other line is '••••••••' whole, comment (`#`) and `[section]` lines included. No `NAME=` clause and no shape exception:
+  //    a value on its own line (.netrc allows it, and it may look like `[x]`, a keyword, or hold `=` or `:`) never shows any part.
+  //    The lists are explicit. Accepted ceiling: a .netrc value shaped like a credential URL shows its scheme and host.
 ```
 
 Parsing rules:
@@ -503,15 +505,16 @@ test('secrets are masked: PEM bodies, token shapes, secret-named values, whole s
   expect(nested).toContain('user: visible');
   const netrc = maskSecrets('machine example.com login demo password not-a-real-secret-9', { wholeFile: true });
   expect(netrc).toContain('machine'); expect(netrc).not.toContain('not-a-real-secret-9');
-  const split = maskSecrets('machine b.example\n  login demo\n  password\n  pwnetrc10\n  password\n  pwnetrc:11=\n  password\n  [pwnetrc15]\n  password\n  account\n', { wholeFile: true });   // values on their own lines
-  expect(split).toContain('login'); for (const v of ['pwnetrc10', '[pwnetrc15]', 'pwnetrc', '11', 'account']) expect(split).not.toContain(v);
+  const split = maskSecrets('machine b.example\n  login demo\n  password\n  pwnetrc10\n  password\n  pwnetrc:11=\n  password\n  [pwnetrc15]\n  password\n  account\n  # pwcomment16\n', { wholeFile: true });   // values on their own lines
+  expect(split).toContain('login'); for (const v of ['pwnetrc10', '[pwnetrc15]', 'pwnetrc', '11', 'account', 'pwcomment16']) expect(split).not.toContain(v);
   const withUrl = maskSecrets('machine example.com login demo password pwnetrc12 # see https://demo:pwurl13@example.com', { wholeFile: true });
   expect(withUrl).toContain('machine'); for (const v of ['pwnetrc12', 'pwurl13']) expect(withUrl).not.toContain(v);   // a URL on the line keeps nothing
 });
 test('credential URLs and newer token prefixes are masked', () => {
   expect(maskSecrets('git clone https://demo:pwurl14@example.com/r.git')).not.toContain('pwurl14');   // first: ordinary text, only the URL pass catches it
-  const gc = maskSecrets('https://demo:' + 'not-a-real-secret-7' + '@example.com', { wholeFile: true }); // .git-credentials line
-  expect(gc).toContain('https://demo:'); expect(gc).toContain('@example.com'); expect(gc).not.toContain('not-a-real-secret-7');
+  const gc = maskSecrets('https://demo:' + 'not-a-real-secret-7' + '@example.com\nhttps://' + 'c0ffee11'.repeat(5) + ':x-oauth-basic@github.com', { wholeFile: true }); // .git-credentials lines; the second holds a legacy token in the user slot
+  for (const v of ['not-a-real-secret-7', 'c0ffee11', 'demo']) expect(gc).not.toContain(v);
+  expect(gc).toContain('https://••••••••@example.com'); expect(gc).toContain('https://••••••••@github.com');
   const toks = ['github' + '_pat_' + 'D'.repeat(40), 'gl' + 'pat-' + 'E'.repeat(20), 'AKIA' + 'F'.repeat(16) + ' ' + 'g/H+'.repeat(10)];
   const out = maskSecrets(toks.join('\n'));
   for (const s of ['DDDDDDDD', 'EEEEEEEE', 'FFFFFFFF', 'g/H+g/H+']) expect(out).not.toContain(s);
@@ -556,7 +559,9 @@ test('secret-named keys and columns are masked in tree, row and table views', ()
   - make a masked bad JSONL row show the parser's message instead of `labels.parseError`. Expected: FAIL in `secret-named keys and columns are masked…`, the output contains `pwnotreal6`;
   - make the whole-file rule keep every line's first token. Expected: FAIL in `secrets are masked…`, the output contains `pwnetrc10`;
   - add an exception that keeps a line that is `[…]` once trimmed (an INI section). Expected: FAIL in the same test, the output contains `[pwnetrc15]`;
-  - drop the "another token follows" condition. Expected: FAIL in the same test, the output contains `account`.
+  - drop the "another token follows" condition. Expected: FAIL in the same test, the output contains `account`;
+  - keep `#` lines as they are in whole-file mode. Expected: FAIL in the same test, the output contains `pwcomment16`;
+  - make the whole-line URL rule mask only the password, keeping the user part. Expected: FAIL in `credential URLs and newer token prefixes…`, the output contains `c0ffee11`.
 - [ ] **Step 6: Commit:** `Renderer/src/data/dotenv.js Renderer/src/data/tree.js Renderer/src/data/table.js Renderer/src/data/jsonl.js Renderer/test/data-dotenv.test.js Fixtures/data/sample.env`, `feat(renderer): .env parser and secret masking, values kept out of the HTML` + trailer.
 
 ---
@@ -723,7 +728,7 @@ View rules:
 | `sample.json`, `.yaml`, `.toml`, `.jsonl`, `x.ndjson` | Our tree or rows, Tegel footer |
 | `sample.csv`, `sample.tsv`, `quoted-newline.csv` | Our table, header detected, the quoted newline in one cell |
 | `prod.env` and `.env` (copies of `sample.env`) | Keys shown; every value is `••••••••`; clicking reveals nothing |
-| `.netrc`, `.git-credentials`, `credentials`, `id_rsa` (temp files with fake values, made as in `testQuickLookMasksSecretFiles`) | Only `.netrc` keywords followed by a value, PEM armour lines and masked-URL lines (`https://demo:••••••••@…`) show; every other line, `[section]` lines included, is `••••••••` whole |
+| `.netrc`, `.git-credentials`, `credentials`, `id_rsa` (temp files with fake values, made as in `testQuickLookMasksSecretFiles`) | Only the first token of a `.netrc` keyword or PEM armour line with another token after it (`machine ••••••••`, `-----BEGIN ••••••••`) and the scheme and host of a whole-line credential URL (`https://••••••••@github.com`) show; every other line, comment and `[section]` lines included, is `••••••••` whole |
 | `big-1m.csv` | First 1,000 rows plus the truncated banner |
 | `Dockerfile`, `CHANGELOG`, `.gitignore` | Our plain text |
 | a NUL-containing `blob` (no extension) | System generic preview (icon), no garbage |
