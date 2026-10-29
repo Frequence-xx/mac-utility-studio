@@ -97,7 +97,7 @@ Every account action uses the studio identity: **`marketing@snelverhuizen.nl`** 
 
 - This Mac also holds another organisation's Apple access: **Stichting Tarbiyah Consultancy** (team `72PF8SBQR6`, Keychain certificate "Apple Development: Hamza Bouzaggou (W3Q9G8NSHG)") and a Personal Team `34WLYZ5RS6`, both in Xcode's cached team list. Never sign, upload, enrol or change anything with them.
 - Before any change in a web dashboard, read the signed-in account on the page (the email; on Apple also the team name and id). If it's anything else, stop and tell the user.
-- Signing names the team explicitly (`DEVELOPMENT_TEAM` from `APPLE_TEAM_ID`, notary profile `tegel-notary`), never a team Xcode picks, and `codesign -dv` must show `TeamIdentifier=23N7947PKX`.
+- Signing names the team explicitly (`DEVELOPMENT_TEAM` from `APPLE_TEAM_ID`, notary profile `tegel-notary`), never a team Xcode picks. Every signature that isn't ad hoc must show `TeamIdentifier=23N7947PKX` in `codesign -dv`.
 
 ## Secrets
 

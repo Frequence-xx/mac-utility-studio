@@ -190,7 +190,7 @@ No commit; Task 4 adds `CLOUDFLARE_R2_API_TOKEN`, `R2_ACCESS_KEY_ID`, `R2_SECRET
   ID=$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application: [^"]*(23N7947PKX)\)"/\1/p' | head -1)
   [ "$(envget APPLE_DEVELOPER_ID_IDENTITY)" = "$ID" ] && [ "$(envget APPLE_TEAM_ID)" = "$(printf '%s' "$ID" | sed -n 's/.*(\([A-Z0-9]*\))$/\1/p')" ] && echo match; unset ID
   ```
-  Expected: `saved`, then `match`. The pattern only accepts the studio team `23N7947PKX` (CLAUDE.md "Accounts"), so another team's Developer ID can never match. On a mismatch, `envset APPLE_DEVELOPER_ID_IDENTITY "$ID"` and `envset APPLE_TEAM_ID` with the id in its trailing parentheses (K1 quoting handles the spaces and parentheses).
+  Expected: `saved`, then `match`. The pattern only accepts the studio team `23N7947PKX` (CLAUDE.md "Accounts"), so another team's Developer ID can never match. On a mismatch, re-run the `ID=` line and stop if `ID` is empty (the studio certificate is gone: Step 1). Otherwise `envset APPLE_DEVELOPER_ID_IDENTITY "$ID"` (K1 quoting handles the spaces and parentheses) and `envset APPLE_TEAM_ID 23N7947PKX`.
 - [ ] **Step 3: The App Store Connect API key (done 27 Oct; verify).** The `.p8` is in `~/.appstoreconnect/private_keys/AuthKey_<KEYID>.p8`, not in `~/.tegel-secrets/`; Step 5 moves it.
   - Run: `. scripts/lib/env.sh; need ASC_API_KEY_ID ASC_API_ISSUER_ID && test -f ~/.appstoreconnect/private_keys/"AuthKey_$(envget ASC_API_KEY_ID).p8" && echo ok`
   - Expected: `ok`.
@@ -893,9 +893,9 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   xcodebuild archive -scheme markdown -configuration Release -destination 'generic/platform=macOS' -archivePath build/sig.xcarchive -quiet \
     CODE_SIGN_IDENTITY="$(envget APPLE_DEVELOPER_ID_IDENTITY)" DEVELOPMENT_TEAM="$(envget APPLE_TEAM_ID)"
   A=$(echo build/sig.xcarchive/Products/Applications/*.app)
-  for c in "$A" "$A"/Contents/PlugIns/*.appex; do codesign -dvv "$c" 2>&1 | grep -cE '^Authority=Developer ID Application|^Timestamp=|flags=0x10000\(runtime\)'; done
+  for c in "$A" "$A"/Contents/PlugIns/*.appex; do codesign -dvv "$c" 2>&1 | grep -cE '^Authority=Developer ID Application|^Timestamp=|flags=0x10000\(runtime\)|^TeamIdentifier=23N7947PKX$'; done
   ```
-  Expected: `3` and `3`. The app and the extension are each Developer ID signed, timestamped and hardened.
+  Expected: `4` and `4`. The app and the extension are each Developer ID signed by the studio team, timestamped and hardened.
 - [ ] **Step 6: Commit:** `Config/Release.xcconfig`, "build: Developer ID manual signing, hardened runtime, secure timestamp for Release".
 
 ### Task 12: `scripts/release.sh` (Fri 20 – Sat 21 Nov)

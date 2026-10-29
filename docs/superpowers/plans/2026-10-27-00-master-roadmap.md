@@ -336,7 +336,7 @@ Location: `Fixtures/markdown/`.
 
 Credentials go to `.env` the moment an account exists; `.env.example` names every key.
 
-**Account identity (user instruction, 29 Oct):** every account below is created and used as `marketing@snelverhuizen.nl` (`STUDIO_EMAIL`; `CLOUDFLARE_EMAIL`, `POLAR_EMAIL` and `APPLE_ACCOUNT_EMAIL` hold the same address), and Apple work uses team `23N7947PKX` only. Never the Stichting Tarbiyah Consultancy account or any other one on this Mac. Before any dashboard change, the signed-in account is read off the page first (CLAUDE.md "Accounts").
+**Account identity (user instruction, 29 Oct):** every account below, except GitHub (exists) and the launch-post accounts (H9, the user's decision), is created and used as `marketing@snelverhuizen.nl` (`STUDIO_EMAIL`; `CLOUDFLARE_EMAIL`, `POLAR_EMAIL` and `APPLE_ACCOUNT_EMAIL` hold the same address), and Apple work uses team `23N7947PKX` only. Never the Stichting Tarbiyah Consultancy account or any other one on this Mac. Before any dashboard change, the signed-in account is read off the page first (CLAUDE.md "Accounts").
 
 **Secrets notes:**
 - `.env` is read only through `scripts/lib/env.sh` (`envget`/`envset`, K1). It is never `source`d.

@@ -377,7 +377,7 @@ def o(status, net, pid="prod-md", meta=None, total=None):
   - The ids carry no personal data.
 - [ ] **Step 2: The ritual.** Every **Tuesday 10:30–11:00 CET**, after plan 05's 10:00 support routine.
   - **C, before 10:30:**
-    - export GSC (Performance → Date → Custom: the 30 days ending last Sunday → Export → Download CSV) and unzip it into `docs/growth/kpi/gsc/<week>/` (U does the export if Claude can't log in). One export holds the daily site totals (`Chart.csv`) and the per-page totals for the same 30 days (`Pages.csv`), so the 30-day and per-page triggers below read real 30-day figures (K9; "last 28 days" can't);
+    - export GSC (Performance → Date → Custom: the 30 days ending last Sunday → Export → Download CSV) and unzip it into `docs/growth/kpi/gsc/<week>/` (Google account `marketing@snelverhuizen.nl` only, CLAUDE.md "Accounts"; U does the export if Claude can't log in). One export holds the daily site totals (`Chart.csv`) and the per-page totals for the same 30 days (`Pages.csv`), so the 30-day and per-page triggers below read real 30-day figures (K9; "last 28 days" can't);
     - read the week's qualified visits from the Web Analytics dashboard, then run the KPI command (Task 4) for the last ISO week.
   - **Agenda:**
     1. Funnel vs last week, and the targets table (5 min).
