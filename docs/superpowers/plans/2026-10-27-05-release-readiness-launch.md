@@ -443,6 +443,7 @@ Notes the doc must carry:
 - [ ] **Step 5: Write `docs/ops/support-log.md`.**
   - **Routine:** once a day at 10:00 CET; target ≤ 20 min. Log **every** day, including `0`, so the average is honest.
   - **Buyer sync:** from Wed 9 Dec, once plan 08 Task 14 Step 7 has activated the lifecycle automation, the routine also runs plan 08 Task 14's daily sync command exactly as plan 08 writes it. It adds opted-in buyers only, reconciles every order since launch, and removes refunded buyers (K9).
+  - **Refunds** (14 days, no questions; 🔒 each one, since it moves money and emails a customer): in the Polar dashboard, refund the full order with its benefits revoked (check the option's name in polar.sh's refund docs on the day; if a refund can't revoke, revoke each licence key on the order by hand). Confirm every key on the order shows revoked (a bundle order has two), then send the REFUND template and log it.
   - **Erasure requests** (the privacy page's deletion promise): handle each with plan 08 Task 14's **Erasure** procedure exactly as written (hash appended first, then the MailerLite forget), and log it in `notes` without the address.
   - **Sending:** if replies go out as `hello@tegelapps.com` through anything other than MailerLite, that path must pass plan 08 Task 6 Step 3b's DMARC check (`dmarc=pass` or an aligned `dkim=pass`) before the DMARC record goes in; otherwise `p=quarantine` sends the replies to spam.
   - **Table:** `| date | minutes | mails | refunds | licence | bug/feature | notes |`.
