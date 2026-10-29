@@ -380,7 +380,7 @@ Notes the doc must carry:
 - [ ] **Step 6: Each FAIL becomes a fix.**
   - Open `gh issue create --label bug,1.0.0`.
   - Fix it on `m05-launch` using superpowers:systematic-debugging, then superpowers:test-driven-development (failing test in the layer that owns the bug, then PASS).
-  - Rebuild as `1.0.0-rc2` (Step 2, whose first bullet commits the matrix and evidence so far) and re-run that row. After the lease, arm64 re-checks run on GitHub runners only; say so in the cell.
+  - Rebuild as `1.0.0-rc2` (Step 2: merge `main`, then its commit bullet commits the matrix and evidence so far) and re-run that row. After the lease, arm64 re-checks run on GitHub runners only; say so in the cell.
 - [ ] **Step 7: Matrix green.** No `FAIL` cells remain: `grep -cE 'FAIL #[0-9]+' docs/gates/test-matrix-1.0.md` → `0` (an open issue cell). Commit `git add docs/gates/test-matrix-1.0.md docs/gates/evidence/1.0 docs/superpowers/plans/2026-10-27-05-release-readiness-launch.md` (the plan file holds Step 5's recorded approval), message `docs(gates): test matrix 1.0 with per-machine evidence` + trailer; `git status --porcelain -- . ':(exclude)docs'` → empty.
 
 ### Task 4: Support pages, templates and support log (Fri 27 – Mon 30 Nov)
