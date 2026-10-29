@@ -103,7 +103,7 @@ Needs H3 (studio inbox) and H5 (sandbox org). Sandbox only, so no confirmation i
   - Result: the order shows in Sales.
 - [ ] **Step 8: Get the key.**
   - Note whether the order email to `POLAR_EMAIL` contains the key; the docs only promise it in the portal (polar.sh/docs/features/benefits/license-keys.md).
-  - Copy the key from the portal and `. scripts/lib/env.sh; envset POLAR_SANDBOX_TEST_LICENSE_KEY '<key>'`. Never echo it.
+  - Copy the key from the portal and save it without it touching a command line: `. scripts/lib/env.sh && envset POLAR_SANDBOX_TEST_LICENSE_KEY "$(pbpaste)" && pbcopy </dev/null`. Never echo it.
 - [ ] **Step 9: Check that the 2-Mac limit is enforced server-side** [F3a, F3c, F3e]. The response bodies contain the key, so they go to a temp file that is deleted:
   ```bash
   . scripts/lib/env.sh
@@ -117,7 +117,7 @@ Needs H3 (studio inbox) and H5 (sandbox org). Sandbox only, so no confirmation i
 - [ ] **Step 10: A key from another app (the D1 test fixture).** Task 13 step 13 uses it to prove the benefit binding.
   - Benefits → New → **License Keys**: description `Tegel Test Other licence`, activation limit 2, `enable_customer_admin` ON.
   - Products → New → `Tegel Test Other (not for sale)`, one-time $19, with only that benefit attached. Create a checkout link and buy it as in step 7 (test card; the BNPL look isn't repeated).
-  - Copy the key from the portal and `. scripts/lib/env.sh; envset POLAR_SANDBOX_OTHER_LICENSE_KEY '<key>'`. Never echo it. Result: `. scripts/lib/env.sh; need POLAR_SANDBOX_OTHER_LICENSE_KEY && echo saved` → `saved`.
+  - Copy the key from the portal and `. scripts/lib/env.sh && envset POLAR_SANDBOX_OTHER_LICENSE_KEY "$(pbpaste)" && pbcopy </dev/null`. Never echo it. Result: `. scripts/lib/env.sh; need POLAR_SANDBOX_OTHER_LICENSE_KEY && echo saved` → `saved`.
 - [ ] **Step 11: Sandbox access token**, read later by plan 08 Task 4 Step 1 (orders; checkouts if `reference_id` sits there), plan 06 Task 12 Step 1 and plan 07 F3 Step 4 (a sandbox `--apply` that reads orders and posts discounts).
   - Settings → Organization access tokens → New, named `tegel-sandbox`, no expiry or the longest offered (F3 runs after G4, Oct 2027). Scopes: `orders:read`, `products:read`, `checkouts:read`, `discounts:read`, `discounts:write`. No benefit, product or checkout-link write scope, so plan 06 Task 12 Step 1 takes its dashboard route. A sandbox discount moves no money, so this token isn't one-off like production's `POLAR_DISCOUNTS_TOKEN` (plan 07 F3).
   - Copy it the moment it's shown and save it without it touching a command line: `. scripts/lib/env.sh && envset POLAR_SANDBOX_ACCESS_TOKEN "$(pbpaste)" && pbcopy </dev/null`. The name is already in `.env.example`.
@@ -146,7 +146,7 @@ Needs plan 04's Cloudflare account and the `tegelapps.com` zone, plus H4's card.
   - Check: `dig +short downloads.tegelapps.com | head -1` prints an address, and the dashboard shows the domain as Active.
 - [ ] **Step 4: Create the token.** R2 → Manage API tokens → Create:
   - permission **Object Read & Write**, applied to **`tegel-downloads` only**;
-  - `. scripts/lib/env.sh; envset CLOUDFLARE_R2_API_TOKEN '<token>'`; then `. scripts/lib/env.sh; need CLOUDFLARE_ACCOUNT_ID && echo saved`, and if it exits 1, copy the id from the dashboard and `. scripts/lib/env.sh; envset CLOUDFLARE_ACCOUNT_ID '<id>'`.
+  - copy the token and `. scripts/lib/env.sh && envset CLOUDFLARE_R2_API_TOKEN "$(pbpaste)" && pbcopy </dev/null`; then `. scripts/lib/env.sh; need CLOUDFLARE_ACCOUNT_ID && echo saved`, and if it exits 1, copy the id from the dashboard and `. scripts/lib/env.sh; envset CLOUDFLARE_ACCOUNT_ID '<id>'`.
   - The same page shows the token's **S3 credentials, once**: the Access Key ID and the Secret Access Key (developers.cloudflare.com/r2/api/tokens/; check the wording on the day). Copy each the moment it's shown and save it without it touching a command line: `. scripts/lib/env.sh && envset R2_ACCESS_KEY_ID "$(pbpaste)" && pbcopy </dev/null`, then the same with `R2_SECRET_ACCESS_KEY`. Check: `. scripts/lib/env.sh; need R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY && echo saved` → `saved`.
   - This bucket-scoped token, through those S3 credentials, is the only credential any R2 upload uses (K2). Plan 04's Pages deploy token has no R2 permission.
 - [ ] **Step 5: Verify the S3 credentials with the release script's upload command.** `release.sh` uploads with `curl --aws-sigv4` against R2's S3 endpoint `https://<account id>.r2.cloudflarestorage.com`, region `auto` (developers.cloudflare.com/r2/api/s3/api/; check it on the day), so no npm code runs at release time. This probe uses the same command.
@@ -754,6 +754,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
 - Modify: the `@main` App struct from plan 01 (`grep -l '@main' Apps/Markdown/App/*.swift`, expected `Apps/Markdown/App/MarkdownApp.swift`)
 - Create: `Apps/Markdown/App/LicenceSettingsView.swift`
 - Modify: plan 02's Settings `TabView` (`grep -l 'TabView' Apps/Markdown/App/*.swift`)
+- Modify: plan 02's `Apps/Markdown/App/ProUpsellView.swift`, whose two buttons plan 02 left disabled for this task
 - Modify: `Apps/Markdown/App/Localizable.xcstrings` (plan 02's catalogue; NL/FR/AR for every new string, D6)
 
 **Interfaces:**
@@ -785,6 +786,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
 
   - A `CancellationError` shows nothing: it only means another licence action was already running.
   - The activation label is the hardware model (`hw.model`, such as `iMac19,1`), never the computer name; `LicenseManager` sends it (Task 7).
+  - **ProUpsellView:** enable its two buttons. "Buy Pro…" → `openURL(config.checkoutURL)` (plan 08 Task 12 later adds the `ref`); "Enter Licence Key…" → open Settings on the Licence tab (the Settings `TabView` selection in `@AppStorage("settingsTab")` set to the Licence tab, then `openSettings()`), and close the Pro window.
   - Add the tab `LicenceSettingsView(proSummary: "Pro adds folder mode with search and live reload, paginated PDF export and three themes. One-time purchase for up to 2 Macs, with a 14-day refund.")` with `.tabItem { Label("Licence", systemImage: "key") }` to the Settings `TabView`.
 - [ ] **Step 3: Run the smoke test (GUI), on the build Mac with a Debug build against the sandbox.**
   1. `. scripts/lib/env.sh; envget POLAR_SANDBOX_TEST_LICENSE_KEY | sed 's/^/  /;s/$/\n/' | pbcopy`. This puts the key on the clipboard with leading spaces and a trailing newline, without printing it.
@@ -793,9 +795,10 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   4. Disconnect the network, quit, relaunch. Expected: still Pro, no error. Reconnect.
   5. Deactivate this Mac. Expected: the free copy shows, and the dashboard shows 0 activations.
   6. Type the key `TEGEL-0000` and Activate. Expected: the `.notFound` copy.
+  6b. With the key deactivated (step 5) and the Debug `isPro` override off, open a Pro feature so the Pro window shows. Expected: "Buy Pro…" opens the sandbox checkout in the browser; "Enter Licence Key…" opens Settings on the Licence tab.
   7. `make test-app ONLY=LocalizationTests`. Expected: `Executed 3 tests, with 0 failures` (every new string has NL/FR/AR). Then relaunch with `-AppleLanguages '(nl)'`, then `(fr)`, then `(ar)`. Expected: the Licence tab shows no English, and the AR layout is right-to-left.
 - [ ] **Step 4: Run `make check`.** Expected: baseline + 41 TegelStore tests, all passing.
-- [ ] **Step 5: Commit:** `Apps/Markdown/App/LicenceSettingsView.swift Apps/Markdown/App/MarkdownApp.swift Apps/Markdown/App/Localizable.xcstrings <settings-tabview-file>`, "feat(app): Licence settings tab; LicenseManager feeds isPro; 24 h refresh".
+- [ ] **Step 5: Commit:** `Apps/Markdown/App/LicenceSettingsView.swift Apps/Markdown/App/MarkdownApp.swift Apps/Markdown/App/Localizable.xcstrings <settings-tabview-file> Apps/Markdown/App/ProUpsellView.swift`, "feat(app): Licence settings tab; LicenseManager feeds isPro; 24 h refresh; Pro window buttons wired".
 
 ### Task 10: Sparkle 2.10.1 and EdDSA keys (Fri 20 Nov)
 

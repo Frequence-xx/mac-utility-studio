@@ -797,7 +797,7 @@ test('the tool drops every non-data: image source, same-origin paths included', 
 
 - [ ] **Step 1: Re-validate.** Record the actual names:
   - plan 02's `ProUpsellView`, the `pro` `WindowGroup`, and its folder / PDF / theme `openWindow` call sites;
-  - plan 03's Licence tab and its Buy button, and how "Buy Pro…" and "Enter Licence Key…" in `ProUpsellView` are wired (plan 02 left them to plan 03; if plan 03 didn't wire them, this task does);
+  - plan 03's Licence tab and its Buy button, and how "Buy Pro…" and "Enter Licence Key…" in `ProUpsellView` are wired (plan 03 Task 9 wires them; this task adds the `ref`);
   - how `isPro` reaches views (master §3.3 `EnvironmentValues.isPro`).
 
   Diff these against this task's interfaces, and list any mismatch under "Contract change requests" before coding.

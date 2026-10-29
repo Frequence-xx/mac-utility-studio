@@ -423,11 +423,11 @@ export function maskSecrets(text, { wholeFile = false, structured = false } = {}
   //    structured (Quick Look's JSON/JSONL/YAML/TOML/CSV/TSV/.env input) skips only that pass: an unquoted replacement can
   //    break a parser, while the passes above replace key and token characters only, so the file still parses. The views
   //    apply the name rule after parsing instead: to secret-named keys and columns, and to every rendered string (maskNames above).
-  //    wholeFile (secret dotfiles, Task 5 DataFile.secretFile): then every non-comment line keeps its first token (ended by whitespace,
-  //    `=` or `:`) only when it's a key: a .netrc keyword (`machine`, `default`, `login`, `password`, `account`, `macdef`), a NAME
-  //    followed by `=` or `:` (`//registry/:_authToken`, `aws_secret_access_key`), an INI `[section]`, PEM armour (`-----BEGIN`),
-  //    or the masked credential URL; the rest of the line is '••••••••'. Any other line is '••••••••' whole, so a value on its own
-  //    line (.netrc allows `password` and its value on separate lines) never shows. The lists are explicit, not a scanner.
+  //    wholeFile (secret dotfiles, Task 5 DataFile.secretFile), after the passes above: a line the credential-URL pass masked stays
+  //    as it is (`https://demo:••••••••@example.com`); an INI `[section]` line stays; any other non-comment line keeps its first
+  //    whitespace-separated token only when that token is a .netrc keyword (`machine`, `default`, `login`, `password`, `account`,
+  //    `macdef`) or PEM armour (`-----BEGIN`, `-----END`), and the rest becomes '••••••••'; every other line is '••••••••' whole.
+  //    No `NAME=` clause: a value on its own line (.netrc allows it, and it may hold `=` or `:`) never shows any part. The lists are explicit.
 ```
 
 Parsing rules:
@@ -501,8 +501,8 @@ test('secrets are masked: PEM bodies, token shapes, secret-named values, whole s
   expect(nested).toContain('user: visible');
   const netrc = maskSecrets('machine example.com login demo password not-a-real-secret-9', { wholeFile: true });
   expect(netrc).toContain('machine'); expect(netrc).not.toContain('not-a-real-secret-9');
-  const split = maskSecrets('machine b.example\n  login demo\n  password\n  pwnetrc10\n', { wholeFile: true });   // value on its own line
-  expect(split).toContain('login'); expect(split).not.toContain('pwnetrc10');
+  const split = maskSecrets('machine b.example\n  login demo\n  password\n  pwnetrc10\n  password\n  pwnetrc:11=\n', { wholeFile: true });   // values on their own lines
+  expect(split).toContain('login'); for (const v of ['pwnetrc10', 'pwnetrc', '11']) expect(split).not.toContain(v);
 });
 test('credential URLs and newer token prefixes are masked', () => {
   const gc = maskSecrets('https://demo:' + 'not-a-real-secret-7' + '@example.com', { wholeFile: true }); // .git-credentials line

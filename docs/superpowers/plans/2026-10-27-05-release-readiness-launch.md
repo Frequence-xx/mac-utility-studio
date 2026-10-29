@@ -375,7 +375,7 @@ Notes the doc must carry:
       -d "{\"key\":\"$(envget POLAR_QA_LICENSE_KEY)\",\"organization_id\":\"$(envget POLAR_ORGANIZATION_ID)\",\"label\":\"qa-third\"}"
     ```
 
-  - **Last, before the lease ends:** after items (2)–(4), if macOS 14 is offered, reinstall and repeat R1–R4, R8 and R9 (`m14-arm` manual cells). The reinstalled server has a new host key, so first `. scripts/lib/env.sh; ssh-keygen -R "$(envget REMOTE_MAC_HOST)"`, `envset REMOTE_MAC_PASSWORD` again if the Overview page shows a new one, and re-run plan 01 Task 12 Step 4's key block without its `ssh-keygen` line (the key pair stays). If it isn't offered, follow the matrix note "No GitHub runner covers macOS 14" (the user chooses).
+  - **Last, before the lease ends:** after items (2)–(4), if macOS 14 is offered, reinstall and repeat R1–R4, R8 and R9 (`m14-arm` manual cells). The reinstalled server has a new host key, so first `. scripts/lib/env.sh; ssh-keygen -R "$(envget REMOTE_MAC_HOST)"`, if the Overview page shows a new password, copy it and `envset REMOTE_MAC_PASSWORD "$(pbpaste)" && pbcopy </dev/null`, and re-run plan 01 Task 12 Step 4's key block without its `ssh-keygen` line (the key pair stays). If it isn't offered, follow the matrix note "No GitHub runner covers macOS 14" (the user chooses).
   - **Release the lease by Fri 27 Nov 09:00 and confirm with the user:** delete the server as plan 01 Task 12 Step 10 does (Playwright, type `DELETE`), then remove `~/.ssh/id_ed25519_scaleway*` and the host key (`. scripts/lib/env.sh; ssh-keygen -R "$(envget REMOTE_MAC_HOST)"`) from the build Mac. Expected: the Scaleway console shows no running server.
 - [ ] **Step 6: Each FAIL becomes a fix.**
   - Open `gh issue create --label bug,1.0.0`.

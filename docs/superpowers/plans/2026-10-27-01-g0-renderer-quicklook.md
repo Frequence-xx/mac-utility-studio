@@ -1545,7 +1545,7 @@ Expected:
 - One pluginkit line with `+` (enabled) and the `~/Applications` path.
 - `net.daringfireball.markdown`.
 
-If the ad-hoc-signed extension is **not** listed, record the output. Then re-sign Debug with the local `Apple Development` identity: `CODE_SIGN_IDENTITY = Apple Development` and `DEVELOPMENT_TEAM = W3Q9G8NSHG` in a gitignored `Config/Local.xcconfig`, included by `#include? "Local.xcconfig"` as the **last** line of `Debug.xcconfig` (later lines win, so an include at the top would be overridden by `CODE_SIGN_IDENTITY = -`). Then repeat this step.
+If the ad-hoc-signed extension is **not** listed, record the output. Then re-sign Debug with an `Apple Development` identity of the studio's team: `CODE_SIGN_IDENTITY = Apple Development` and `DEVELOPMENT_TEAM = 23N7947PKX` in a gitignored `Config/Local.xcconfig`. The Keychain's existing `Apple Development: Hamza Bouzaggou (W3Q9G8NSHG)` belongs to another team and is never used (master §1); if no Apple Development certificate for `23N7947PKX` exists yet, create one at developer.apple.com → Certificates with the CSR flow of plan 03 Task 3 (free, part of the membership). The xcconfig is included by `#include? "Local.xcconfig"` as the **last** line of `Debug.xcconfig` (later lines win, so an include at the top would be overridden by `CODE_SIGN_IDENTITY = -`). Then repeat this step.
 
 - [ ] **Step 5: Run the manual previews and screenshots (build Mac, macOS 15.7.7, x86_64)**
 
