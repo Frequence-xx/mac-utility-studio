@@ -775,9 +775,9 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   | State | Content |
   |---|---|
   | `.free` | Text `proSummary`, which App 1 passes as "Pro adds folder mode with search and live reload, paginated PDF export and three themes. One-time purchase for up to 2 Macs, with a 14-day refund." · Button **"Buy Pro…"** → `openURL(config.checkoutURL)` · TextField "Licence key" + Button **"Activate"** (disabled while empty or busy) |
-  | `.pro` | Text "Pro is active on this Mac." · Button **"Deactivate this Mac"** · Button **"Manage activations…"** → `openURL(config.portalURL)` |
-  | `.lapsed` | Text "Tegel couldn't confirm your licence for more than 30 days. Connect to the internet, then click Check Again." · Button **"Check Again"** → `refresh()` · **"Manage activations…"** · Button **"Remove Licence…"** → a confirmation dialog "Remove the licence from this Mac?" with **"Remove Licence"** (destructive) and "Cancel" → `deactivate()`. A 404 (activation already removed in the portal) counts as done, so the `.free` row comes back and the key can be entered again; other errors show their copy below |
-  | error `.limitReached` | "This key is already active on 2 Macs, or it is no longer valid. Free up a Mac in Manage activations, then try again." |
+  | `.pro` | Text "Pro is active on this Mac." · Button **"Deactivate This Mac"** · Button **"Manage Activations…"** → `openURL(config.portalURL)` |
+  | `.lapsed` | Text "Tegel couldn't confirm your licence for more than 30 days. Connect to the internet, then click Check Again." · Button **"Check Again"** → `refresh()` · **"Manage Activations…"** · Button **"Remove Licence…"** → a confirmation dialog "Remove the licence from this Mac?" with **"Remove Licence"** (destructive) and "Cancel" → `deactivate()`. A 404 (activation already removed in the portal) counts as done, so the `.free` row comes back and the key can be entered again; other errors show their copy below |
+  | error `.limitReached` | "This key is already active on 2 Macs, or it is no longer valid. Free up a Mac in Manage Activations, then try again." |
   | error `.notFound` | "That licence key wasn't found. Copy it again from your receipt or the customer portal." |
   | error `.network` | "Couldn't reach the licence server. Check your connection and try again." |
   | error `.http(n)` | "The licence server returned error \(n). Try again later." |
@@ -793,7 +793,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   2. Paste it, then click Activate. Expected: "Pro is active on this Mac", and folder mode is enabled.
   3. Sandbox dashboard → the order's licence key → activations. Expected: one activation whose label equals `sysctl -n hw.model` (`iMac19,1` here), not `scutil --get ComputerName`. This also confirms `sysctlbyname("hw.model")` works inside the sandbox.
   4. Disconnect the network, quit, relaunch. Expected: still Pro, no error. Reconnect.
-  5. Deactivate this Mac. Expected: the free copy shows, and the dashboard shows 0 activations.
+  5. Deactivate This Mac. Expected: the free copy shows, and the dashboard shows 0 activations.
   6. Type the key `TEGEL-0000` and Activate. Expected: the `.notFound` copy.
   6b. With the key deactivated (step 5) and the Debug `isPro` override off, open a Pro feature so the Pro window shows. Expected: "Buy Pro…" opens the sandbox checkout in the browser; "Enter Licence Key…" opens Settings on the Licence tab.
   7. `make test-app ONLY=LocalizationTests`. Expected: `Executed 3 tests, with 0 failures` (every new string has NL/FR/AR). Then relaunch with `-AppleLanguages '(nl)'`, then `(fr)`, then `(ar)`. Expected: the Licence tab shows no English, and the AR layout is right-to-left.
@@ -1190,7 +1190,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   - Paste the key with leading spaces and a trailing newline → Activate. Expected: "Pro is active on this Mac", and folder mode works.
   - Dashboard: the activation label = `sysctl -n hw.model`.
 - [ ] **Step 11 (GUI): offline relaunch.** Disconnect the network, ⌘Q, relaunch. Expected: still Pro, no error dialog. Reconnect.
-- [ ] **Step 12 (GUI): deactivate.** Deactivate this Mac. Expected: the free copy, and 0 activations in the dashboard.
+- [ ] **Step 12 (GUI): deactivate.** Deactivate This Mac. Expected: the free copy, and 0 activations in the dashboard.
 - [ ] **Step 13: Error copy.**
   - Key `TEGEL-0000` → the `.notFound` copy.
   - Fill both slots of `POLAR_SANDBOX_TEST_LICENSE_KEY` (the activation ids go to a gitignored file, because the next block runs in another shell):
@@ -1214,9 +1214,9 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
   - **Another app's key is rejected (D1).** Paste `POLAR_SANDBOX_OTHER_LICENSE_KEY` (Task 1 step 10) as in step 10, then Activate → the `.wrongProduct` copy, and the app stays free. Then prove no activation was left on that key (its limit is 2): run Task 1 step 9's block with `K=$(envget POLAR_SANDBOX_OTHER_LICENSE_KEY)` and without `act probe-3`. Expected: `200`, `200`, `204`, `204`. A `403` on probe-2 means the app left an activation behind.
 - [ ] **Step 14 (GUI): the 404 rule, live.**
   1. Activate in the app.
-  2. Manage activations… opens the portal; sign in with the emailed code and deactivate this Mac there. This exercises `enable_customer_admin`.
+  2. Manage Activations… opens the portal; sign in with the emailed code and deactivate this Mac there. This exercises `enable_customer_admin`.
   3. ⌘Q, then relaunch online. Expected: **still Pro** (validate 404 → grace).
-  4. Deactivate this Mac. Expected: free (a 404 counts as already done).
+  4. Deactivate This Mac. Expected: free (a 404 counts as already done).
 - [ ] **Step 15 (GUI): auto-update toggle.**
   - In Settings ▸ Updates, turn "Check for updates automatically" off, ⌘Q, then `defaults read ~/Library/Containers/com.tegelapps.markdown/Data/Library/Preferences/com.tegelapps.markdown SUEnableAutomaticChecks` → `0`.
   - Turn it back on → `1`.
