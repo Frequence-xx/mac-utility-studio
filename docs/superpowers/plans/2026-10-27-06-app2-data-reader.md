@@ -424,10 +424,12 @@ export function maskSecrets(text, { wholeFile = false, structured = false } = {}
   //    break a parser, while the passes above replace key and token characters only, so the file still parses. The views
   //    apply the name rule after parsing instead: to secret-named keys and columns, and to every rendered string (maskNames above).
   //    wholeFile (secret dotfiles, Task 5 DataFile.secretFile), after the passes above: a line that is nothing but one masked credential
-  //    URL once trimmed (`https://demo:••••••••@example.com`, a .git-credentials line) stays as it is; an INI `[section]` line stays; any other non-comment line keeps its first
+  //    URL once trimmed (`https://demo:••••••••@example.com`, a .git-credentials line) stays as it is; any other non-comment line keeps its first
   //    whitespace-separated token only when that token is a .netrc keyword (`machine`, `default`, `login`, `password`, `account`,
-  //    `macdef`) or PEM armour (`-----BEGIN`, `-----END`), and the rest becomes '••••••••'; every other line is '••••••••' whole.
-  //    No `NAME=` clause: a value on its own line (.netrc allows it, and it may hold `=` or `:`) never shows any part. The lists are explicit.
+  //    `macdef`) or PEM armour (`-----BEGIN`, `-----END`) and another token follows it, and the rest becomes '••••••••'; every other
+  //    line is '••••••••' whole, `[section]` lines included. No `NAME=` clause and no shape exception: a value on its own line (.netrc
+  //    allows it, and it may look like `[x]`, a keyword, or hold `=` or `:`) never shows any part. The lists are explicit. Accepted
+  //    ceiling: a .netrc value shaped like a credential URL shows its user and host (its password part is masked).
 ```
 
 Parsing rules:
@@ -501,8 +503,8 @@ test('secrets are masked: PEM bodies, token shapes, secret-named values, whole s
   expect(nested).toContain('user: visible');
   const netrc = maskSecrets('machine example.com login demo password not-a-real-secret-9', { wholeFile: true });
   expect(netrc).toContain('machine'); expect(netrc).not.toContain('not-a-real-secret-9');
-  const split = maskSecrets('machine b.example\n  login demo\n  password\n  pwnetrc10\n  password\n  pwnetrc:11=\n', { wholeFile: true });   // values on their own lines
-  expect(split).toContain('login'); for (const v of ['pwnetrc10', 'pwnetrc', '11']) expect(split).not.toContain(v);
+  const split = maskSecrets('machine b.example\n  login demo\n  password\n  pwnetrc10\n  password\n  pwnetrc:11=\n  password\n  [pwnetrc15]\n  password\n  account\n', { wholeFile: true });   // values on their own lines
+  expect(split).toContain('login'); for (const v of ['pwnetrc10', '[pwnetrc15]', 'pwnetrc', '11', 'account']) expect(split).not.toContain(v);
   const withUrl = maskSecrets('machine example.com login demo password pwnetrc12 # see https://demo:pwurl13@example.com', { wholeFile: true });
   expect(withUrl).toContain('machine'); for (const v of ['pwnetrc12', 'pwurl13']) expect(withUrl).not.toContain(v);   // a URL on the line keeps nothing
 });
@@ -548,11 +550,13 @@ test('secret-named keys and columns are masked in tree, row and table views', ()
 - [ ] **Step 2: Run it, expect FAIL.** `cd Renderer && bun test test/data-dotenv.test.js`. Expected: FAIL, `Cannot find module '../src/data/dotenv.js'`.
 - [ ] **Step 3: Implement `parseDotenv`, `envHTML` and `maskSecrets`.** A single line-cursor loop that applies the rules above. `envHTML` emits keys, comments (through `maskSecrets` before escaping) and error rows from `parsed`, and only the index `k` for each value. `maskSecrets` is four regex passes in the interface's order (PEM body, credential URL, token shapes, then the secret-named assignment unless `structured`) plus the `wholeFile` line rule. `isSecretName` is one case-insensitive regex, shared by that pass and the three `maskNames` options.
 - [ ] **Step 4: Run it, expect PASS.** `cd Renderer && bun test test/data-dotenv.test.js`. Expected: 14 pass.
-- [ ] **Step 5: Watch the two credential rules fail.** One at a time, then restore each and re-run to 14 pass:
+- [ ] **Step 5: Watch the credential rules fail.** One at a time, then restore each and re-run to 14 pass:
   - delete the credential-URL pass. Expected: FAIL in `credential URLs and newer token prefixes…`: the first assertion's output contains `pwurl14`;
   - delete `github_pat_` from the token shapes. Expected: FAIL in the same test, the output contains `DDDDDDDD`;
   - make a masked bad JSONL row show the parser's message instead of `labels.parseError`. Expected: FAIL in `secret-named keys and columns are masked…`, the output contains `pwnotreal6`;
-  - make the whole-file rule keep every line's first token. Expected: FAIL in `secrets are masked…`, the output contains `pwnetrc10`.
+  - make the whole-file rule keep every line's first token. Expected: FAIL in `secrets are masked…`, the output contains `pwnetrc10`;
+  - add an exception that keeps a line that is `[…]` once trimmed (an INI section). Expected: FAIL in the same test, the output contains `[pwnetrc15]`;
+  - drop the "another token follows" condition. Expected: FAIL in the same test, the output contains `account`.
 - [ ] **Step 6: Commit:** `Renderer/src/data/dotenv.js Renderer/src/data/tree.js Renderer/src/data/table.js Renderer/src/data/jsonl.js Renderer/test/data-dotenv.test.js Fixtures/data/sample.env`, `feat(renderer): .env parser and secret masking, values kept out of the HTML` + trailer.
 
 ---
@@ -719,7 +723,7 @@ View rules:
 | `sample.json`, `.yaml`, `.toml`, `.jsonl`, `x.ndjson` | Our tree or rows, Tegel footer |
 | `sample.csv`, `sample.tsv`, `quoted-newline.csv` | Our table, header detected, the quoted newline in one cell |
 | `prod.env` and `.env` (copies of `sample.env`) | Keys shown; every value is `••••••••`; clicking reveals nothing |
-| `.netrc`, `.git-credentials`, `credentials`, `id_rsa` (temp files with fake values, made as in `testQuickLookMasksSecretFiles`) | Only `.netrc` keywords, PEM armour lines, `[section]` lines and masked-URL lines (`https://demo:••••••••@…`) show; every other line is `••••••••` whole |
+| `.netrc`, `.git-credentials`, `credentials`, `id_rsa` (temp files with fake values, made as in `testQuickLookMasksSecretFiles`) | Only `.netrc` keywords followed by a value, PEM armour lines and masked-URL lines (`https://demo:••••••••@…`) show; every other line, `[section]` lines included, is `••••••••` whole |
 | `big-1m.csv` | First 1,000 rows plus the truncated banner |
 | `Dockerfile`, `CHANGELOG`, `.gitignore` | Our plain text |
 | a NUL-containing `blob` (no extension) | System generic preview (icon), no garbage |
