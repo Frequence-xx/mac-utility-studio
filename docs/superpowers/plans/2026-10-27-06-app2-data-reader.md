@@ -1039,7 +1039,7 @@ swift -e 'import AppKit; print(NSWorkspace.shared.urlForApplication(withBundleId
 - Create: `site/content/en/claude-code-transcript-viewer.md` (target query "view claude code transcripts"). It explains where the transcripts live (DF9, DF10) and that the app only reads them.
 - Modify: `site/config.json`. Set `apps.data.priceEUR` and `regularPriceEUR` to Task 12's confirmed EUR amount (default `"15"`, pending the user, K10), and add `"bundle": { "name": "Tegel Bundle", "page": "/bundle/", "price": "29", "regularPrice": "29", "intro": false, "priceEUR": "29", "regularPriceEUR": "29", "launchDate": "2027-02-02", "minMacOS": "14.0", "checkoutURL": "" }` (plan 04 Task 16 assigns `apps.bundle` to this plan; `launchDate` and `minMacOS` complete its JSON-LD offer). Both `checkoutURL`s stay `""` and no page uses `{{checkout:data}}` or `{{checkout:bundle}}` until Task 16 Step 4 (plan 04's `fill` throws on an empty one; with it empty, the JSON-LD offer URL falls back to the page). **No nl or fr page prices App 2 or the bundle until these EUR amounts equal Task 12's Polar price query** (`[('eur', 1500), ('usd', 1500)]`; plan 04's build throws on an empty EUR amount).
 - Modify: `site/test/pages.test.js` (plan 04's file; B19).
-- Create: `site/content/en/bundle.md`, for plan 04's W14 bundle row (plan 06 owns the bundle): "Both apps, one licence each, 2 Macs per app: {{price:bundle}}. Bought separately they cost {{price:markdown}} and {{price:data}}." Both prices are current and real, so there's no "was" price and no countdown (rule 6). It states the 14-day refund and "one key per app", and "Already own Tegel Markdown? Buy Tegel Data on its own: {{price:data}}."; its Buy link `{{checkout:bundle}}` comes in Task 16 Step 4.
+- Create: `site/content/en/bundle.md`, for plan 04's W14 bundle row (plan 06 owns the bundle): "Both apps, one licence each, 2 Macs per app: {{price:bundle}}. Bought separately they cost {{price:markdown}} and {{price:data}}." Both prices are current and real, so there's no "was" price and no countdown (rule 6). It states the 14-day refund and "one key per app", and "Already own Tegel Markdown? Buy Tegel Data on its own: {{price:data}}."; if plan 04 Task 14 Step 3 recorded "US total + sales tax" (its en `pricing.licence` then holds "US sales tax is added at checkout where it applies."), that sentence follows the prices once; its Buy link `{{checkout:bundle}}` comes in Task 16 Step 4.
 
 **Interfaces:**
 - Consumes: plan 04's page register, front-matter keys, build command and sitemap (Task 0 #10).
@@ -1051,7 +1051,9 @@ swift -e 'import AppKit; print(NSWorkspace.shared.urlForApplication(withBundleId
 test('App 2 pages carry price and licence limits from config', () => {
   expect(s.read(page('/data/'))).toContain(fill('{{pricing:data}}', 'en', config))
   const b = s.read(page('/bundle/')); expect(b).toContain(fill('{{price:bundle}}', 'en', config)); expect(b).toContain('2 Macs per app')
-  expect(scan(b).ld.find(o => o['@type'] === 'SoftwareApplication')).toMatchObject({ name: 'Tegel Bundle', offers: { price: config.apps.bundle.price } }) })
+  expect(scan(b).ld.find(o => o['@type'] === 'SoftwareApplication')).toMatchObject({ name: 'Tegel Bundle', offers: { price: config.apps.bundle.price } })
+  const tax = 'US sales tax is added at checkout where it applies.'
+  if (config.pricing.licence.en.includes(tax)) expect(b).toContain(tax) })
 test('App 2 copy makes no claim the build Mac cannot prove', () => { for (const p of PHASES.APP2)
   expect([p, /klarna|afterpay|giveaway|apple silicon ready|works on macos 2[67]/i.test(s.read(page(p)))]).toEqual([p, false]) })
 ```
