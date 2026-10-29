@@ -507,9 +507,9 @@ test('secrets are masked: PEM bodies, token shapes, secret-named values, whole s
   expect(withUrl).toContain('machine'); for (const v of ['pwnetrc12', 'pwurl13']) expect(withUrl).not.toContain(v);   // a URL on the line keeps nothing
 });
 test('credential URLs and newer token prefixes are masked', () => {
+  expect(maskSecrets('git clone https://demo:pwurl14@example.com/r.git')).not.toContain('pwurl14');   // first: ordinary text, only the URL pass catches it
   const gc = maskSecrets('https://demo:' + 'not-a-real-secret-7' + '@example.com', { wholeFile: true }); // .git-credentials line
   expect(gc).toContain('https://demo:'); expect(gc).toContain('@example.com'); expect(gc).not.toContain('not-a-real-secret-7');
-  expect(maskSecrets('git clone https://demo:pwurl14@example.com/r.git')).not.toContain('pwurl14');   // ordinary text: only the URL pass catches it
   const toks = ['github' + '_pat_' + 'D'.repeat(40), 'gl' + 'pat-' + 'E'.repeat(20), 'AKIA' + 'F'.repeat(16) + ' ' + 'g/H+'.repeat(10)];
   const out = maskSecrets(toks.join('\n'));
   for (const s of ['DDDDDDDD', 'EEEEEEEE', 'FFFFFFFF', 'g/H+g/H+']) expect(out).not.toContain(s);
@@ -549,7 +549,7 @@ test('secret-named keys and columns are masked in tree, row and table views', ()
 - [ ] **Step 3: Implement `parseDotenv`, `envHTML` and `maskSecrets`.** A single line-cursor loop that applies the rules above. `envHTML` emits keys, comments (through `maskSecrets` before escaping) and error rows from `parsed`, and only the index `k` for each value. `maskSecrets` is four regex passes in the interface's order (PEM body, credential URL, token shapes, then the secret-named assignment unless `structured`) plus the `wholeFile` line rule. `isSecretName` is one case-insensitive regex, shared by that pass and the three `maskNames` options.
 - [ ] **Step 4: Run it, expect PASS.** `cd Renderer && bun test test/data-dotenv.test.js`. Expected: 14 pass.
 - [ ] **Step 5: Watch the two credential rules fail.** One at a time, then restore each and re-run to 14 pass:
-  - delete the credential-URL pass. Expected: FAIL in `credential URLs and newer token prefixes…`: the ordinary-text output contains `pwurl14` (the whole-file `gc` line is then masked whole, so it fails on `toContain('https://demo:')` instead of leaking);
+  - delete the credential-URL pass. Expected: FAIL in `credential URLs and newer token prefixes…`: the first assertion's output contains `pwurl14`;
   - delete `github_pat_` from the token shapes. Expected: FAIL in the same test, the output contains `DDDDDDDD`;
   - make a masked bad JSONL row show the parser's message instead of `labels.parseError`. Expected: FAIL in `secret-named keys and columns are masked…`, the output contains `pwnotreal6`;
   - make the whole-file rule keep every line's first token. Expected: FAIL in `secrets are masked…`, the output contains `pwnetrc10`.
