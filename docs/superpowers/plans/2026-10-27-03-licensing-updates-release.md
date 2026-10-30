@@ -177,7 +177,7 @@ No commit; Task 4 adds `CLOUDFLARE_R2_API_TOKEN`, `R2_ACCESS_KEY_ID`, `R2_SECRET
 **Interfaces:**
 - Produces these `.env` names, used by Tasks 11–13: `APPLE_DEVELOPER_ID_IDENTITY`, `APPLE_TEAM_ID`, `ASC_API_KEY_ID`, `ASC_API_ISSUER_ID` (Team keys only), `NOTARY_KEYCHAIN_PROFILE`. No key path: `ASC_API_KEY_PATH` is set on 27 Oct and Step 5 empties it, because the `.p8` doesn't stay on disk.
 - Keychain: the Developer ID identity and the `tegel-notary` profile.
-- The offline key store, `TegelKeys` (default: an encrypted APFS image the user keeps on external media). Task 10 adds the Sparkle key to it.
+- The offline key store, `TegelKeys` (K3, answered 29 Oct, master §5): an encrypted APFS image on external media, with a second copy on a USB stick kept away from the Mac (Step 5 item 4). Task 10 adds the Sparkle key to it.
 
 - [ ] **Step 1: The certificate (done 27 Oct; verify).**
   - Run: `security find-identity -v -p codesigning | grep -c '"Developer ID Application: .*(23N7947PKX)"'; security find-certificate -c "Developer ID Application" -p | openssl x509 -noout -enddate`
@@ -209,7 +209,7 @@ No commit; Task 4 adds `CLOUDFLARE_R2_API_TOKEN`, `R2_ACCESS_KEY_ID`, `R2_SECRET
      find ~/.tegel-signing ~/.tegel-secrets -type f \( -name '*.key' -o -name '*.p8' -o -name '*.p12' \) 2>/dev/null
      ```
      Expected: two paths, `devid-application.key` and `AuthKey_<KEYID>.p8`. Only this app's key moves; any other `.p8` in `~/.appstoreconnect/private_keys/` isn't Tegel's and stays.
-  2. **Ask the user where the encrypted store lives** (USER item K3). Default: an AES-256 encrypted APFS image on external media, with its passphrase in the user's password manager. For the default, the **user** runs this in Terminal, because both commands prompt for the passphrase:
+  2. **The encrypted store** (K3, answered 29 Oct, master §5; don't ask again): an AES-256 encrypted APFS image, with its passphrase in the user's password manager. The **user** runs this in Terminal, because both commands prompt for the passphrase:
      `hdiutil create -size 20m -fs APFS -encryption AES-256 -volname TegelKeys ~/TegelKeys.dmg && hdiutil attach ~/TegelKeys.dmg`
   3. Claude copies each file, checks the copy, deletes the original, empties the key path in `.env`, and confirms nothing broke:
      ```bash
@@ -225,7 +225,7 @@ No commit; Task 4 adds `CLOUDFLARE_R2_API_TOKEN`, `R2_ACCESS_KEY_ID`, `R2_SECRET
      xcrun notarytool history --keychain-profile tegel-notary >/dev/null && echo notary-ok
      ```
      Expected: the two file names, then `0`, `no-path`, `1`, `notary-ok`. Step 4 already showed the profile works without the `.p8` on disk; a `notary-ok` failure here is something else, so record the error and ask the user.
-  4. The **user** moves `~/TegelKeys.dmg` to the external media and deletes the local copy.
+  4. **Two copies (K3).** The **user** copies `~/TegelKeys.dmg` to the external working medium and to the second USB stick, which is kept away from the Mac. For each, `cmp ~/TegelKeys.dmg <medium>/TegelKeys.dmg` prints nothing. Then the user deletes the local copy. **After any later change to the store** (Step 6, Task 10), the user copies the changed image over the one on the second stick and checks it with `cmp` the same way, so the two copies never differ.
 - [ ] **Step 6: Renew the certificate by Fri 12 Nov 2027** (it expires Fri 26 Nov 2027, 11:25 UTC). Apps already signed and notarised keep opening after it expires, because their signatures are timestamped, but no new build can be signed, so a missed renewal blocks every update and release.
   - Make a new key and CSR without printing values:
     ```bash
@@ -235,7 +235,7 @@ No commit; Task 4 adds `CLOUDFLARE_R2_API_TOKEN`, `R2_ACCESS_KEY_ID`, `R2_SECRET
     ```
   - The **user** uploads the CSR as a new **Developer ID Application** certificate (G2 Sub-CA); Claude imports the key and the `.cer` as in Step 1.
   - Delete the old certificate in Keychain Access (sort by expiry date): two identities with one name make the name in `APPLE_DEVELOPER_ID_IDENTITY` ambiguous to `codesign`. Then Step 1's check prints `1` and the new `notAfter`, and Step 2 prints `match`.
-  - Run Task 11 step 5's signed archive check. Then the **user** attaches `TegelKeys` (`hdiutil attach <path>/TegelKeys.dmg`) and Claude runs Step 5 item 3, which moves `devid-application-2027.key` into the store; the expected counts are the same.
+  - Run Task 11 step 5's signed archive check. Then the **user** attaches `TegelKeys` (`hdiutil attach <path>/TegelKeys.dmg`) and Claude runs Step 5 item 3, which moves `devid-application-2027.key` into the store; the expected counts are the same. Then the user refreshes the second copy (Step 5 item 4).
 
 No commit.
 
@@ -846,7 +846,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
     build/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys --account tegelapps -x /Volumes/TegelKeys/sparkle-ed25519-tegelapps.key
     ls /Volumes/TegelKeys; hdiutil detach /Volumes/TegelKeys
     ```
-    Expected: `sparkle-ed25519-tegelapps.key`, beside Task 3's `AuthKey_<KEYID>.p8` and `devid-application.key` once those exist. The user puts the media away.
+    Expected: `sparkle-ed25519-tegelapps.key`, beside Task 3's `AuthKey_<KEYID>.p8` and `devid-application.key` once those exist. If the store was created just now, the user makes its two copies with Task 3 Step 5 item 4; otherwise they refresh the second copy as that item says. Then both media go away.
   - Put the public key, which is public by design, into `project.yml` as `SUPublicEDKey`.
   - **App:** `CommandGroup(after: .appInfo) { Button("Check for Updates…") { updaterController.updater.checkForUpdates() } }`.
   - **Settings:** add the tab `UpdatesSettingsView(updater: updaterController.updater)` with `.tabItem { Label("Updates", systemImage: "arrow.triangle.2.circlepath") }` after Licence. Its `Form` holds (plan 09 Settings spec):

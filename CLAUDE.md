@@ -176,6 +176,7 @@ Base = the commit the milestone branch started from (`git merge-base HEAD main`)
 8. **Bloat audit (post):** re-run the Bloat Audit over the final cumulative diff, with the same rules as stage 1.
 9. **gstack `/review` + cubic:**
    - Run `/review`, then `cubic review -b <base-sha> -j` from the repo root. The JSON key is `issues`.
+   - Cubic's subscription has lapsed and isn't renewed (user, 29 Oct). Until it is, each round is a cold Claude review subagent plus `codex exec -s read-only` on the same range, and every plan step that runs cubic uses that substitute.
    - Re-run after each fix batch until **two consecutive rounds show no new P0/P1**. Cubic can't converge while an agent is still writing to the tree, so stabilise first.
 
 **If a stage can't run:** say which stage, why, and what you ran instead. Never skip silently.
