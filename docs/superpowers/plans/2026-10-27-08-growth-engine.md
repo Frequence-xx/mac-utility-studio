@@ -1208,7 +1208,7 @@ Rules were read on 27 Oct from each primary source (repo `CONTRIBUTING.md`/READM
   6. Log: date, venue, URL, approval, and the article's Web Analytics visits over 7 days.
 - [ ] **Step 3: Brand accounts 🔒** (U creates them; open question 2).
   - Name `Tegel Apps`, handle `tegelapps` (or the nearest free one); avatar = the tile; bio `Native, read-only Mac apps. Made in the Netherlands.`
-  - No face anywhere (HR6). Credentials go in `.env` (names in `.env.example`).
+  - No face anywhere (HR6). Handles and emails go in `.env` (add the names to `.env.example`); each password goes in the Keychain as `tegel-<service>`, e.g. `tegel-bluesky`, `tegel-mastodon` (master §6).
   - Mastodon instance: one that allows commercial project accounts. Check the instance rules before signing up; Fosstodon is FOSS-only, so not that one.
 - [ ] **Step 4: Silent clips** from plan 05's demo: `ffmpeg -ss <start> -t 8 -i site/static/media/tegel-markdown-demo.mp4 -an -vf "fps=24,scale=1080:-2" -c:v libx264 -crf 24 -pix_fmt yuv420p -movflags +faststart docs/growth/clips/<name>.mp4`. Each clip passes the Task 1 `ffprobe` audio check (empty output).
 - [ ] **Step 5: Localised timing** for RTL communities. Post Sunday to Wednesday at 10:00 local time (the weekend is Fri–Sat in most Arabic-speaking countries and in Israel, and Friday in Iran). No tie-in with Ramadan, Eid, Nowruz or Jewish holidays (HR8, HR9). Never frame the apps for inburgering or immigration (HR7).
