@@ -726,7 +726,7 @@ Plan 06 creates the $29 bundle (Polar product, BNPL check, site copy at `site/co
 - [ ] **Step 2: Rule 1 decision (the user's).** Joining means a Setapp edition that reports usage to Setapp — an exception to "No telemetry". Options: (a) accept it for the Setapp edition only, disclosed on `tegelapps.com/privacy` ("The Setapp edition reports usage to Setapp under Setapp's privacy policy; the direct and App Store editions report nothing"); (b) don't join. Record `Decision: GO | NO-GO` with the user's sign-off. **Default NO-GO** until signed; NO-GO skips Steps 3–4 and C3–C4. **Answered 29 Oct (master §5): no, so record NO-GO** unless the user reverses it.
 - [ ] **Step 3: Application** in `docs/setapp/application.md`: name; one-line description; the gap it fills (RTL Markdown with paginated PDF and a Quick Look tier); category; website; silent demo URL; 5 screenshots (reuse `docs/mas/screenshots`); macOS 14+, universal; contact `hello@tegelapps.com`. The user approves the text, then it goes in through the setapp.com/developers form ("Get in touch"). Check: the confirmation email has arrived.
 - [ ] **Step 4: Contracting entity.** When the developer agreement arrives, record the legal party it names. The site operator is "MacPaw Way Ltd., … Limassol, Cyprus" (setapp.com footer); the agreement's party is unverified. Add the VAT question to H10 (BUSINESS-PLAN §15). The user signs; Claude never does.
-- [ ] **Step 5: Commit both docs.** C3 starts only after Setapp accepts.
+- [ ] **Step 5: Commit both docs** (NO-GO: only `docs/gates/setapp.md`, as Step 3 never ran). C3 starts only after Setapp accepts.
 
 ### Task C3: `MarkdownSetapp` targets
 

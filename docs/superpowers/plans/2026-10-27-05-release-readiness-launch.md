@@ -235,7 +235,7 @@ Each 🔒 step is a live, outward-facing change. Show the user the exact values,
 - [ ] **Step 7 🔒 QA licence.** It gives a production key for the matrix without a real sale.
   - Create discount `QA-INTERNAL`: 100%, max redemptions 1 (single-use), ends 2026-12-07. Hidden: it's never published, and the public link has discount codes off (Step 6), so nobody can type it in.
   - Create a separate, unpublished checkout link with that discount preset. Claude fills it with the studio email, **leaving the opt-in box as it loads** (unticked); the **user** clicks the final button (master §6: the success page may list the key).
-  - Save the key from the receipt as `POLAR_QA_LICENSE_KEY`.
+  - The **user** copies the key from the receipt; save it as `POLAR_QA_LICENSE_KEY` (`envset` from the pasteboard, master §6).
   - Expected: key check → `set`. The $0 order is excluded from G1 by Task 6.
   - Expected, K9 semantics on a real order: the command below prints `False` (the untouched box did not record consent).
 
@@ -364,7 +364,7 @@ Notes the doc must carry:
   - **L2 is shared, in this order:** (1) this plan's matrix on macOS 27; (2) plan 03's arm64/macOS 27 acceptance with b2; (3) plan 02's pending arm64 checks; (4) plan 08's Quick Look deep-link check; (5) **last:** reinstall macOS 14 if offered, then the macOS 14 leg.
   - **Operator:**
     - SSH parts: Claude via `REMOTE_MAC_*`;
-    - GUI rows: the user over Screen Sharing, or Claude through the computer-use skill driving Screen Sharing on the build Mac; a row with a licence key on screen is the user's (master §6).
+    - GUI rows: the user over Screen Sharing, or Claude through the computer-use skill driving Screen Sharing on the build Mac; a row with a licence key on screen is the user's, and so is the Screen Sharing sign-in, pasted from `REMOTE_MAC_PASSWORD` (`envget REMOTE_MAC_PASSWORD | tr -d '\n' | pbcopy`, then `pbcopy </dev/null`; master §6).
   - **Run:** `scp` the DMG, `Fixtures/` and Step 4's `rc-feed/` over, and serve `rc-feed/` on that Mac. Then, in Step 4's order: R10 first (b2 from the copied folder, then the update to rc1), then R1 with `smoke-dmg.sh`, R2–R9 and R11. Item (2), plan 03's leg, stops this server and serves its own `beta-feed/` (betas only: b1, b2 and any b3, with a sandbox key; plan 03 Hand-off 1).
   - **R9 extra:** with both Macs activated, the call below (run on the build Mac) returns `403` [F3a]. Then deactivate on both Macs. Expected: the customer portal shows 0 activations (screenshot of the activations list, key cropped out; master §6).
 
