@@ -62,7 +62,7 @@ Task 3 Step 5 (keys at rest, K3) still runs before them.
 - **Swift tests:** `swift test --package-path Packages/TegelKit --filter <Suite>`.
 - **Commits:** "Commit: `<paths>`, `<message>`" means `git add <paths> && git commit -m "<message>" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`.
 
-**GUI steps** are marked *(GUI)*. The user does them, or Claude does them through the computer-use skill. Playwright is used for web dashboards only.
+**GUI steps** are marked *(GUI)*. The user does them, or Claude does them through the computer-use skill, except while a licence key is on screen, which is the user's (master §6). Playwright is used for web dashboards only.
 
 ---
 
@@ -99,7 +99,7 @@ Needs H3 (studio inbox) and H5 (sandbox org). Sandbox only, so no confirmation i
   - Email = the `POLAR_EMAIL` value. Sandbox emails reach org members only (polar.sh/docs/integrate/sandbox.md).
   - **Before paying**, set the billing country to **Netherlands**, then to **United States**, and list every payment method offered. Save `browser_take_screenshot` to `local-docs/m03/bnpl-sandbox.png`.
   - If any pay-later method appears (Klarna, Afterpay, Affirm, Riverty, "pay in 3"), **stop and tell the user** (product rule 7).
-  - Pay with `4242 4242 4242 4242`, any future expiry, any CVC.
+  - Claude fills `4242 4242 4242 4242`, any future expiry, any CVC; the **user** clicks Pay, and Claude makes no Playwright call on the success page, which may list the key (master §6).
   - Result: the order shows in Sales.
 - [ ] **Step 8: Get the key.**
   - Note whether the order email to `POLAR_EMAIL` contains the key; the docs only promise it in the portal (polar.sh/docs/features/benefits/license-keys.md).
