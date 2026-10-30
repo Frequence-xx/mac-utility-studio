@@ -103,7 +103,7 @@ Needs H3 (studio inbox) and H5 (sandbox org). Sandbox only, so no confirmation i
   - Result: the order shows in Sales.
 - [ ] **Step 8: Get the key.**
   - Note whether the order email to `POLAR_EMAIL` contains the key; the docs only promise it in the portal (polar.sh/docs/features/benefits/license-keys.md).
-  - Copy the key from the portal and save it without it touching a command line: `. scripts/lib/env.sh && envset POLAR_SANDBOX_TEST_LICENSE_KEY "$(pbpaste)" && pbcopy </dev/null`. Never echo it.
+  - The **user** opens the key in the portal and copies it, and Claude makes no Playwright call while it is on screen (master §6). Save it without it touching a command line: `. scripts/lib/env.sh && envset POLAR_SANDBOX_TEST_LICENSE_KEY "$(pbpaste)" && pbcopy </dev/null`. Never echo it.
 - [ ] **Step 9: Check that the 2-Mac limit is enforced server-side** [F3a, F3c, F3e]. The response bodies contain the key, so they go to a temp file that is deleted:
   ```bash
   . scripts/lib/env.sh
@@ -117,10 +117,10 @@ Needs H3 (studio inbox) and H5 (sandbox org). Sandbox only, so no confirmation i
 - [ ] **Step 10: A key from another app (the D1 test fixture).** Task 13 step 13 uses it to prove the benefit binding.
   - Benefits → New → **License Keys**: description `Tegel Test Other licence`, activation limit 2, `enable_customer_admin` ON.
   - Products → New → `Tegel Test Other (not for sale)`, one-time $19, with only that benefit attached. Create a checkout link and buy it as in step 7 (test card; the BNPL look isn't repeated).
-  - Copy the key from the portal and `. scripts/lib/env.sh && envset POLAR_SANDBOX_OTHER_LICENSE_KEY "$(pbpaste)" && pbcopy </dev/null`. Never echo it. Result: `. scripts/lib/env.sh; need POLAR_SANDBOX_OTHER_LICENSE_KEY && echo saved` → `saved`.
+  - The **user** copies the key from the portal as in step 8, then `. scripts/lib/env.sh && envset POLAR_SANDBOX_OTHER_LICENSE_KEY "$(pbpaste)" && pbcopy </dev/null`. Never echo it. Result: `. scripts/lib/env.sh; need POLAR_SANDBOX_OTHER_LICENSE_KEY && echo saved` → `saved`.
 - [ ] **Step 11: Sandbox access token**, read later by plan 08 Task 4 Step 1 (orders; checkouts if `reference_id` sits there), plan 06 Task 12 Step 1 and plan 07 F3 Step 4 (a sandbox `--apply` that reads orders and posts discounts).
   - Settings → Organization access tokens → New, named `tegel-sandbox`, no expiry or the longest offered (F3 runs after G4, Oct 2027). Scopes: `orders:read`, `products:read`, `checkouts:read`, `discounts:read`, `discounts:write`. No benefit, product or checkout-link write scope, so plan 06 Task 12 Step 1 takes its dashboard route. A sandbox discount moves no money, so this token isn't one-off like production's `POLAR_DISCOUNTS_TOKEN` (plan 07 F3).
-  - Copy it the moment it's shown and save it without it touching a command line: `. scripts/lib/env.sh && envset POLAR_SANDBOX_ACCESS_TOKEN "$(pbpaste)" && pbcopy </dev/null`. The name is already in `.env.example`.
+  - The **user** clicks the final Create button and Copy, and Claude makes no Playwright call while the token is on screen (master §6). Then save it without it touching a command line: `. scripts/lib/env.sh && envset POLAR_SANDBOX_ACCESS_TOKEN "$(pbpaste)" && pbcopy </dev/null`. The name is already in `.env.example`.
   - Expected: `. scripts/lib/env.sh; need POLAR_SANDBOX_ACCESS_TOKEN && echo saved` → `saved`, and `. scripts/lib/env.sh; curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $(envget POLAR_SANDBOX_ACCESS_TOKEN)" "https://sandbox-api.polar.sh/v1/orders/?organization_id=$(envget POLAR_SANDBOX_ORGANIZATION_ID)&limit=1"` → `200`.
 
 No commit: the outputs are gitignored. Task 4 adds the new key names to `.env.example`.
@@ -146,8 +146,8 @@ Needs plan 04's Cloudflare account and the `tegelapps.com` zone, plus H4's card.
   - Check: `dig +short downloads.tegelapps.com | head -1` prints an address, and the dashboard shows the domain as Active.
 - [ ] **Step 4: Create the token.** R2 → Manage API tokens → Create:
   - permission **Object Read & Write**, applied to **`tegel-downloads` only**;
-  - copy the token and `. scripts/lib/env.sh && envset CLOUDFLARE_R2_API_TOKEN "$(pbpaste)" && pbcopy </dev/null`; then `. scripts/lib/env.sh; need CLOUDFLARE_ACCOUNT_ID && echo saved`, and if it exits 1, copy the id from the dashboard and `. scripts/lib/env.sh; envset CLOUDFLARE_ACCOUNT_ID '<id>'`.
-  - The same page shows the token's **S3 credentials, once**: the Access Key ID and the Secret Access Key (developers.cloudflare.com/r2/api/tokens/; check the wording on the day). Copy each the moment it's shown and save it without it touching a command line: `. scripts/lib/env.sh && envset R2_ACCESS_KEY_ID "$(pbpaste)" && pbcopy </dev/null`, then the same with `R2_SECRET_ACCESS_KEY`. Check: `. scripts/lib/env.sh; need R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY && echo saved` → `saved`.
+  - the **user** clicks the final Create button and copies the token, and Claude makes no Playwright call while it or the S3 credentials below are on screen (master §6); then `. scripts/lib/env.sh && envset CLOUDFLARE_R2_API_TOKEN "$(pbpaste)" && pbcopy </dev/null`; then `. scripts/lib/env.sh; need CLOUDFLARE_ACCOUNT_ID && echo saved`, and if it exits 1, copy the id from the dashboard and `. scripts/lib/env.sh; envset CLOUDFLARE_ACCOUNT_ID '<id>'`.
+  - The same page shows the token's **S3 credentials, once**: the Access Key ID and the Secret Access Key (developers.cloudflare.com/r2/api/tokens/; check the wording on the day). The **user** copies each. Save each without it touching a command line: `. scripts/lib/env.sh && envset R2_ACCESS_KEY_ID "$(pbpaste)" && pbcopy </dev/null`, then the same with `R2_SECRET_ACCESS_KEY`. Check: `. scripts/lib/env.sh; need R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY && echo saved` → `saved`.
   - This bucket-scoped token, through those S3 credentials, is the only credential any R2 upload uses (K2). Plan 04's Pages deploy token has no R2 permission.
 - [ ] **Step 5: Verify the S3 credentials with the release script's upload command.** `release.sh` uploads with `curl --aws-sigv4` against R2's S3 endpoint `https://<account id>.r2.cloudflarestorage.com`, region `auto` (developers.cloudflare.com/r2/api/s3/api/; check it on the day), so no npm code runs at release time. This probe uses the same command.
   - **Ask the user first** (Global Constraints: any upload to R2): "Upload one 2-byte test object `probe.txt` to `tegel-downloads`, read it back through `downloads.tegelapps.com`, then delete it?" Run the block only after a yes.

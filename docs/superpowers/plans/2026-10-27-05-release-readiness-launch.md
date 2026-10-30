@@ -188,7 +188,7 @@ Each 🔒 step is a live, outward-facing change. Show the user the exact values,
 
   Expected: a screenshot of the settings page saved as `polar/org.png`.
 - [ ] **Step 3 🔒 Access token:**
-  - Create an organization access token with scopes `orders:read`, `products:read`; copy it and `. scripts/lib/env.sh && envset POLAR_ACCESS_TOKEN "$(pbpaste)" && pbcopy </dev/null`.
+  - Create an organization access token with scopes `orders:read`, `products:read`: Claude fills the form, the **user** clicks Create and Copy, and Claude makes no Playwright call while the token is on screen (master §6). Then `. scripts/lib/env.sh && envset POLAR_ACCESS_TOKEN "$(pbpaste)" && pbcopy </dev/null`.
   - Expected: key check `POLAR_ACCESS_TOKEN` → `set`.
   - Expected: the command below prints `200`.
 
@@ -359,7 +359,7 @@ Notes the doc must carry:
     - `grep -c '/Users/' R11.txt` → `0`.
 - [ ] **Step 5: Scaleway lease L2 (`m27-arm`), H6.**
   - **Ask the user first:** "Lease one Scaleway M1 for 24 h, Thu 26 Nov 09:00 → Fri 27 Nov 09:00, macOS 27, at €3.19 incl. VAT (€2.64 before tax) [F9]?" Record the approval here.
-  - **Order and save access** (L1's server, key and host key were deleted in plan 01 Task 12 Step 10): after the yes, repeat plan 01 Task 12 Step 4 for this lease. Order the M1 (PARIS 3, macOS 27) in the console; `envset` `REMOTE_MAC_HOST`, `REMOTE_MAC_USER` and `REMOTE_MAC_VNC_PORT` from the Overview page, and `REMOTE_MAC_PASSWORD` from the pasteboard (`envset REMOTE_MAC_PASSWORD "$(pbpaste)" && pbcopy </dev/null`); then run its key block after prefix line P (`ssh-keygen` for `~/.ssh/id_ed25519_scaleway`, `ssh-copy-id -o StrictHostKeyChecking=accept-new` through the askpass file, never the password in argv). Expected: its `R 'sw_vers -productVersion; uname -m; who'` → `27.x`, `arm64` and a `console` line.
+  - **Order and save access** (L1's server, key and host key were deleted in plan 01 Task 12 Step 10): after the yes, repeat plan 01 Task 12 Step 4 for this lease. Order the M1 (PARIS 3, macOS 27) in the console; `envset` `REMOTE_MAC_HOST`, `REMOTE_MAC_USER` and `REMOTE_MAC_VNC_PORT` from the Overview page, and `REMOTE_MAC_PASSWORD` from the pasteboard after the **user** reveals and copies it, with no Playwright call while it is shown (master §6) (`envset REMOTE_MAC_PASSWORD "$(pbpaste)" && pbcopy </dev/null`); then run its key block after prefix line P (`ssh-keygen` for `~/.ssh/id_ed25519_scaleway`, `ssh-copy-id -o StrictHostKeyChecking=accept-new` through the askpass file, never the password in argv). Expected: its `R 'sw_vers -productVersion; uname -m; who'` → `27.x`, `arm64` and a `console` line.
   - **L2 is shared, in this order:** (1) this plan's matrix on macOS 27; (2) plan 03's arm64/macOS 27 acceptance with b2; (3) plan 02's pending arm64 checks; (4) plan 08's Quick Look deep-link check; (5) **last:** reinstall macOS 14 if offered, then the macOS 14 leg.
   - **Operator:**
     - SSH parts: Claude via `REMOTE_MAC_*`;
@@ -375,7 +375,7 @@ Notes the doc must carry:
       -d "{\"key\":\"$(envget POLAR_QA_LICENSE_KEY)\",\"organization_id\":\"$(envget POLAR_ORGANIZATION_ID)\",\"label\":\"qa-third\"}"
     ```
 
-  - **Last, before the lease ends:** after items (2)–(4), if macOS 14 is offered, reinstall and repeat R1–R4, R8 and R9 (`m14-arm` manual cells). The reinstalled server has a new host key, so first `. scripts/lib/env.sh; ssh-keygen -R "$(envget REMOTE_MAC_HOST)"`, if the Overview page shows a new password, copy it and `envset REMOTE_MAC_PASSWORD "$(pbpaste)" && pbcopy </dev/null`, and re-run plan 01 Task 12 Step 4's key block without its `ssh-keygen` line (the key pair stays). If it isn't offered, follow the matrix note "No GitHub runner covers macOS 14" (the user chooses).
+  - **Last, before the lease ends:** after items (2)–(4), if macOS 14 is offered, reinstall and repeat R1–R4, R8 and R9 (`m14-arm` manual cells). The reinstalled server has a new host key, so first `. scripts/lib/env.sh; ssh-keygen -R "$(envget REMOTE_MAC_HOST)"`, if the Overview page shows a new password, the **user** copies it (no Playwright call while it is shown, master §6) and Claude runs `envset REMOTE_MAC_PASSWORD "$(pbpaste)" && pbcopy </dev/null`, and re-run plan 01 Task 12 Step 4's key block without its `ssh-keygen` line (the key pair stays). If it isn't offered, follow the matrix note "No GitHub runner covers macOS 14" (the user chooses).
   - **Release the lease by Fri 27 Nov 09:00 and confirm with the user:** delete the server as plan 01 Task 12 Step 10 does (Playwright, type `DELETE`), then remove `~/.ssh/id_ed25519_scaleway*` and the host key (`. scripts/lib/env.sh; ssh-keygen -R "$(envget REMOTE_MAC_HOST)"`) from the build Mac. Expected: the Scaleway console shows no running server.
 - [ ] **Step 6: Each FAIL becomes a fix.**
   - Open `gh issue create --label bug,1.0.0`.

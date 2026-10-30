@@ -104,7 +104,7 @@ Every account action uses the studio identity: **`marketing@snelverhuizen.nl`** 
 - `.env` is gitignored and `chmod 600`; `.env.example` lists every key.
 - Credentials for accounts Claude creates are saved the moment the account exists: emails, ids and tokens in `.env`, the account password in the Keychain (master roadmap §6).
 - **Keychain holds:**
-  - every account password, as a generic password `tegel-<service>` with account `marketing@snelverhuizen.nl`;
+  - every account password, as a generic password `tegel-<service>` with account `marketing@snelverhuizen.nl` (the one exception is `REMOTE_MAC_PASSWORD`, a leased server's login, kept in `.env`);
   - the notarytool profile (`tegel-notary`);
   - the Sparkle EdDSA private key. Its backup lives **outside** the repo.
 - Never print a secret value in output, commit messages, plans or logs. Refer to it by its `.env` key name.
