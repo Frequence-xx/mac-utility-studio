@@ -1,0 +1,36 @@
+docs/superpowers/plans/2026-10-27-00-master-roadmap.md
+  s_bc8ea26773de3f::t_76051282985ac4 344
+  s_bc8ea26773de3f::t_e256dc422dcd86 347
+docs/superpowers/plans/2026-10-27-04-site-seo.md
+  s_bc8ea26773de3f::t_94d51672d51438 298
+docs/superpowers/plans/2026-10-27-08-growth-engine.md
+  s_bc8ea26773de3f::t_b48465e90b60ae 441
+docs/superpowers/plans/2026-10-27-07-post-launch-scale.md
+  s_bc8ea26773de3f::t_dc1bf888eb47a7 726
+CLAUDE.md
+  s_bc8ea26773de3f::t_f8ddb0df4160fa 107
+docs/superpowers/plans/2026-10-27-01-g0-renderer-quicklook.md
+  s_bc8ea26773de3f::t_2eaf6e89f668ec 1846
+docs/superpowers/plans/2026-10-27-05-release-readiness-launch.md
+  s_bc8ea26773de3f::t_dcc3aabc31af8b 362,378
+  s_bc8ea26773de3f::t_09ddf3c326f777 191
+docs/superpowers/plans/2026-10-27-03-licensing-updates-release.md
+  s_bc8ea26773de3f::t_dcc3aabc31af8b 106,120,149-150
+  s_bc8ea26773de3f::t_ac61023553148a 123
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7715741f8991d767cdd0c6a3cef7916c5dc2cdd5",
+  "prompts": {},
+  "sessions": {
+    "s_bc8ea26773de3f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c36ff1eb-4626-43e3-815d-36966257085e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "farouq abou umar <farouqabouumar@farouqs-iMac.local>"
+    }
+  }
+}
