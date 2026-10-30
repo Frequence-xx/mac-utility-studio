@@ -249,7 +249,7 @@ Each 🔒 step is a live, outward-facing change. Show the user the exact values,
   - only the tile avatar and text;
   - no holiday or figurative imagery;
   - the portal link is present, and the image shows no key;
-  - the key is present (the user's word, recorded as text next to the image).
+  - the key is present (the user's word, recorded as text next to the image); the user confirms no key is visible before Claude opens the image or commits it.
 - [ ] **Step 9: Fill `Config/Release.xcconfig`.** Replace the four `REPLACE_IN_PLAN_05` values in plan 03's build settings. `TG_POLAR_API_BASE = https:/$()/api.polar.sh` is already production (plan 03 Task 8); leave it. xcconfig treats `//` as a comment, so write URLs as `https:/$()/…`:
 
   ```text

@@ -62,7 +62,7 @@ Task 3 Step 5 (keys at rest, K3) still runs before them.
 - **Swift tests:** `swift test --package-path Packages/TegelKit --filter <Suite>`.
 - **Commits:** "Commit: `<paths>`, `<message>`" means `git add <paths> && git commit -m "<message>" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`.
 
-**GUI steps** are marked *(GUI)*. The user does them, or Claude does them through the computer-use skill, except while a licence key is on screen, which is the user's (master §6). Playwright is used for web dashboards only.
+**GUI steps** are marked *(GUI)*. The user does them, or Claude does them through the computer-use skill, except the Pay click on any checkout that grants a key and any screen showing a key, which are the user's (master §6). Playwright is used for web dashboards only.
 
 ---
 
@@ -1186,7 +1186,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
 - [ ] **Step 8 (GUI): purchase.**
   - Settings → Licence → Buy Pro… → the sandbox checkout opens;
   - pay as `POLAR_EMAIL` with `4242 4242 4242 4242`. Expected: the success page.
-- [ ] **Step 9: Key email.** Record whether the email to `POLAR_EMAIL` contains the key. If it doesn't, take the key from the portal; that result feeds plan 05's FAQ.
+- [ ] **Step 9: Key email.** The **user** checks whether the email to `POLAR_EMAIL` contains the key, and Claude records the answer. If it doesn't, the user takes the key from the portal (master §6); that result feeds plan 05's FAQ.
 - [ ] **Step 10 (GUI): activate.**
   - Paste the key with leading spaces and a trailing newline → Activate. Expected: "Pro is active on this Mac", and folder mode works.
   - Dashboard: the activation label = `sysctl -n hw.model`.
