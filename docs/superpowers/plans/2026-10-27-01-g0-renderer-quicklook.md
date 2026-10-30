@@ -1827,7 +1827,7 @@ Then commit `docs/gates/trademark.md`: "docs(gates): trademark desk search for T
 
 - [ ] **Step 1: Create the account (Wed 28 Oct)**
 
-Run: `. scripts/lib/env.sh; envset SCALEWAY_EMAIL "$(envget STUDIO_EMAIL)" && security add-generic-password -a "$(envget STUDIO_EMAIL)" -s tegel-scaleway -w "$(openssl rand -base64 24)"`. The password is never echoed. With Playwright, sign up at https://console.scaleway.com/register with that email; the `tegel-scaleway` password goes in by pasteboard, never through a tool call (master §6). Add the two key names to `.env.example`.
+Run: `. scripts/lib/env.sh; envset SCALEWAY_EMAIL "$(envget STUDIO_EMAIL)" && security add-generic-password -a "$(envget STUDIO_EMAIL)" -s tegel-scaleway -w "$(openssl rand -base64 24)"`. The password is never echoed. With Playwright, sign up at https://console.scaleway.com/register with that email; the user pastes the `tegel-scaleway` password and submits the form themselves, and Claude waits until the page has moved on (master §6). Add the two key names to `.env.example`.
 
 Check: `. scripts/lib/env.sh; need SCALEWAY_EMAIL && security find-generic-password -a "$(envget STUDIO_EMAIL)" -s tegel-scaleway -w >/dev/null && echo ok`
 Expected: `ok`.

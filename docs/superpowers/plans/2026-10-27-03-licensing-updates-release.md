@@ -211,6 +211,7 @@ No commit; Task 4 adds `CLOUDFLARE_R2_API_TOKEN`, `R2_ACCESS_KEY_ID`, `R2_SECRET
      Expected: two paths, `devid-application.key` and `AuthKey_<KEYID>.p8`. Only this app's key moves; any other `.p8` in `~/.appstoreconnect/private_keys/` isn't Tegel's and stays.
   2. **The encrypted store** (K3, answered 29 Oct, master §5; don't ask again): an AES-256 encrypted APFS image, with its passphrase in the user's password manager. The **user** runs this in Terminal, because both commands prompt for the passphrase:
      `hdiutil create -size 20m -fs APFS -encryption AES-256 -volname TegelKeys ~/TegelKeys.dmg && hdiutil attach ~/TegelKeys.dmg`
+     **If Task 10 already made the store**, it lives on the working medium and must not be recreated (a new image would then be copied over both backups, and the Sparkle key would be lost). The user runs `hdiutil attach <medium>/TegelKeys.dmg` instead of the line above, and item 4 then only refreshes the second copy, from the working medium.
   3. Claude copies each file, checks the copy, deletes the original, empties the key path in `.env`, and confirms nothing broke:
      ```bash
      . scripts/lib/env.sh
@@ -224,7 +225,7 @@ No commit; Task 4 adds `CLOUDFLARE_R2_API_TOKEN`, `R2_ACCESS_KEY_ID`, `R2_SECRET
      security find-identity -v -p codesigning | grep -c '"Developer ID Application:'
      xcrun notarytool history --keychain-profile tegel-notary >/dev/null && echo notary-ok
      ```
-     Expected: the two file names, then `0`, `no-path`, `1`, `notary-ok`. Step 4 already showed the profile works without the `.p8` on disk; a `notary-ok` failure here is something else, so record the error and ask the user.
+     Expected: the two file names (three, with `sparkle-ed25519-tegelapps.key`, if Task 10 ran first), then `0`, `no-path`, `1`, `notary-ok`. Step 4 already showed the profile works without the `.p8` on disk; a `notary-ok` failure here is something else, so record the error and ask the user.
   4. **Two copies (K3).** The **user** copies `~/TegelKeys.dmg` to the external working medium and to the second USB stick, which is kept away from the Mac. For each, `cmp ~/TegelKeys.dmg <medium>/TegelKeys.dmg` prints nothing. Then the user deletes the local copy. **After any later change to the store** (Step 6, Task 10), the user copies the changed image over the one on the second stick and checks it with `cmp` the same way, so the two copies never differ.
 - [ ] **Step 6: Renew the certificate by Fri 12 Nov 2027** (it expires Fri 26 Nov 2027, 11:25 UTC). Apps already signed and notarised keep opening after it expires, because their signatures are timestamped, but no new build can be signed, so a missed renewal blocks every update and release.
   - Make a new key and CSR without printing values:
