@@ -6,7 +6,7 @@ gates and every number come from `BUSINESS-PLAN.md`. The execution plan is
 
 - **App 1** (`Apps/Markdown`): Markdown + Mermaid reader. Quick Look extension, RTL, paginated PDF.
 - **App 2** (`Apps/Data`, from W10): JSON/JSONL/YAML/TOML/CSV/.env reader and Quick Look pack, plus a session-transcript mode.
-- **Shared code:** `Renderer/` (HTML/CSS/JS, built with bun into `Renderer/dist`, which is committed) and `Packages/TegelKit` (Swift).
+- **Shared code:** `Renderer/` (HTML/CSS/JS sources and tests) and `Packages/TegelKit` (Swift libraries `TegelKit` and `TegelStore`). bun builds the renderer into `Packages/TegelKit/Sources/TegelKit/Resources/Renderer/`, which is committed so Xcode builds never need bun.
 - **Other parts:** `site/` (static site → Cloudflare Pages); `scripts/` (release, notarise, appcast).
 
 Repo: `git@github-mus:Frequence-xx/mac-utility-studio.git` (SSH alias in `~/.ssh/config`, deploy key `~/.ssh/id_ed25519_mus`). Branch `main`.
@@ -19,7 +19,7 @@ Repo: `git@github-mus:Frequence-xx/mac-utility-studio.git` (SSH alias in `~/.ssh
 |---|---|
 | Everything the pipeline's stage 2 needs | `make check` |
 | JS renderer tests | `bun test` (in `Renderer/`) |
-| Rebuild renderer bundle | `make renderer` (then commit `Renderer/dist`) |
+| Rebuild renderer bundle | `make renderer` (then commit `Packages/TegelKit/Sources/TegelKit/Resources/Renderer/`) |
 | Swift package tests | `swift test --package-path Packages/TegelKit` |
 | Generate Xcode project | `xcodegen generate` (the `.xcodeproj` is generated and gitignored; edit `project.yml`, never the pbxproj) |
 | Build app targets | `make build` |
@@ -38,7 +38,7 @@ The build Mac is an **Intel iMac19,1 on macOS 15.7, Xcode 26.3**. It can never r
 
 These bind code, UI copy, site copy, screenshots, demo videos and launch posts:
 
-1. **Read-only.** The apps never write to user files. The only writes are PDF exports to a path the user picked in a save panel, plus the app's own container. No telemetry, no accounts, no network calls except licence checks and Sparkle updates.
+1. **Read-only.** The apps never write to user files. The only writes are exports to a path the user picked in a save panel (PDF; App 2's session transcript as Markdown, BUSINESS-PLAN §6.2), plus the app's own container. No telemetry, no accounts, no network calls except licence checks and Sparkle updates.
 2. **Untrusted input.** Every opened file is untrusted. The renderer runs under a strict CSP: no network, no inline script, and output sanitised with DOMPurify. Mermaid uses `securityLevel: 'strict'`, and navigation is blocked. `.env` values are masked by default.
 3. **Imagery.** Text, code and diagrams only. The icon is a plain geometric tile. No faces, figures, animals, mascots or Delft figurative tiles. Arabic sample text is never Qur'an or hadith.
 4. **No music or audio** anywhere (apps, demos, site). Demo videos are silent, with captions.
@@ -48,17 +48,63 @@ These bind code, UI copy, site copy, screenshots, demo videos and launch posts:
 8. **No ads**, in or around the apps.
 9. **Excluded app categories:** power/thermal, captions/accessibility-critical, health/posture, camera gaze, now-playing/music, desktop pets, novelty sound, AI interview copilots, wallpaper content.
 
+## Design standard (MANDATORY for any UI, icon, renderer theme, site page, screenshot or demo)
+
+**The bar:** work a senior Apple-platform designer with 20 years' experience would sign. It should feel native, quiet and exact, with nothing that reads as "AI-generated".
+
+**The single source of truth is `DESIGN.md`**, built in plan 09: type scale, grid, spacing, colour tokens, icon grid, voice. No UI work starts before it exists, and no UI value is invented outside it.
+
+**Skills.** Brief each one into any subagent that touches UI:
+- **App UI:** `macos-design-guidelines` (HIG rules for menus, windows, toolbars, sidebars, keyboard, pointer, Settings); `apple-design` (Apple typography, SF Symbols, Liquid Glass, UX writing, animation).
+- **Site:** `web-design-guidelines` (WCAG 2.2, responsive, performance); `frontend-design`.
+- **Design-system work:** `design-consultation`.
+- **Review:** `plan-design-review` (plans) and `design-review` (built UI, with screenshots).
+
+The first three were installed into `~/.claude/skills` on 27 Oct from MIT repos; their `SOURCE` file gives the origin. They are available as skills.
+
+**Native first:**
+- System controls, materials, SF Pro / SF Arabic / SF Hebrew, SF Symbols, standard menus and shortcuts, `Settings` scene.
+- Liquid Glass on macOS 26+, falling back gracefully on 14/15.
+- Respect Reduce Motion, Increase Contrast and the accent colour.
+
+**Banned AI-slop patterns:**
+- purple/blue gradients;
+- glassmorphism blobs and decorative orbs;
+- emoji as icons;
+- a generic hero, then three feature cards with icons, then testimonials;
+- "Supercharge / Unleash / Seamless / Effortless" copy;
+- centred everything;
+- uniform 16px rounded cards everywhere;
+- drop shadows on everything;
+- Inter as a default on the site;
+- fake app screenshots;
+- stock illustrations;
+- placeholder lorem.
+
+**Typography is the product.** Reading themes get a modular scale, a 60–75ch measure, real line-height for Arabic (larger than for Latin), and **no letter-spacing on Arabic**. They also need correct quotes and dashes, tabular figures in tables, and hanging punctuation where WebKit supports it.
+
+**Verification:** design claims need screenshots (light, dark and Arabic UI), plus a `design-review` pass before a milestone closes.
+
 ## Outward-facing actions: confirm with the user first
 
 Purchases of any kind. Creating or changing *live* Polar products, prices or discounts. Deploying the public site for the first time. Publishing a release (DMG/appcast upload). Any post, email or submission (Product Hunt, Reddit, HN, IH, Homebrew, Setapp, MAS, press, customers). DNS changes on a live domain.
 
 Approval covers the specific action shown, not the next one. Sandbox and test resources (Polar sandbox, preview deploys, local builds) need no confirmation.
 
+## Accounts: the studio identity only (MANDATORY)
+
+Every account action uses the studio identity: **`marketing@snelverhuizen.nl`** (`STUDIO_EMAIL`), and on Apple the individual team **Mohammed Haroen Baksh, `23N7947PKX`**. This covers Apple Developer, App Store Connect, notarisation, Google, Cloudflare, Polar, Scaleway, MailerLite and every account added later. The exceptions are GitHub (`Frequence-xx`, already exists) and the launch-post accounts (H9), which are the user's choice.
+
+- This Mac also holds another organisation's Apple access: **Stichting Tarbiyah Consultancy** (team `72PF8SBQR6`, Keychain certificate "Apple Development: Hamza Bouzaggou (W3Q9G8NSHG)") and a Personal Team `34WLYZ5RS6`, both in Xcode's cached team list. Never sign, upload, enrol or change anything with them. They stay on this Mac because the user works on another project for that organisation, so never remove them either.
+- Before any change in a web dashboard, read the signed-in account on the page: the email, plus the team name and id on Apple, and the account or org id on Cloudflare and Polar (`CLOUDFLARE_ACCOUNT_ID`, `POLAR_ORGANIZATION_ID`, or `POLAR_SANDBOX_ORGANIZATION_ID` in the sandbox). If anything differs, stop and tell the user.
+- Signing names the team explicitly (`DEVELOPMENT_TEAM` from `APPLE_TEAM_ID`, notary profile `tegel-notary`), never a team Xcode picks. Every signature that isn't ad hoc must show `TeamIdentifier=23N7947PKX` in `codesign -dv`.
+
 ## Secrets
 
 - `.env` is gitignored and `chmod 600`; `.env.example` lists every key.
-- Credentials for accounts Claude creates go in `.env` immediately.
+- Credentials for accounts Claude creates are saved the moment the account exists: emails, ids and tokens in `.env`, the account password in the Keychain (master roadmap §6).
 - **Keychain holds:**
+  - every account password, as a generic password `tegel-<service>` with account `marketing@snelverhuizen.nl` (the one exception is `REMOTE_MAC_PASSWORD`, a leased server's login, kept in `.env`);
   - the notarytool profile (`tegel-notary`);
   - the Sparkle EdDSA private key. Its backup lives **outside** the repo.
 - Never print a secret value in output, commit messages, plans or logs. Refer to it by its `.env` key name.
@@ -130,6 +176,7 @@ Base = the commit the milestone branch started from (`git merge-base HEAD main`)
 8. **Bloat audit (post):** re-run the Bloat Audit over the final cumulative diff, with the same rules as stage 1.
 9. **gstack `/review` + cubic:**
    - Run `/review`, then `cubic review -b <base-sha> -j` from the repo root. The JSON key is `issues`.
+   - Cubic's subscription has lapsed and isn't renewed (user, 29 Oct). Until it is, each round is a cold Claude review subagent plus `codex exec -s read-only` on the same range, and every plan step that runs cubic uses that substitute.
    - Re-run after each fix batch until **two consecutive rounds show no new P0/P1**. Cubic can't converge while an agent is still writing to the tree, so stabilise first.
 
 **If a stage can't run:** say which stage, why, and what you ran instead. Never skip silently.
