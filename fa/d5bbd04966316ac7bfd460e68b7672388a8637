@@ -1,0 +1,20 @@
+docs/superpowers/plans/2026-10-27-03-licensing-updates-release.md
+  s_bc8ea26773de3f::t_99c544a1dd8c5d 216-217,222-223,236,852,854-855
+  s_bc8ea26773de3f::t_1c1f3818930510 873
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fad5bbd04966316ac7bfd460e68b7672388a8637",
+  "prompts": {},
+  "sessions": {
+    "s_bc8ea26773de3f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c36ff1eb-4626-43e3-815d-36966257085e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "farouq abou umar <farouqabouumar@farouqs-iMac.local>"
+    }
+  }
+}
