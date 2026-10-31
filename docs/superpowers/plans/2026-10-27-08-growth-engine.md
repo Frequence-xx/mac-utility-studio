@@ -28,7 +28,7 @@ Everything else lives in files under `docs/growth/`, and every outward-facing ac
 
 ## Global constraints
 
-- **Licence keys on screen (master §6, "Screenshots can't be searched"):** whoever a step names, the **user** does any step that pastes a licence key into an app, opens one in the portal, a receipt or an email, or clicks Pay on a checkout that grants one, sandbox keys included. Claude fills the other fields, takes no Playwright snapshot, computer-use screenshot or `screencapture` while a key is visible, and saves a key only from the pasteboard (`envset KEY "$(pbpaste)" && pbcopy </dev/null`). A committed image shows no key, and the user confirms that before Claude opens or commits it.
+- **Licence keys on screen (master §6, "Screenshots can't be searched"):** whoever a step names, the **user** does any step that pastes a licence key into an app, opens one in the portal, a receipt, an email or any other screen that shows a full key (the merchant dashboard included), or clicks Pay on a checkout that grants one, sandbox keys included. Claude fills the other fields, takes no Playwright snapshot, computer-use screenshot or `screencapture` while a key is visible, and saves a key only from the pasteboard (`. scripts/lib/env.sh && envset KEY "$(pbpaste)" && pbcopy </dev/null`). An image taken while a key could be on screen shows no key, and the user confirms that before Claude opens or commits it.
 
 Master §2/§3 and `CLAUDE.md` apply (product rules 1–9, design standard, approvals for outward-facing actions, secrets named by `.env` key only). Plan-specific:
 
@@ -539,7 +539,7 @@ test('valid sign-up creates an unconfirmed subscriber and redirects', async () =
     - Workers & Pages → tegel → Settings → Bindings → KV namespace `WAITLIST_KV`: `tegel-waitlist` under Production, `tegel-waitlist-preview` under Preview. **Check step:** Pages bindings are set per environment (developers.cloudflare.com/pages/functions/bindings/, KV namespaces); confirm the dashboard shows a different namespace per environment and record it. If it allows only one, stop and tell the user.
     - No `wrangler kv` command runs in this plan.
   - **Preview secrets** (CR-P2-9: without the environment flag, wrangler targets production). Set each of `MAILERLITE_API_TOKEN` (value from `MAILERLITE_API_TOKEN_PAGES`), `MAILERLITE_GROUP_WAITLIST` and `SITE_ORIGIN` (plan 04's preview alias, `printf 'https://preview.%s' "$H"`). Pipe the value in so it's never echoed: `. scripts/lib/env.sh && need MAILERLITE_API_TOKEN_PAGES && envget MAILERLITE_API_TOKEN_PAGES | CLOUDFLARE_API_TOKEN="$(envget CLOUDFLARE_API_TOKEN)" CLOUDFLARE_ACCOUNT_ID="$(envget CLOUDFLARE_ACCOUNT_ID)" bunx wrangler@4.151.2 pages secret put MAILERLITE_API_TOKEN --project-name tegel --env preview`.
-  - **Check step** (`--env preview` is documented only on a third-party mirror of the wrangler docs, 27 Oct): `… bunx wrangler@4.151.2 pages secret list --project-name tegel --env preview` lists the three names. If the flag is rejected, the **user** sets them in the dashboard under Settings → Variables and Secrets → Preview, pasting the token from the pasteboard (`envget MAILERLITE_API_TOKEN_PAGES | tr -d '\n' | pbcopy`, then `pbcopy </dev/null`); it never goes into a browser tool call, and Claude makes no Playwright call while it is in the field (master §6). Record that.
+  - **Check step** (`--env preview` is documented only on a third-party mirror of the wrangler docs, 27 Oct): `… bunx wrangler@4.151.2 pages secret list --project-name tegel --env preview` lists the three names. If the flag is rejected, the **user** sets them in the dashboard under Settings → Variables and Secrets → Preview, pasting the token from the pasteboard (`. scripts/lib/env.sh && envget MAILERLITE_API_TOKEN_PAGES | tr -d '\n' | pbcopy`, then `pbcopy </dev/null`); it never goes into a browser tool call, and Claude makes no Playwright call while it is in the field (master §6). Record that.
   - **Deploy** with plan 04's preview command (it runs from `site/`, so `functions/` uploads; X9).
   - **Expected** (one `-w` each, CR-P2-9):
     - `curl -s -o /dev/null -w '%{http_code}' -X POST "https://preview.$H/api/waitlist"` → `403` (no Origin);
@@ -1144,6 +1144,8 @@ This was email 1 of 2. The second comes when the next Tegel app launches; then t
 **Files:** Create `docs/growth/directories.md` from the table below. Each row gets `Submitted`, `URL`, `Result` and `Approved` columns.
 
 Rules were read on 27 Oct from each primary source (repo `CONTRIBUTING.md`/README via raw.githubusercontent.com, or the site's FAQ/submit page). Rows marked UNVERIFIED are check steps.
+
+A site that needs an account (AlternativeTo, MacUpdate, SaaSHub) gets one with `STUDIO_EMAIL` and the master §6 password pattern: `tegel-<site>` generated in the Keychain, Claude fills the other fields, the user pastes the password and submits, then the exposure search → `clean`.
 
 | Target | Rule that decides it | Verdict and date |
 |---|---|---|

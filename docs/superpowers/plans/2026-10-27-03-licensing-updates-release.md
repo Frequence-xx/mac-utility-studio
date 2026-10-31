@@ -15,7 +15,7 @@
 
 ## Global Constraints
 
-- **Licence keys on screen (master §6, "Screenshots can't be searched"):** whoever a step names, the **user** does any step that pastes a licence key into an app, opens one in the portal, a receipt or an email, or clicks Pay on a checkout that grants one, sandbox keys included. Claude fills the other fields, takes no Playwright snapshot, computer-use screenshot or `screencapture` while a key is visible, and saves a key only from the pasteboard (`envset KEY "$(pbpaste)" && pbcopy </dev/null`). A committed image shows no key, and the user confirms that before Claude opens or commits it.
+- **Licence keys on screen (master §6, "Screenshots can't be searched"):** whoever a step names, the **user** does any step that pastes a licence key into an app, opens one in the portal, a receipt, an email or any other screen that shows a full key (the merchant dashboard included), or clicks Pay on a checkout that grants one, sandbox keys included. Claude fills the other fields, takes no Playwright snapshot, computer-use screenshot or `screencapture` while a key is visible, and saves a key only from the pasteboard (`. scripts/lib/env.sh && envset KEY "$(pbpaste)" && pbcopy </dev/null`). An image taken while a key could be on screen shows no key, and the user confirms that before Claude opens or commits it.
 
 Master "Global constraints", master §3.3 (the TegelStore contract) and CLAUDE.md apply. This plan's deltas:
 
@@ -213,7 +213,7 @@ No commit; Task 4 adds `CLOUDFLARE_R2_API_TOKEN`, `R2_ACCESS_KEY_ID`, `R2_SECRET
      Expected: two paths, `devid-application.key` and `AuthKey_<KEYID>.p8`. Only this app's key moves; any other `.p8` in `~/.appstoreconnect/private_keys/` isn't Tegel's and stays.
   2. **The encrypted store** (K3, answered 29 Oct, master §5; don't ask again): an AES-256 encrypted APFS image, with its passphrase in the user's password manager. The **user** runs this in Terminal, because both commands prompt for the passphrase:
      `hdiutil create -size 20m -fs APFS -encryption AES-256 -volname TegelKeys ~/TegelKeys.dmg && hdiutil attach ~/TegelKeys.dmg`
-     **If Task 10 already made the store** (check: `. scripts/lib/env.sh; [ -n "$(envget SPARKLE_PUBLIC_ED_KEY)" ] && echo exists` → `exists`), it lives on the working medium and must not be recreated (a new image would then be copied over both backups, and the Sparkle key would be lost). The user runs `hdiutil attach <medium>/TegelKeys.dmg` instead of the line above, and item 4 then only refreshes the second copy, from the working medium.
+     **If Task 10 already made the store** (check, with the working medium connected: `[ -f <medium>/TegelKeys.dmg ] && echo exists` → `exists`), it lives on the working medium and must not be recreated (a new image would then be copied over both backups, and the Sparkle key would be lost). The user runs `hdiutil attach <medium>/TegelKeys.dmg` instead of the line above, and item 4 then only refreshes the second copy, from the working medium.
   3. Claude copies each file, checks the copy, deletes the original, empties the key path in `.env`, and confirms nothing broke:
      ```bash
      . scripts/lib/env.sh
@@ -844,7 +844,7 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
     need SPARKLE_PUBLIC_ED_KEY && echo saved
     ```
     Expected: `saved`.
-  - **Back up the private key straight into the offline store (K3)**; it never lands in `$HOME`. Losing it means no more updates for every installed copy. The **user** connects the media and runs `hdiutil attach <path>/TegelKeys.dmg` (passphrase prompt). If Task 3 step 5 hasn't run yet, the store doesn't exist yet: the user first creates it with Task 3 step 5 item 2's command, and Task 3 later adds its two files to it. Then:
+  - **Back up the private key straight into the offline store (K3)**; it never lands in `$HOME`. Losing it means no more updates for every installed copy. The **user** connects the media and runs `hdiutil attach <path>/TegelKeys.dmg` (passphrase prompt). If the store doesn't exist yet (`[ -f <path>/TegelKeys.dmg ] || echo missing` → `missing`, because Task 3 step 5 hasn't run): the user first creates it with Task 3 step 5 item 2's command, and Task 3 later adds its two files to it. Then:
     ```bash
     build/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys --account tegelapps -x /Volumes/TegelKeys/sparkle-ed25519-tegelapps.key
     ls /Volumes/TegelKeys; hdiutil detach /Volumes/TegelKeys

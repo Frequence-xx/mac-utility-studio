@@ -42,7 +42,7 @@
 
 ## Global Constraints
 
-- **Licence keys on screen (master §6, "Screenshots can't be searched"):** whoever a step names, the **user** does any step that pastes a licence key into an app, opens one in the portal, a receipt or an email, or clicks Pay on a checkout that grants one, sandbox keys included. Claude fills the other fields, takes no Playwright snapshot, computer-use screenshot or `screencapture` while a key is visible, and saves a key only from the pasteboard (`envset KEY "$(pbpaste)" && pbcopy </dev/null`). A committed image shows no key, and the user confirms that before Claude opens or commits it.
+- **Licence keys on screen (master §6, "Screenshots can't be searched"):** whoever a step names, the **user** does any step that pastes a licence key into an app, opens one in the portal, a receipt, an email or any other screen that shows a full key (the merchant dashboard included), or clicks Pay on a checkout that grants one, sandbox keys included. Claude fills the other fields, takes no Playwright snapshot, computer-use screenshot or `screencapture` while a key is visible, and saves a key only from the pasteboard (`. scripts/lib/env.sh && envset KEY "$(pbpaste)" && pbcopy </dev/null`). An image taken while a key could be on screen shows no key, and the user confirms that before Claude opens or commits it.
 
 Master §2/§3 and `CLAUDE.md` apply (platform, machines and evidence naming, product rules 1–9, design standard, approvals, secrets). Every task with UI reads `DESIGN.md` first; no UI value comes from outside it. Plan-specific:
 
@@ -1195,7 +1195,7 @@ Run **Procedure P (master §11)** with these deltas (B1):
   - **Session folder access and bookmarks:** the open panel, the real-home lookup, `BookmarkStore` scope start/stop, read-only use (`readonly-gate` over all of `Apps/`).
   - **Entitlements:** App = D5; Quick Look without the `/` exception; `scripts/entitlements/data*.plist` equal those sets. **Licensing and updates:** App 2's `TGPolarBenefitID` is the Data benefit in Debug and Release; plan 03's binding, `wrongProduct` deactivation and 404 grace path are unchanged; App 2's Sparkle wiring is plan 03's, with the signed-feed flags on.
   - **Release script:** the `data)` case, `SLUG=data` and its two `release_test.sh` cases (Task 14).
-- **Design review shots:** Welcome, `DataProView`, Settings › Licence (free, Pro, lapsed and each error; an error reached with a real key is shot keyless, as in plan 03's design review shots), the window views, Sessions (secrets masked and revealed), the export toolbar, the Quick Look previews (a secret dotfile included), the four site pages and frames of the demo video, in `docs/reviews/m06-design/`, with `.env` values masked in every shot.
+- **Design review shots:** Welcome, `DataProView`, Settings › Licence (free, Pro, lapsed and each error; an error reached with a real key is shot keyless, as in plan 03's design review shots), the window views, Sessions (secrets masked and revealed, from Task 9's synthetic fixtures only, never the real `~/.claude`), the export toolbar, the Quick Look previews (a secret dotfile included), the four site pages and frames of the demo video, in `docs/reviews/m06-design/`, with `.env` values masked in every shot.
 - **Merge:** `git merge --no-ff m06-app2 -m "merge: m06"` per P stage 11.
 
 - [ ] **Step 1: Run Procedure P** with the deltas above. Commit: `docs/reviews/m06.md docs/reviews/m06-design`, `docs(m06): pipeline results` + trailer; then merge and push per P.
