@@ -214,23 +214,25 @@ No commit; Task 4 adds `CLOUDFLARE_R2_API_TOKEN`, `R2_ACCESS_KEY_ID`, `R2_SECRET
   2. **The encrypted store** (K3, answered 29 Oct, master §5; don't ask again): an AES-256 encrypted APFS image, with its passphrase in the user's password manager. The **user** runs this in Terminal, because both commands prompt for the passphrase:
      `hdiutil create -size 20m -fs APFS -encryption AES-256 -volname TegelKeys ~/TegelKeys.dmg && hdiutil attach ~/TegelKeys.dmg`
      **Before creating, check both media.** The user connects the working medium and the second stick, and Claude runs `M='<medium>'; [ -d "$M" ] && { [ -f "$M/TegelKeys.dmg" ] && echo exists || echo missing; } || echo not-mounted` once for each, with `M` set to that medium's mount path. Create only when both print `missing`. `not-mounted` means connect it and check again, never create. Neither medium may itself be named `TegelKeys`, because the image would then mount at `/Volumes/TegelKeys 1` and item 3 would copy the keys unencrypted onto the drive.
-     **If either prints `exists`**, Task 10 already made the store. It lives on the working medium and must not be recreated (a new image would then be copied over both backups, and the Sparkle key would be lost). The user runs `hdiutil attach <medium>/TegelKeys.dmg` instead of the line above, and item 4 then only refreshes the second copy, from the working medium.
+     **If the working medium prints `exists`**, Task 10 already made the store. It must not be recreated (a new image would then be copied over both backups, and the Sparkle key would be lost). The user ejects the stick and runs `hdiutil attach <working>/TegelKeys.dmg` instead of the line above (only the working medium's copy is ever attached), and item 4 then only refreshes the second copy. If only the stick prints `exists`, or `~/TegelKeys.dmg` is left from an interrupted run, stop and ask the user.
+     Item 3 and Task 10 check the attached image by path, so `IMG` is `$HOME/TegelKeys.dmg` after the create and `<working>/TegelKeys.dmg` after this attach.
   3. Claude copies each file, checks the copy, deletes the original, empties the key path in `.env`, and confirms nothing broke:
      ```bash
      . scripts/lib/env.sh
-     [ "$(hdiutil info | grep -c '[[:space:]]/Volumes/TegelKeys$')" = 1 ] || { echo 'store not mounted at /Volumes/TegelKeys'; exit 1; }
+     IMG="$HOME/TegelKeys.dmg"   # or '<working>/TegelKeys.dmg' when item 2 attached the existing store
+     [ "$(hdiutil info | awk -F' : ' '/^image-path/{p=$2} /\t\/Volumes\/TegelKeys$/{print p}')" = "$IMG" ] || { echo 'wrong or no image at /Volumes/TegelKeys'; exit 1; }
      for f in $(find ~/.tegel-signing ~/.tegel-secrets -type f \( -name '*.key' -o -name '*.p8' -o -name '*.p12' \)); do
        cp -p "$f" /Volumes/TegelKeys/ && cmp -s "$f" "/Volumes/TegelKeys/${f##*/}" && rm "$f"
      done
-     ls /Volumes/TegelKeys; hdiutil detach /Volumes/TegelKeys
+     ls /Volumes/TegelKeys; hdiutil detach /Volumes/TegelKeys && echo detached
      envset ASC_API_KEY_PATH ''
      find ~/.tegel-signing ~/.tegel-secrets -type f \( -name '*.key' -o -name '*.p8' -o -name '*.p12' \) 2>/dev/null | wc -l
      [ -z "$(envget ASC_API_KEY_PATH)" ] && echo no-path
      security find-identity -v -p codesigning | grep -c '"Developer ID Application:'
      xcrun notarytool history --keychain-profile tegel-notary >/dev/null && echo notary-ok
      ```
-     Expected: the two file names (three, with `sparkle-ed25519-tegelapps.key`, if Task 10 ran first), then `0`, `no-path`, `1`, `notary-ok`. Step 4 already showed the profile works without the `.p8` on disk; a `notary-ok` failure here is something else, so record the error and ask the user.
-  4. **Two copies (K3).** The **user** copies `~/TegelKeys.dmg` to the external working medium and to the second USB stick, which is kept away from the Mac. This copy is only for a store item 2 just created, after its check printed `missing` for both media; it is never a refresh. For each, `cmp ~/TegelKeys.dmg <medium>/TegelKeys.dmg` prints nothing. Then the user deletes the local copy. **After any later change to the store** (Step 6, Task 10), the user copies the changed image from the working medium over the one on the second stick, and `cmp <working>/TegelKeys.dmg <stick>/TegelKeys.dmg` prints nothing, so the two copies never differ.
+     Expected: the two file names (three, with `sparkle-ed25519-tegelapps.key`, if Task 10 ran first), then `detached`, `0`, `no-path`, `1`, `notary-ok`. Step 4 already showed the profile works without the `.p8` on disk; a `notary-ok` failure here is something else, so record the error and ask the user.
+  4. **Two copies (K3).** The **user** copies `~/TegelKeys.dmg` to the external working medium and to the second USB stick, which is kept away from the Mac. This copy is only for a store item 2 just created, after its check printed `missing` for both media; it is never a refresh. For each, `cmp ~/TegelKeys.dmg <medium>/TegelKeys.dmg` prints nothing. Then the user deletes the local copy. **After any later change to the store** (item 3 on an existing store, Step 6, Task 10), once it is detached, the user connects both media and runs `[ "$(hdiutil info | grep -c /Volumes/TegelKeys)" = 0 ] && cp '<working>/TegelKeys.dmg' '<stick>/TegelKeys.dmg' && cmp '<working>/TegelKeys.dmg' '<stick>/TegelKeys.dmg' && echo refreshed` → `refreshed`. No copy is attached while it is overwritten, and the two copies never differ.
 - [ ] **Step 6: Renew the certificate by Fri 12 Nov 2027** (it expires Fri 26 Nov 2027, 11:25 UTC). Apps already signed and notarised keep opening after it expires, because their signatures are timestamped, but no new build can be signed, so a missed renewal blocks every update and release.
   - Make a new key and CSR without printing values:
     ```bash
@@ -240,7 +242,7 @@ No commit; Task 4 adds `CLOUDFLARE_R2_API_TOKEN`, `R2_ACCESS_KEY_ID`, `R2_SECRET
     ```
   - The **user** uploads the CSR as a new **Developer ID Application** certificate (G2 Sub-CA); Claude imports the key and the `.cer` as in Step 1.
   - Delete the old certificate in Keychain Access (sort by expiry date): two identities with one name make the name in `APPLE_DEVELOPER_ID_IDENTITY` ambiguous to `codesign`. Then Step 1's check prints `1` and the new `notAfter`, and Step 2 prints `match`.
-  - Run Task 11 step 5's signed archive check. Then the **user** attaches `TegelKeys` (`hdiutil attach <path>/TegelKeys.dmg`) and Claude runs Step 5 item 3, which moves `devid-application-2027.key` into the store; the expected counts are the same. Then the user refreshes the second copy (Step 5 item 4).
+  - Run Task 11 step 5's signed archive check. Then the **user**, with only the working medium connected, attaches the store (`hdiutil attach <working>/TegelKeys.dmg`) and Claude runs Step 5 item 3 with `IMG='<working>/TegelKeys.dmg'`, which moves `devid-application-2027.key` into the store; the expected counts are the same. Then the user refreshes the second copy (Step 5 item 4).
 
 No commit.
 
@@ -846,13 +848,14 @@ The licence logic is unit-tested in Tasks 4–7. Plan 02's `MarkdownAppTests` ta
     need SPARKLE_PUBLIC_ED_KEY && echo saved
     ```
     Expected: `saved`.
-  - **Back up the private key straight into the offline store (K3)**; it never lands in `$HOME`. Losing it means no more updates for every installed copy. The **user** connects the media and runs `hdiutil attach <path>/TegelKeys.dmg` (passphrase prompt). If the store doesn't exist yet (Task 3 step 5 item 2's check prints `missing` for both media, because Task 3 step 5 hasn't run; `not-mounted` means connect that medium and check again, never create): the user first creates it with Task 3 step 5 item 2's command, and Task 3 later adds its two files to it. Then:
+  - **Back up the private key straight into the offline store (K3)**; it never lands in `$HOME`. Losing it means no more updates for every installed copy. The **user** connects only the working medium and runs `hdiutil attach <working>/TegelKeys.dmg` (passphrase prompt). If the store doesn't exist yet (Task 3 step 5 item 2's check prints `missing` for both media, because Task 3 step 5 hasn't run; `not-mounted` means connect that medium and check again, never create): the user first creates it with Task 3 step 5 item 2's command, and Task 3 later adds its two files to it. Then:
     ```bash
-    [ "$(hdiutil info | grep -c '[[:space:]]/Volumes/TegelKeys$')" = 1 ] || { echo 'store not mounted at /Volumes/TegelKeys'; exit 1; }
+    IMG='<working>/TegelKeys.dmg'   # or "$HOME/TegelKeys.dmg" when the store was created just now
+    [ "$(hdiutil info | awk -F' : ' '/^image-path/{p=$2} /\t\/Volumes\/TegelKeys$/{print p}')" = "$IMG" ] || { echo 'wrong or no image at /Volumes/TegelKeys'; exit 1; }
     build/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys --account tegelapps -x /Volumes/TegelKeys/sparkle-ed25519-tegelapps.key
-    ls /Volumes/TegelKeys; hdiutil detach /Volumes/TegelKeys
+    ls /Volumes/TegelKeys; hdiutil detach /Volumes/TegelKeys && echo detached
     ```
-    Expected: `sparkle-ed25519-tegelapps.key`, beside Task 3's `AuthKey_<KEYID>.p8` and `devid-application.key` once those exist. If the store was created just now, the user makes its two copies with Task 3 Step 5 item 4; otherwise they refresh the second copy as that item says. Then both media go away.
+    Expected: `sparkle-ed25519-tegelapps.key`, then `detached`; beside Task 3's `AuthKey_<KEYID>.p8` and `devid-application.key` once those exist. If the store was created just now, the user makes its two copies with Task 3 Step 5 item 4; otherwise they refresh the second copy as that item says. Then both media go away.
   - Put the public key, which is public by design, into `project.yml` as `SUPublicEDKey`.
   - **App:** `CommandGroup(after: .appInfo) { Button("Check for Updates…") { updaterController.updater.checkForUpdates() } }`.
   - **Settings:** add the tab `UpdatesSettingsView(updater: updaterController.updater)` with `.tabItem { Label("Updates", systemImage: "arrow.triangle.2.circlepath") }` after Licence. Its `Form` holds (plan 09 Settings spec):
