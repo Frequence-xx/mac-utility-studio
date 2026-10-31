@@ -42,6 +42,8 @@
 
 ## Global Constraints
 
+- **Licence keys on screen (master §6, "Screenshots can't be searched"):** whoever a step names, the **user** does any step that pastes a licence key into an app, opens one in the portal, a receipt or an email, or clicks Pay on a checkout that grants one, sandbox keys included. Claude fills the other fields, takes no Playwright snapshot, computer-use screenshot or `screencapture` while a key is visible, and saves a key only from the pasteboard (`envset KEY "$(pbpaste)" && pbcopy </dev/null`). A committed image shows no key, and the user confirms that before Claude opens or commits it.
+
 Master §2/§3 and `CLAUDE.md` apply (platform, machines and evidence naming, product rules 1–9, design standard, approvals, secrets). Every task with UI reads `DESIGN.md` first; no UI value comes from outside it. Plan-specific:
 
 - **Bundle ids:** `com.tegelapps.data` and `com.tegelapps.data.quicklook` (D7).

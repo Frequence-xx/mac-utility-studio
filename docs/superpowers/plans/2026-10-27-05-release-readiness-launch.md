@@ -25,6 +25,8 @@
 
 ## Global Constraints
 
+- **Licence keys on screen (master §6, "Screenshots can't be searched"):** whoever a step names, the **user** does any step that pastes a licence key into an app, opens one in the portal, a receipt or an email, or clicks Pay on a checkout that grants one, sandbox keys included. Claude fills the other fields, takes no Playwright snapshot, computer-use screenshot or `screencapture` while a key is visible, and saves a key only from the pasteboard (`envset KEY "$(pbpaste)" && pbcopy </dev/null`). A committed image shows no key, and the user confirms that before Claude opens or commits it.
+
 Master §2/§3 and CLAUDE.md apply (product rules 1–9, outward-facing approvals, secrets, hardware evidence, the D7/D16 names, DESIGN.md for every UI value). This plan's deltas:
 
 - **Price (D15, K10):** App 1 is **$19 / €19 once, 2 Macs**. The introductory **$14 / €14 is the actual Polar price, not a discount** [F3f]. Both currencies change by hand on **Tue 15 Dec 2026 00:00 CET**, site first. The EUR amounts were confirmed by the user on 29 Oct (K10, master §5). Polar picks the checkout currency by geolocation and shows EU prices VAT-inclusive.
