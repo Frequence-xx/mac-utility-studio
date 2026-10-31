@@ -1843,7 +1843,7 @@ Ask in this week's question round, so the yes is in by Fri 30 Oct. Ask the user 
 
 - [ ] **Step 4: Order and save access**
 
-In the console: Bare Metal → Apple silicon → Create → M1 → PARIS 3 → macOS 27. Record the order time in G0.md. When the server is ready, store the host, user and VNC port from the Overview page with `envset REMOTE_MAC_HOST …` (and `REMOTE_MAC_USER`, `REMOTE_MAC_VNC_PORT`), and the password from the pasteboard: after Claude has recorded those, the **user** reveals and copies the password, and Claude makes no Playwright call while it is shown, then `envset REMOTE_MAC_PASSWORD "$(pbpaste)" && pbcopy </dev/null` (master §6).
+In the console: Bare Metal → Apple silicon → Create → M1 → PARIS 3 → macOS 27. Record the order time in G0.md. When the server is ready, store the host, user and VNC port from the Overview page with `envset REMOTE_MAC_HOST …` (and `REMOTE_MAC_USER`, `REMOTE_MAC_VNC_PORT`), and the password from the pasteboard: after Claude has recorded those, the **user** reveals and copies the password, and Claude makes no Playwright call while it is shown, then `. scripts/lib/env.sh && envset REMOTE_MAC_PASSWORD "$(pbpaste)" && pbcopy </dev/null` (master §6).
 
 Every remote block from here on starts with this prefix line, **P**. `R` is a function, not a string, so it works in zsh, which doesn't word-split `$R`:
 ```
